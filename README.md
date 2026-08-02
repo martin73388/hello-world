@@ -1,66 +1,47 @@
-# Éolia — terres du vent 🍃
-### Un voyage au long cours
+# L'Atelier de Minuit
 
-Un jeu d'**exploration 3D en monde ouvert à l'échelle réelle** : 1 unité = 1 mètre,
-1 seconde réelle = 1 minute de jeu. Une île de **22 km²**, un pic à **1104 m**
-dont l'ascension à pied demande une **journée de jeu entière** (~25 minutes
-réelles), comme en vrai — avec la nuit qui tombe en route et la fatigue qui
-s'accumule.
+Un jeu construit pas à pas. **Prologue : le garage.**
 
-Tu y vis dans un **vieux camping-car vide**, que tu conduis et que tu aménages
-au fil de tes trouvailles.
+Un personnage en vue 3ᵉ personne — Marcel, mécanicien de nuit — dans son
+garage fermé, à minuit et quart. Pas encore de monde ouvert : ce chapitre
+se concentre sur les fondations qui doivent être irréprochables avant tout
+le reste : le personnage, ses animations, les contrôles et la caméra.
 
-## Jouer
+## Direction artistique
 
-Ouvre `index.html` dans un navigateur — aucun serveur nécessaire, tout est local.
+**Toon-shading à paliers + contours encrés.** Nuit bleue profonde, lumière
+tungstène ambrée sous abat-jour émaillé, clair de lune par le bandeau vitré.
+1 unité = 1 mètre partout (garage 7,2 × 5,6 m, plafond 2,9 m, personnage 1,78 m).
 
-| Commande | Action |
-|---|---|
-| ZQSD / WASD / flèches | Marcher (7 km/h) — Maj : courir |
-| Espace | Sauter · en l'air : **paravoile** |
-| E | Ramasser / prendre le volant / descendre |
-| F | Entrer dans l'habitacle du van |
-| T | Manger (repas, sinon baies) |
-| Souris / molette | Caméra / zoom |
+## Ce qui est soigné
 
-## La boucle de jeu
+- **Rig procédural** : squelette hiérarchique complet (bassin, colonne,
+  tête, bras, jambes), jambes en **IK analytique 2 os** — les pieds se
+  posent réellement au sol, sans glissade (la fréquence de foulée est
+  asservie à la vitesse).
+- **Cycle de marche et de course** générés par phase : appui/oscillation,
+  déroulé talon-pointe, phase de vol en course, contre-rotation du buste,
+  balancier des bras, inclinaison dans les virages et à l'accélération.
+- **Vie au repos** : respiration, transferts d'appui, regards curieux,
+  clignements des yeux.
+- **Caméra 3ᵉ personne** : orbite à la souris (pointer lock), zoom molette,
+  amortissements distincts, collision caméra (murs + obstacles) sans
+  jamais traverser le décor, avance sur le déplacement, FOV qui s'élargit
+  en courant.
+- **Contrôles** : ZQSD **et** WASD (codes physiques → AZERTY géré
+  nativement), flèches, Shift pour courir, déplacement relatif à la caméra,
+  accélération/friction, glissement le long des obstacles.
 
-**Explorer → récolter → aménager le van → partir plus loin.**
+## Lancer
 
-- **Le camping-car** se conduit (~80 km/h max, pentes raides infranchissables,
-  l'océan l'arrête). Il consomme du carburant : récupère des **jerricans**
-  près des épaves, repérables à leur colonne de fumée.
-- **Les ressources** : du **bois** (branches en forêt), des **baies**
-  (buissons), de la **ferraille** (épaves), des **cristaux** (offerts par les
-  sanctuaires éveillés).
-- **L'habitacle** (vue maison de poupée) s'aménage pièce par pièce :
-  vrai lit → kitchenette → étagères → plante & tapis → guirlande → radio
-  (musique générative !) → panneau solaire (−30 % de carburant).
-  Chaque meuble apparaît physiquement dans le van. Confort affiché en %.
-- **L'énergie** : marcher fatigue, grimper épuise, la nuit coûte plus cher.
-  Cueille des baies, cuisine des repas pour les expéditions, et dors dans le
-  van (sans lit, la nuit sur le siège récupère mal…).
-- **Les sept sanctuaires** aux piliers de lumière cyan restent le fil rouge :
-  chacun offre un cristal, nécessaire aux aménagements avancés.
+Ouvrir `index.html` dans un navigateur (ou servir le dossier avec
+`python3 -m http.server`). Aucune dépendance réseau : `three.min.js`
+(r147) est embarqué.
 
-## Les dimensions, en vrai
-
-| Trajet | Durée |
-|---|---|
-| Ascension du pic à pied | ~25 h de jeu (≈ 25 min réelles) |
-| Traversée de l'île en van | ~6 h de jeu (≈ 6 min réelles) |
-| Une journée complète | 24 min réelles |
-
-## Technique
-
-- `three.min.js` — Three.js r147 embarqué (jouable hors ligne)
-- `game.js` — terrain procédural déterministe (bruit fractal + masque d'île),
-  couleurs par sommet, ombres dynamiques, végétation instanciée, ciel en
-  shader, cycle jour/nuit, personnage et van animés, trois modes de jeu
-  (marche / conduite / habitacle), audio 100 % WebAudio (vent réactif, moteur,
-  radio générative, carillons)
-- `index.html` — page et HUD (horloge, énergie, carburant, inventaire,
-  boussole, panneau d'aménagement)
-
-Les fonctions de terrain sont pures et testables sous Node :
-`node -e "console.log(require('./game.js').findPeak())"`
+| Touche | Action |
+| --- | --- |
+| ZQSD / WASD / flèches | se déplacer |
+| Shift | courir |
+| Souris | caméra (clic pour capturer, Échap pour libérer) |
+| Molette | zoom |
+| M | couper le son |
