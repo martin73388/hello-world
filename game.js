@@ -310,7 +310,7 @@ function buildGarage() {
   // lampe d'établi
   const benchLampArm = new THREE.Group(); benchLampArm.position.set(-0.3, 2.3, d / 2 - 0.1); scene.add(benchLampArm);
   cyl(0.02, 0.02, 0.5, M.metalDark, 0, 0, -0.22, benchLampArm).rotation.x = Math.PI / 2.3;
-  const shade = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.14, 20, 1, true), M.teal);
+  const shade = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.14, 20, 1, true), M.teal.clone());
   shade.position.set(0, -0.1, -0.48); shade.material.side = THREE.DoubleSide; benchLampArm.add(shade);
   const bulbB = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), M.bulb);
   bulbB.position.set(0, -0.15, -0.48); benchLampArm.add(bulbB);
@@ -362,7 +362,7 @@ function buildGarage() {
   blob.scale.set(1.05, 0.62, 0.52); blob.position.y = 0.52; blob.castShadow = blob.receiveShadow = true; tarp.add(blob);
   const blob2 = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 12), M.tarp);
   blob2.scale.set(0.55, 0.5, 0.45); blob2.position.set(0.45, 0.75, 0); blob2.castShadow = true; tarp.add(blob2);
-  const skirt = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.12, 0.5, 22, 1, true), M.tarp);
+  const skirt = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.12, 0.5, 22, 1, true), M.tarp.clone());
   skirt.scale.set(1.05, 1, 0.55); skirt.position.y = 0.25; skirt.material.side = THREE.DoubleSide; skirt.castShadow = true; tarp.add(skirt);
   // corde
   const rope = new THREE.Mesh(new THREE.TorusGeometry(1.09, 0.018, 6, 30), toon(0xb08d55));
@@ -702,7 +702,7 @@ function animate(dt, t, speed, yawRate, accelFwd) {
   const sway = m * lerp(0.022, 0.012, r) * Math.sin(p2);
   const idleSway = (1 - m) * 0.016 * noise1(t * 0.4);
   B.hips.position.set(sway + idleSway, bobBase + bob, 0);
-  const pelvYaw = m * lerp(0.10, 0.16, r) * Math.cos(p2);
+  const pelvYaw = -m * lerp(0.10, 0.16, r) * Math.cos(p2);  // hanche gauche en avant avec la jambe gauche
   const pelvRoll = m * 0.045 * Math.sin(p2) + anim.leanRoll;
   const idleBreath = (1 - m) * 0.012 * Math.sin(t * 1.6);
   B.hips.rotation.set(anim.leanPitch + m * 0.03 + idleBreath * 0.3, pelvYaw, pelvRoll);
@@ -812,16 +812,19 @@ function collide(pos) {
       }
     }
   }
+  // re-borner aux murs : une expulsion d'obstacle ne doit jamais traverser la pièce
+  pos.x = clamp(pos.x, -ROOM.w / 2 + r + 0.05, ROOM.w / 2 - r - 0.05);
+  pos.z = clamp(pos.z, -ROOM.d / 2 + r + 0.12, ROOM.d / 2 - r - 0.05);
 }
 
 function updatePlayer(dt) {
   const axis = keyAxis();
   const running = keys.ShiftLeft || keys.ShiftRight;
   const maxSpeed = running ? CHAR.runSpeed : CHAR.walkSpeed;
-  // direction voulue, relative à la caméra
+  // direction voulue, relative à la caméra (l'avant écran est −(sin cy, cos cy))
   const cy = camCtl.yaw;
-  const dirX = axis.x * Math.cos(cy) + axis.z * Math.sin(cy);
-  const dirZ = -axis.x * Math.sin(cy) + axis.z * Math.cos(cy);
+  const dirX = axis.x * Math.cos(cy) - axis.z * Math.sin(cy);
+  const dirZ = -axis.x * Math.sin(cy) - axis.z * Math.cos(cy);
   const wants = axis.x !== 0 || axis.z !== 0;
 
   const prevVel = _v2.copy(player.vel);
@@ -835,9 +838,14 @@ function updatePlayer(dt) {
     player.vel.x *= f; player.vel.z *= f;
     if (player.vel.lengthSq() < 0.0004) player.vel.set(0, 0, 0);
   }
+  const px = player.pos.x, pz = player.pos.z;
   player.pos.x += player.vel.x * dt;
   player.pos.z += player.vel.z * dt;
   collide(player.pos);
+  // la vitesse devient le déplacement effectif : bloqué contre un mur = à l'arrêt,
+  // glissade oblique = seule la composante tangentielle anime la foulée
+  player.vel.x = (player.pos.x - px) / dt;
+  player.vel.z = (player.pos.z - pz) / dt;
 
   player.speed = Math.hypot(player.vel.x, player.vel.z);
   // orientation : le personnage se tourne vers sa vitesse
@@ -915,7 +923,6 @@ function cameraRayLimit(origin, dir, want) {
   }
   // obstacles (gonflés) — méthode des « slabs »
   for (const c of colliders) {
-    if (c.maxY < 1.0) continue;                        // trop bas pour gêner la caméra
     const g = 0.14;
     const mn = [c.minX - g, -1, c.minZ - g], mx = [c.maxX + g, c.maxY + g, c.maxZ + g];
     const o = [origin.x, origin.y, origin.z], v = [dir.x, dir.y, dir.z];
@@ -972,6 +979,7 @@ const audio = {
       this.master = this.ctx.createGain();
       this.master.gain.value = 0.5;
       this.master.connect(this.ctx.destination);
+      if (this.ctx.state === 'suspended') this.ctx.resume();
       // ronronnement électrique très bas
       const hum = this.ctx.createOscillator(); hum.type = 'sine'; hum.frequency.value = 100;
       const hum2 = this.ctx.createOscillator(); hum2.type = 'sine'; hum2.frequency.value = 199;
