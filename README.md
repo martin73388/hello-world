@@ -1,36 +1,45 @@
-# Minuit moins douze 🕰️
+# Éolia — terres du vent 🍃
 
-Un jeu original où **le niveau est une horloge vivante** : les trois aiguilles
-(heures, minutes, secondes) sont tes plateformes. Elles tournent chacune à leur
-vitesse, et tu incarnes une étincelle qui court dessus et saute de l'une à l'autre.
+Un jeu d'**exploration 3D en monde ouvert** : une grande île procédurale aux
+graphismes stylisés low-poly — prairies vallonnées, forêts, plages, un pic
+enneigé, un océan, des îles flottantes à l'horizon — baignée de brume et d'un
+cycle jour/nuit.
 
-**Le but :** allumer les douze chiffres romains du cadran avant que minuit ne sonne
-(99 secondes).
+**Le but :** parcourir l'île pour éveiller les **sept sanctuaires**, signalés
+au loin par leurs piliers de lumière cyan. Une fois éveillés, ils passent à l'or.
 
-## Comment jouer
+## Jouer
 
-Ouvre simplement `index.html` dans un navigateur — aucun serveur, aucune dépendance.
+Ouvre `index.html` dans un navigateur — aucun serveur nécessaire, tout est local.
 
-| Touche | Action |
+| Commande | Action |
 |---|---|
-| ← / → | Courir vers le centre / vers la pointe de l'aiguille |
-| Espace ou ↑ | Sauter |
-| ↓ | Se laisser tomber de l'aiguille |
+| ZQSD / WASD / flèches | Se déplacer |
+| Maj | Courir |
+| Espace | Sauter |
+| Espace en l'air | Ouvrir / fermer le **paravoile** |
+| Glisser la souris | Orienter la caméra |
+| Molette | Zoom |
 
-Sur mobile : tiers gauche / droit de l'écran pour courir, milieu pour sauter.
+## Ce qu'il faut savoir
 
-## Les subtilités
-
-- **L'effet fronde** : quand tu sautes, tu emportes la vitesse du point de
-  l'aiguille où tu te trouves. Sauter depuis la pointe de l'aiguille des
-  secondes (la orange, la rapide) te catapulte à travers le cadran.
-- L'aiguille des **heures** est lente et sûre, celle des **minutes** est un
-  bon compromis, celle des **secondes** est risquée mais puissante.
-- Tomber du cadran coûte **6 secondes** sur l'horloge.
-- Tous les 3 chiffres allumés, **le mécanisme s'emballe** : les aiguilles accélèrent.
-- Ton record (secondes d'avance sur minuit) est sauvegardé.
+- Le **paravoile** est la clé de l'exploration : grimpe sur une hauteur, saute,
+  et plane à travers l'île. Depuis le pic enneigé, on survole tout le monde.
+- La **boussole** en haut de l'écran montre les points cardinaux et la direction
+  de chaque sanctuaire (cyan = à éveiller, or = éveillé).
+- On peut nager, mais on avance lentement — et le vent te ramène si tu t'éloignes
+  trop d'Éolia.
+- Le monde vit : cycle jour/nuit (5 min), étoiles, nuages dérivants, vent audible
+  qui force quand tu planes.
 
 ## Technique
 
-Un seul fichier HTML : canvas 2D, physique à pas fixe (240 Hz), sons entièrement
-synthétisés au WebAudio (tic-tac, cloches, gong de minuit). Zéro dépendance.
+- `three.min.js` — Three.js r147 embarqué (aucun accès réseau requis)
+- `game.js` — tout le jeu : terrain procédural déterministe (bruit fractal +
+  masque d'île), couleurs par sommet, ombres dynamiques, végétation instanciée,
+  ciel en shader avec soleil et étoiles, personnage animé, physique (course,
+  saut, vol plané, nage), audio synthétisé au WebAudio (vent, nappe, carillons)
+- `index.html` — la page et le HUD
+
+Les fonctions de terrain sont pures et testables sous Node :
+`node -e "console.log(require('./game.js').findPeak())"`
