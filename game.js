@@ -79,15 +79,46 @@ css.textContent = `
   #enter.hidden{opacity:0;pointer-events:none}
   #hint{bottom:24px;left:50%;transform:translateX(-50%);font-family:'Courier New',monospace;
     font-size:11px;letter-spacing:.12em;opacity:0;transition:opacity .6s;color:#b9c2d8}
+  #objective{top:26px;right:26px;font-family:'Courier New',monospace;font-size:13px;
+    letter-spacing:.14em;color:#e8dcc8;background:rgba(10,14,26,.62);
+    border:1px solid rgba(232,220,200,.16);border-radius:8px;padding:8px 14px;text-align:right}
+  #objective b{color:#ffb066}
+  #prompt{bottom:96px;left:50%;transform:translateX(-50%);font-family:'Courier New',monospace;
+    font-size:14px;letter-spacing:.1em;color:#e8dcc8;background:rgba(10,14,26,.72);
+    border:1px solid rgba(255,176,102,.35);border-radius:8px;padding:8px 16px;
+    opacity:0;transition:opacity .25s}
+  #prompt b{color:#ffb066;border:1px solid rgba(255,176,102,.5);border-radius:4px;padding:0 6px;margin-right:8px}
+  #toast{top:19%;left:50%;transform:translateX(-50%);font-size:17px;font-style:italic;
+    letter-spacing:.08em;color:#ffe6c4;text-shadow:0 2px 14px rgba(0,0,0,.85);
+    opacity:0;transition:opacity .5s;white-space:nowrap}
+  .tbtn{position:fixed;z-index:12;display:none;align-items:center;justify-content:center;
+    font-family:'Courier New',monospace;color:#e8dcc8;background:rgba(10,14,26,.55);
+    border:1px solid rgba(232,220,200,.3);border-radius:50%;user-select:none;-webkit-user-select:none;
+    touch-action:none}
+  #stickZone{position:fixed;left:26px;bottom:26px;width:128px;height:128px;z-index:12;display:none;
+    border:1px solid rgba(232,220,200,.25);border-radius:50%;background:rgba(10,14,26,.35);touch-action:none}
+  #stickNub{position:absolute;left:44px;top:44px;width:40px;height:40px;border-radius:50%;
+    background:rgba(255,176,102,.45)}
+  #btnE{right:30px;bottom:118px;width:64px;height:64px;font-size:22px;color:#ffb066;opacity:.35}
+  #btnRun{right:112px;bottom:40px;width:58px;height:58px;font-size:12px}
+  body.touch #stickZone{display:block}
+  body.touch .tbtn{display:flex}
+  body.touch #keys{display:none}
 `;
 document.head.appendChild(css);
 document.body.insertAdjacentHTML('beforeend', `
   <div id="stage"></div>
   <div class="vignette"></div>
   <div class="hud" id="title"><div class="t1">L'ATELIER</div><div class="t2">Prologue&nbsp;— minuit et quart</div></div>
-  <div class="hud" id="keys"><b>ZQSD</b> / <b>WASD</b>&nbsp; se déplacer<br><b>Shift</b>&nbsp; courir<br><b>Souris</b>&nbsp; caméra&nbsp; · &nbsp;<b>Molette</b>&nbsp; zoom<br><b>M</b>&nbsp; son</div>
+  <div class="hud" id="keys"><b>ZQSD</b> / <b>WASD</b>&nbsp; se déplacer<br><b>Shift</b>&nbsp; courir&nbsp; · &nbsp;<b>E</b>&nbsp; interagir<br><b>Souris</b>&nbsp; caméra&nbsp; · &nbsp;<b>Molette</b>&nbsp; zoom<br><b>M</b>&nbsp; son</div>
   <div class="hud" id="hint">Échap pour libérer la souris</div>
-  <div id="enter"><div class="big">L'ATELIER</div><div class="small">— cliquer pour allumer la lumière —</div></div>
+  <div class="hud" id="objective"><b id="objN">0</b> / 5 clés retrouvées</div>
+  <div class="hud" id="prompt"><b>E</b><span id="promptText"></span></div>
+  <div class="hud" id="toast"></div>
+  <div id="stickZone"><div id="stickNub"></div></div>
+  <div class="tbtn" id="btnE">E</div>
+  <div class="tbtn" id="btnRun">courir</div>
+  <div id="enter"><div class="big">L'ATELIER</div><div class="small">— cliquer pour allumer la lumière —<br><br>cinq clés égarées&nbsp;·&nbsp;la route attend</div></div>
 `);
 
 /* ---------------------------------------------------------- */
@@ -257,7 +288,42 @@ function buildGarage() {
     m.material.map.repeat.set(ww / 2.9, 1);
     m.position.set(x, h / 2, z); m.rotation.y = ry; m.receiveShadow = true; scene.add(m); return m;
   };
-  mkWall(w, 0, -d / 2, 0);            // mur nord (porte de garage)
+  // mur nord en trois pans : derrière la porte, la nuit
+  const sideW = (w - 2.72) / 2;
+  mkWall(sideW, -(2.72 / 2 + sideW / 2), -d / 2, 0);
+  mkWall(sideW, (2.72 / 2 + sideW / 2), -d / 2, 0);
+  {
+    const strip = new THREE.Mesh(new THREE.PlaneGeometry(2.72, h - 2.18), M.wall.clone());
+    strip.material.map = wallTex.clone(); strip.material.map.needsUpdate = true;
+    strip.material.map.repeat.set(2.72 / 2.9, (h - 2.18) / h);
+    strip.position.set(0, 2.18 + (h - 2.18) / 2, -d / 2); strip.receiveShadow = true; scene.add(strip);
+  }
+  // le dehors : ciel étoilé, sapins, et la route qui attend
+  const nightTex = canvasTex(512, (g, s) => {
+    const gr = g.createLinearGradient(0, 0, 0, s);
+    gr.addColorStop(0, '#27395e'); gr.addColorStop(0.7, '#1a2a4a'); gr.addColorStop(1, '#142038');
+    g.fillStyle = gr; g.fillRect(0, 0, s, s);
+    g.fillStyle = 'rgba(255,255,255,.85)';
+    for (let i = 0; i < 42; i++) { g.beginPath(); g.arc(Math.random() * s, Math.random() * s * .55, Math.random() * 1.3 + .3, 0, 7); g.fill(); }
+    g.fillStyle = '#dfe8f8'; g.beginPath(); g.arc(s * .78, s * .17, 15, 0, 7); g.fill();
+    g.fillStyle = '#0b1226';
+    for (let x = -20; x < s + 20; x += 26 + Math.random() * 22) {
+      const hgt = s * (0.2 + Math.random() * 0.14), base = s * 0.64;
+      g.beginPath(); g.moveTo(x - 16, base); g.lineTo(x, base - hgt); g.lineTo(x + 16, base); g.closePath(); g.fill();
+    }
+    // sol brumeux éclairé par la lune, et la route qui s'enfonce
+    const gr2 = g.createLinearGradient(0, s * .64, 0, s);
+    gr2.addColorStop(0, '#3c4c74'); gr2.addColorStop(0.35, '#2a3a5e'); gr2.addColorStop(1, '#1a2740');
+    g.fillStyle = gr2; g.fillRect(0, s * .64, s, s * .36);
+    g.fillStyle = '#516290';
+    g.beginPath(); g.moveTo(s * .34, s); g.lineTo(s * .465, s * .64); g.lineTo(s * .535, s * .64); g.lineTo(s * .70, s); g.closePath(); g.fill();
+    g.fillStyle = 'rgba(232,220,200,.5)';
+    g.fillRect(s * .497, s * .70, s * .006, s * .06);
+    g.fillRect(s * .497, s * .82, s * .008, s * .08);
+  });
+  const night = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 2.7), new THREE.MeshBasicMaterial({ map: nightTex }));
+  night.position.set(0, 1.05, -d / 2 - 0.75); scene.add(night);
+
   mkWall(w, 0, d / 2, Math.PI);       // mur sud (établi)
   mkWall(d, -w / 2, 0, Math.PI / 2);  // ouest
   mkWall(d, w / 2, 0, -Math.PI / 2);  // est
@@ -269,11 +335,12 @@ function buildGarage() {
     box(2.44, 0.30, 0.02, M.metal, 0, 0.22 + i * 0.43, 0.032, door);
     p.receiveShadow = true;
   }
-  box(0.09, 2.25, 0.10, M.metalDark, -1.38, 1.12, 0, door);
-  box(0.09, 2.25, 0.10, M.metalDark, 1.38, 1.12, 0, door);
   box(0.55, 0.16, 0.03, M.metal, 0, 1.02, 0.06, door); // poignée
-  // enseigne émaillée au-dessus de la porte
-  const sign = box(1.5, 0.34, 0.04, M.teal, 0, 2.55, 0.02, door);
+  // rails de guidage et enseigne : fixés au mur, la porte coulisse entre eux
+  const doorFrame = new THREE.Group(); doorFrame.position.copy(door.position); scene.add(doorFrame);
+  box(0.09, 2.6, 0.10, M.metalDark, -1.38, 1.3, 0, doorFrame);
+  box(0.09, 2.6, 0.10, M.metalDark, 1.38, 1.3, 0, doorFrame);
+  const sign = box(1.5, 0.34, 0.04, M.teal, 0, 2.55, 0.02, doorFrame);
   sign.add(new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.24),
     toon(0xffffff, { map: canvasTex(256, (g, s) => {
       g.fillStyle = '#3f6f6a'; g.fillRect(0, 0, s, s);
@@ -393,14 +460,19 @@ function buildGarage() {
   const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), M.bulb);
   bulb.position.y = -0.74; lampG.add(bulb);
 
-  return { lampPos: new THREE.Vector3(0.15, h - 0.78, -0.2), benchLampPos: new THREE.Vector3(-0.3, 2.13, d / 2 - 0.58) };
+  return {
+    lampPos: new THREE.Vector3(0.15, h - 0.78, -0.2),
+    benchLampPos: new THREE.Vector3(-0.3, 2.13, d / 2 - 0.58),
+    door, tarp, bulb,
+  };
 }
 const anchors = buildGarage();
 
 /* ---------------------------------------------------------- */
 /* 7. Lumières                                                 */
 /* ---------------------------------------------------------- */
-scene.add(new THREE.HemisphereLight(0x223052, 0x100c09, 0.22));
+const hemi = new THREE.HemisphereLight(0x223052, 0x100c09, 0.22);
+scene.add(hemi);
 // ampoule centrale sous abat-jour — cône chaud vers le sol
 const keyLight = new THREE.SpotLight(0xffa25c, 2.0, 13, 1.0, 0.6, 1.3);
 keyLight.position.copy(anchors.lampPos);
@@ -538,7 +610,11 @@ function buildCharacter() {
   // visage : yeux, sourcils, nez, moustache, oreilles
   const mkEye = sx => {
     const e = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 8), M.eye);
-    e.position.set(sx * 0.042, 0.075, 0.094); e.scale.set(1, 1.35, 0.6); B.head.add(e); return e;
+    e.position.set(sx * 0.042, 0.075, 0.094); e.scale.set(1, 1.35, 0.6); B.head.add(e);
+    const hl = new THREE.Mesh(new THREE.SphereGeometry(0.005, 6, 6),
+      new THREE.MeshBasicMaterial({ color: 0xfff4e0 }));
+    hl.position.set(0.004, 0.004, 0.011); e.add(hl);
+    return e;
   };
   const eyeL = mkEye(1), eyeR = mkEye(-1);
   const mkBrow = sx => {
@@ -612,6 +688,223 @@ function buildCharacter() {
 const marcel = buildCharacter();
 
 /* ---------------------------------------------------------- */
+/* 8bis. Objets, interactions, boucle de jeu                   */
+/* ---------------------------------------------------------- */
+const gameState = { tools: 0, toolsTotal: 5, doorUnlocked: false, doorOpen: false, lightsOn: true };
+const doorState = { y: 0, shake: 0, dustT: 0, done: false };
+let tarpWobble = 0, toastTimer = 0;
+
+const toastEl = document.getElementById('toast');
+function toast(msg, dur = 3.4) { toastEl.textContent = msg; toastEl.style.opacity = 1; toastTimer = dur; }
+
+function softSprite(color, size, opacity) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: dustSprite, color, transparent: true, opacity, depthWrite: false,
+    blending: THREE.AdditiveBlending }));
+  s.scale.setScalar(size); scene.add(s); return s;
+}
+// halo chaud autour de l'ampoule (matériau propre : l'ampoule doit pouvoir s'éteindre seule)
+anchors.bulb.material = anchors.bulb.material.clone();
+const bulbHalo = softSprite(0xffc27d, 0.9, 0.3);
+bulbHalo.position.copy(anchors.lampPos); bulbHalo.position.y -= 0.02;
+// lueur froide au pied de la porte (montera quand elle s'ouvre)
+const doorGlow = new THREE.PointLight(0x7fa8ff, 0, 4, 1.8);
+doorGlow.position.set(0, 0.5, -ROOM.d / 2 + 0.4); scene.add(doorGlow);
+
+// bouffées de poussière (pas de course, porte)
+const puffs = [];
+for (let i = 0; i < 14; i++) {
+  const s = softSprite(0xcbb89a, 0.16, 0);
+  s.material.blending = THREE.NormalBlending;
+  puffs.push({ s, life: 0, vx: 0, vy: 0, vz: 0 });
+}
+let puffI = 0;
+function spawnPuff(x, y, z, vx, vz) {
+  const p = puffs[puffI = (puffI + 1) % puffs.length];
+  p.life = 0.55; p.s.position.set(x, y, z); p.s.scale.setScalar(0.13);
+  p.vx = vx + (Math.random() - .5) * .4; p.vy = 0.45 + Math.random() * .4; p.vz = vz + (Math.random() - .5) * .4;
+}
+
+// --- les cinq clés égarées ---
+const toolSpots = [
+  { x: -2.95, y: 0.015, z: 0.9 },     // au pied des pneus
+  { x: -0.35, y: 0.947, z: 2.42 },    // sur l'établi
+  { x: 2.72, y: 1.012, z: 0.32 },     // sur la servante
+  { x: -2.1, y: 0.355, z: -2.05 },    // sur la caisse
+  { x: 0.55, y: 0.015, z: 1.05 },     // au sol, près de la bâche
+];
+const tools = toolSpots.map((p, i) => {
+  const g = new THREE.Group();
+  const mat = M.brass.clone();
+  mat.emissive = new THREE.Color(0xff9a4a); mat.emissiveIntensity = 0.2;
+  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.013, 0.12), mat);
+  handle.castShadow = true; g.add(handle);
+  const head = new THREE.Mesh(new THREE.TorusGeometry(0.024, 0.011, 8, 14, Math.PI * 1.55), mat);
+  head.position.z = 0.072; head.rotation.x = Math.PI / 2; head.rotation.z = 0.6;
+  head.castShadow = true; g.add(head);
+  const glint = softSprite(0xffd9a0, 0.16, 0.5);
+  glint.position.set(p.x, p.y + 0.09, p.z);
+  g.position.set(p.x, p.y + 0.012, p.z); g.rotation.y = i * 1.7;
+  scene.add(g);
+  return { g, mat, glint, taken: false, i };
+});
+const TOOL_LINES = [
+  'Une. Elle traînait là depuis des semaines.',
+  'Deux. Le compte remonte.',
+  'Trois. La moitié du chemin.',
+  'Quatre. Plus qu’une.',
+  'Cinq. La porte n’attend plus que toi.',
+];
+
+// --- registre des interactions ---
+const interactables = [];
+const interact = { nearest: null, relYaw: 0 };
+const promptEl = document.getElementById('prompt');
+const promptText = document.getElementById('promptText');
+const btnE = document.getElementById('btnE');
+function addInteract(o) { interactables.push(o); return o; }
+
+tools.forEach(t => addInteract({
+  x: t.g.position.x, z: t.g.position.z, r: 1.25,
+  label: () => 'Ramasser la clé',
+  enabled: () => !t.taken,
+  action: () => startPickup(t),
+}));
+addInteract({   // la porte du garage
+  x: 0, z: -ROOM.d / 2 + 0.3, r: 1.6,
+  label: () => gameState.doorUnlocked ? 'Ouvrir la porte' : 'La porte — verrouillée',
+  enabled: () => !gameState.doorOpen,
+  action: () => {
+    if (!gameState.doorUnlocked) {
+      doorState.shake = 0.5; thumpSound();
+      toast('Verrouillée. Où sont passées mes clés ?');
+    } else { gameState.doorOpen = true; rumbleSound(); }
+  },
+});
+addInteract({   // l'interrupteur
+  x: 1.45, z: -ROOM.d / 2 + 0.4, r: 1.1,
+  label: () => gameState.lightsOn ? 'Éteindre la lumière' : 'Rallumer la lumière',
+  action: () => {
+    gameState.lightsOn = !gameState.lightsOn; clickSound();
+    toast(gameState.lightsOn ? 'Voilà qui est mieux.' : 'La lune suffit, parfois.');
+  },
+});
+addInteract({   // la radio
+  x: -1.75, z: 2.15, r: 1.3,
+  label: () => audio.musicOn ? 'Éteindre la radio' : 'Allumer la radio',
+  action: () => { audio.toggleMusic(); toast(audio.musicOn ? 'Un peu de musique.' : 'Silence, alors.'); },
+});
+addInteract({   // la bâche
+  x: 1.6, z: 1.7, r: 2.0,
+  label: () => 'Soulever la bâche ?',
+  action: () => { tarpWobble = 1; toast('Chut. Pas encore.'); },
+});
+addInteract({   // l'affiche
+  x: ROOM.w / 2 - 0.15, z: 1.6, r: 1.25,
+  label: () => 'Regarder l’affiche',
+  action: () => toast('« Un jour, la route. » — un jour proche.'),
+});
+
+// --- petits meshes : radio et interrupteur ---
+const radioLED = (() => {
+  const r = new THREE.Group(); r.position.set(-1.75, 0.935, 2.40); r.rotation.y = 0.15; scene.add(r);
+  box(0.24, 0.125, 0.085, M.teal.clone(), 0, 0.062, 0, r);
+  box(0.088, 0.078, 0.006, M.metalDark, -0.055, 0.062, 0.045, r);      // grille
+  box(0.07, 0.05, 0.006, M.cream, 0.062, 0.07, 0.045, r);              // cadran
+  cyl(0.012, 0.012, 0.014, M.brass, 0.062, 0.035, 0.05, r, 10).rotation.x = Math.PI / 2;
+  const ant = cyl(0.004, 0.004, 0.22, M.metalDark, 0.1, 0.19, -0.02, r, 6);
+  ant.rotation.z = -0.5;
+  const led = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.014, 0.008), new THREE.MeshBasicMaterial({ color: 0x33201a }));
+  led.position.set(0.028, 0.098, 0.046); r.add(led);
+  return led;
+})();
+(() => {  // interrupteur près de la porte
+  const p = new THREE.Group(); p.position.set(1.45, 1.15, -ROOM.d / 2 + 0.045); scene.add(p);
+  box(0.07, 0.11, 0.025, M.cream, 0, 0, 0, p);
+  box(0.024, 0.04, 0.02, M.brass, 0, 0.01, 0.015, p);
+})();
+
+function startPickup(t) {
+  if (anim.action) return;
+  const dx = t.g.position.x - player.pos.x, dz = t.g.position.z - player.pos.z;
+  anim.action = { type: 'pickup', t: 0, dur: 1.05, item: t, faceYaw: Math.atan2(dx, dz), grabbed: false };
+}
+
+function updateObjective() {
+  document.getElementById('objN').textContent = gameState.tools;
+  if (gameState.tools >= gameState.toolsTotal) {
+    gameState.doorUnlocked = true;
+    document.getElementById('objective').innerHTML = 'Clés retrouvées — <b>ouvre la porte</b>';
+  }
+}
+
+function updateInteract() {
+  let best = null, bd = 1e9;
+  for (const o of interactables) {
+    if (o.enabled && !o.enabled()) continue;
+    const d = Math.hypot(o.x - player.pos.x, o.z - player.pos.z);
+    if (d < o.r && d < bd) { bd = d; best = o; }
+  }
+  interact.nearest = best;
+  if (best) interact.relYaw = wrapPi(Math.atan2(best.x - player.pos.x, best.z - player.pos.z) - player.yaw);
+  const show = best && !anim.action;
+  promptEl.style.opacity = show ? 1 : 0;
+  btnE.style.opacity = show ? 1 : 0.35;
+  if (show) promptText.textContent = ' ' + best.label();
+}
+function tryInteract() { if (interact.nearest && !anim.action) interact.nearest.action(); }
+
+/* --- contrôles tactiles --- */
+const touch = { on: 'ontouchstart' in window, ax: 0, az: 0, run: false, stickId: null, camId: null, camX: 0, camY: 0 };
+if (touch.on) {
+  document.body.classList.add('touch');
+  document.getElementById('hint').textContent = '';
+  const zone = document.getElementById('stickZone');
+  const nub = document.getElementById('stickNub');
+  const btnRun = document.getElementById('btnRun');
+  zone.addEventListener('touchstart', e => {
+    e.preventDefault();
+    if (touch.stickId === null) touch.stickId = e.changedTouches[0].identifier;
+  }, { passive: false });
+  renderer.domElement.addEventListener('touchstart', e => {
+    if (touch.camId === null) {
+      const t = e.changedTouches[0];
+      touch.camId = t.identifier; touch.camX = t.clientX; touch.camY = t.clientY;
+    }
+  }, { passive: true });
+  addEventListener('touchmove', e => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === touch.stickId) {
+        const r = zone.getBoundingClientRect();
+        let dx = (t.clientX - (r.left + 64)) / 50, dy = (t.clientY - (r.top + 64)) / 50;
+        const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; }
+        touch.ax = dx; touch.az = -dy;
+        nub.style.left = (44 + dx * 34) + 'px'; nub.style.top = (44 + dy * 34) + 'px';
+      } else if (t.identifier === touch.camId) {
+        camCtl.yaw -= (t.clientX - touch.camX) * 0.006;
+        camCtl.pitch = clamp(camCtl.pitch + (t.clientY - touch.camY) * 0.006, CAM.minPitch, CAM.maxPitch);
+        touch.camX = t.clientX; touch.camY = t.clientY;
+      }
+    }
+  }, { passive: true });
+  const release = e => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === touch.stickId) {
+        touch.stickId = null; touch.ax = touch.az = 0;
+        nub.style.left = '44px'; nub.style.top = '44px';
+      }
+      if (t.identifier === touch.camId) touch.camId = null;
+    }
+  };
+  addEventListener('touchend', release); addEventListener('touchcancel', release);
+  btnE.addEventListener('touchstart', e => { e.preventDefault(); tryInteract(); }, { passive: false });
+  btnRun.addEventListener('touchstart', e => {
+    e.preventDefault(); touch.run = !touch.run;
+    btnRun.style.borderColor = touch.run ? '#ffb066' : 'rgba(232,220,200,.3)';
+  }, { passive: false });
+}
+
+/* ---------------------------------------------------------- */
 /* 9. Animation procédurale                                    */
 /* ---------------------------------------------------------- */
 const anim = {
@@ -676,6 +969,10 @@ function animate(dt, t, speed, yawRate, accelFwd) {
     : damp(anim.moveBlend, sstep(0.08, 0.6, speed), 8, dt);
   const r = anim.runBlend = fg ? sstep(2.2, 3.6, speed)
     : damp(anim.runBlend, sstep(2.2, 3.6, speed), 6, dt);
+  // poids de l'action de ramassage (cloche : 0 → accroupi → 0)
+  const act = anim.action;
+  const aw = act && act.type === 'pickup'
+    ? Math.pow(Math.sin(Math.PI * clamp(act.t / act.dur, 0, 1)), 0.8) : 0;
 
   // paramètres d'allure — la course introduit une phase de vol (appui court)
   const duty = lerp(0.58, 0.30, r);
@@ -701,11 +998,11 @@ function animate(dt, t, speed, yawRate, accelFwd) {
   const bob = m * lerp(0.016, 0.055, r) * (0.5 - 0.5 * Math.cos(2 * p2 - bobPhase));
   const sway = m * lerp(0.022, 0.012, r) * Math.sin(p2);
   const idleSway = (1 - m) * 0.016 * noise1(t * 0.4);
-  B.hips.position.set(sway + idleSway, bobBase + bob, 0);
+  B.hips.position.set(sway + idleSway, bobBase + bob - aw * 0.27, aw * 0.03);
   const pelvYaw = -m * lerp(0.10, 0.16, r) * Math.cos(p2);  // hanche gauche en avant avec la jambe gauche
   const pelvRoll = m * 0.045 * Math.sin(p2) + anim.leanRoll;
   const idleBreath = (1 - m) * 0.012 * Math.sin(t * 1.6);
-  B.hips.rotation.set(anim.leanPitch + m * 0.03 + idleBreath * 0.3, pelvYaw, pelvRoll);
+  B.hips.rotation.set(anim.leanPitch + m * 0.03 + idleBreath * 0.3 + aw * 0.5, pelvYaw, pelvRoll);
 
   // --- jambes (cibles en repère root) ---
   for (const [S, sx, off] of [['L', 1, 0], ['R', -1, 0.5]]) {
@@ -717,9 +1014,15 @@ function animate(dt, t, speed, yawRate, accelFwd) {
     const tz = lerp(restZ, g.z, m);
     const ty = lerp(CHAR.ankleY, g.y, m);
     solveLeg(S, sx, _v3.set(tx, ty, tz), m * g.pitch);
-    // contact au sol → bruit de pas
+    // contact au sol → bruit de pas + bouffée de poussière en course
     const grounded = m > 0.35 && u < duty;
-    if (grounded && !anim.contact[S] && speed > 0.4) stepSound(Math.min(1, speed / 4));
+    if (grounded && !anim.contact[S] && speed > 0.4) {
+      stepSound(Math.min(1, speed / 4));
+      if (speed > 2.8) {
+        marcel.B['foot' + S].getWorldPosition(_v);
+        spawnPuff(_v.x, 0.05, _v.z, -player.vel.x * 0.05, -player.vel.z * 0.05);
+      }
+    }
     anim.contact[S] = grounded;
   }
 
@@ -741,11 +1044,21 @@ function animate(dt, t, speed, yawRate, accelFwd) {
   B.foreL.rotation.x = -(bendBase + m * lerp(0.25, 0.75, r) * (0.5 - 0.5 * Math.cos(p2)));
   B.foreR.rotation.x = -(bendBase + m * lerp(0.25, 0.75, r) * (0.5 + 0.5 * Math.cos(p2)));
   B.handL.rotation.x = -0.12; B.handR.rotation.x = -0.12;
+  if (aw > 0) {                       // main droite tendue vers la clé
+    B.shoulderR.rotation.x = lerp(B.shoulderR.rotation.x, -1.15, aw);
+    B.shoulderR.rotation.z = lerp(B.shoulderR.rotation.z, 0.18, aw);
+    B.foreR.rotation.x = lerp(B.foreR.rotation.x, -0.22, aw);
+    B.chest.rotation.x += aw * 0.22;
+  }
 
-  // --- tête : stabilisée, regards curieux à l'arrêt ---
+  // --- tête : stabilisée, regarde les objets proches, regards curieux à l'arrêt ---
   const glance = (1 - m) * sstep(0.4, 0.9, Math.abs(noise1(t * 0.23)));
-  anim.headYaw = damp(anim.headYaw, glance * noise1(t * 0.31 + 9) * 0.55 - pelvYaw * 0.35, 4, dt);
-  anim.headPitch = damp(anim.headPitch, glance * noise1(t * 0.27 + 4) * 0.14 - anim.leanPitch * 1.1 + m * 0.02, 4, dt);
+  const lookAtIt = interact.nearest && m < 0.5 && Math.abs(interact.relYaw) < 1.15 && !aw;
+  const headYawTgt = lookAtIt ? interact.relYaw * 0.6
+    : glance * noise1(t * 0.31 + 9) * 0.55 - pelvYaw * 0.35;
+  anim.headYaw = damp(anim.headYaw, headYawTgt, 4, dt);
+  anim.headPitch = damp(anim.headPitch,
+    (lookAtIt ? 0.22 : glance * noise1(t * 0.27 + 4) * 0.14) - anim.leanPitch * 1.1 + m * 0.02 + aw * 0.45, 4, dt);
   B.neck.rotation.set(anim.headPitch * 0.4, anim.headYaw * 0.4, -anim.leanRoll * 0.3);
   B.head.rotation.set(anim.headPitch * 0.6 + m * 0.02 * Math.cos(2 * p2), anim.headYaw * 0.6, -anim.leanRoll * 0.35);
 
@@ -764,6 +1077,7 @@ const keys = {};
 addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'KeyM') audio.toggle();
+  if (e.code === 'KeyE' && !e.repeat) tryInteract();
 });
 addEventListener('keyup', e => keys[e.code] = false);
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
@@ -818,9 +1132,14 @@ function collide(pos) {
 }
 
 function updatePlayer(dt) {
-  const axis = keyAxis();
-  const running = keys.ShiftLeft || keys.ShiftRight;
-  const maxSpeed = running ? CHAR.runSpeed : CHAR.walkSpeed;
+  let axis = keyAxis(), mag = 1;
+  if (touch.on && touch.stickId !== null && (touch.ax || touch.az)) {
+    mag = Math.min(1, Math.hypot(touch.ax, touch.az));
+    if (mag > 0.05) axis = { x: touch.ax / mag, z: touch.az / mag };
+  }
+  if (anim.action) axis = { x: 0, z: 0 };            // immobile pendant le ramassage
+  const running = (keys.ShiftLeft || keys.ShiftRight || touch.run) && !anim.action;
+  const maxSpeed = (running ? CHAR.runSpeed : CHAR.walkSpeed) * mag;
   // direction voulue, relative à la caméra (l'avant écran est −(sin cy, cos cy))
   const cy = camCtl.yaw;
   const dirX = axis.x * Math.cos(cy) - axis.z * Math.sin(cy);
@@ -848,8 +1167,11 @@ function updatePlayer(dt) {
   player.vel.z = (player.pos.z - pz) / dt;
 
   player.speed = Math.hypot(player.vel.x, player.vel.z);
-  // orientation : le personnage se tourne vers sa vitesse
-  if (player.speed > 0.15) {
+  // orientation : vers la clé pendant le ramassage, sinon vers la vitesse
+  if (anim.action && anim.action.faceYaw !== undefined) {
+    player.yaw = dampAngle(player.yaw, anim.action.faceYaw, 9, dt);
+    player.yawRate = damp(player.yawRate, 0, 8, dt);
+  } else if (player.speed > 0.15) {
     const target = Math.atan2(player.vel.x, player.vel.z);
     const before = player.yaw;
     player.yaw = dampAngle(player.yaw, target, CHAR.turnRate, dt);
@@ -972,6 +1294,46 @@ function updateCamera(dt) {
 /* ---------------------------------------------------------- */
 const audio = {
   ctx: null, master: null, muted: false,
+  musicOn: false, music: null, lastNote: 0,
+  toggleMusic() {
+    this.start();
+    if (!this.ctx) { this.musicOn = !this.musicOn; return; }
+    this.musicOn = !this.musicOn;
+    if (this.musicOn && !this.music) this.buildMusic();
+    if (this.music) {
+      const t = this.ctx.currentTime;
+      this.music.g.gain.cancelScheduledValues(t);
+      this.music.g.gain.linearRampToValueAtTime(this.musicOn ? 0.42 : 0.0001, t + 1.1);
+    }
+  },
+  buildMusic() {
+    const c = this.ctx;
+    const g = c.createGain(); g.gain.value = 0.0001; g.connect(this.master);
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 850; lp.connect(g);
+    const padG = c.createGain(); padG.gain.value = 0.045; padG.connect(lp);
+    [[146.83, -5], [220, 4], [293.66, -2]].forEach(([f, det]) => {
+      const o = c.createOscillator(); o.type = 'triangle';
+      o.frequency.value = f; o.detune.value = det; o.connect(padG); o.start();
+    });
+    const dl = c.createDelay(1); dl.delayTime.value = 0.42;
+    const fb = c.createGain(); fb.gain.value = 0.3; dl.connect(fb); fb.connect(dl); dl.connect(g);
+    // mélodie pentatonique paresseuse, en ré mineur
+    const notes = [293.66, 349.23, 392, 440, 523.25, 587.33];
+    let idx = 2;
+    setInterval(() => {
+      if (!this.musicOn || Math.random() < 0.3) return;
+      idx = clamp(idx + ((Math.random() * 3) | 0) - 1, 0, notes.length - 1);
+      const t = c.currentTime;
+      const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = notes[idx];
+      const e = c.createGain(); e.gain.setValueAtTime(0.0008, t);
+      e.gain.exponentialRampToValueAtTime(0.055, t + 0.04);
+      e.gain.exponentialRampToValueAtTime(0.0006, t + 1.15);
+      o.connect(e); e.connect(dl); e.connect(g);
+      o.start(t); o.stop(t + 1.25);
+      this.lastNote = performance.now();
+    }, 620);
+    this.music = { g };
+  },
   start() {
     if (this.ctx) return;
     try {
@@ -993,6 +1355,44 @@ const audio = {
     if (this.master) this.master.gain.value = this.muted ? 0 : 0.5;
   },
 };
+function clinkSound() {
+  if (!audio.ctx || audio.muted) return;
+  const c = audio.ctx, t = c.currentTime;
+  [2093, 3136].forEach((f, i) => {
+    const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = f * (1 + Math.random() * 0.012);
+    const g = c.createGain(); g.gain.setValueAtTime(0.06 / (i + 1), t);
+    g.gain.exponentialRampToValueAtTime(0.0005, t + 0.18);
+    o.connect(g); g.connect(audio.master); o.start(t); o.stop(t + 0.2);
+  });
+}
+function clickSound() {
+  if (!audio.ctx || audio.muted) return;
+  const c = audio.ctx, t = c.currentTime;
+  const o = c.createOscillator(); o.type = 'square'; o.frequency.value = 940;
+  const g = c.createGain(); g.gain.setValueAtTime(0.05, t);
+  g.gain.exponentialRampToValueAtTime(0.0005, t + 0.04);
+  o.connect(g); g.connect(audio.master); o.start(t); o.stop(t + 0.05);
+}
+function thumpSound() {
+  if (!audio.ctx || audio.muted) return;
+  const c = audio.ctx, t = c.currentTime;
+  const o = c.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(85, t);
+  o.frequency.exponentialRampToValueAtTime(45, t + 0.22);
+  const g = c.createGain(); g.gain.setValueAtTime(0.16, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+  o.connect(g); g.connect(audio.master); o.start(t); o.stop(t + 0.3);
+}
+function rumbleSound() {
+  if (!audio.ctx || audio.muted) return;
+  const c = audio.ctx, t = c.currentTime;
+  [52, 66].forEach(f => {
+    const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+    const g = c.createGain(); g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.09, t + 0.3);
+    g.gain.linearRampToValueAtTime(0.0001, t + 2.6);
+    o.connect(g); g.connect(audio.master); o.start(t); o.stop(t + 2.7);
+  });
+}
 function stepSound(vol) {
   if (!audio.ctx || audio.muted) return;
   const c = audio.ctx, t = c.currentTime;
@@ -1017,9 +1417,77 @@ function tick(now) {
   const dt = clamp((now - last) / 1000, 0.001, 0.05);
   last = now; elapsed += dt;
 
+  // action en cours : le ramassage
+  if (anim.action) {
+    const a = anim.action; a.t += dt;
+    if (a.type === 'pickup') {
+      if (!a.grabbed && a.t > 0.45) {
+        a.grabbed = true; clinkSound();
+        a.from = a.item.g.position.clone();
+      }
+      if (a.grabbed && !a.item.taken) {
+        const k = clamp((a.t - 0.45) / 0.32, 0, 1), e = smooth(k);
+        _v.set(player.pos.x + Math.sin(player.yaw) * 0.4, 0.52, player.pos.z + Math.cos(player.yaw) * 0.4);
+        a.item.g.position.lerpVectors(a.from, _v, e);
+        a.item.g.scale.setScalar(Math.max(0.001, 1 - e));
+        if (k >= 1) {
+          a.item.taken = true; scene.remove(a.item.g); scene.remove(a.item.glint);
+          gameState.tools++; updateObjective();
+          toast(TOOL_LINES[gameState.tools - 1], 3.8);
+        }
+      }
+      if (a.t >= a.dur) anim.action = null;
+    }
+  }
+  updateInteract();
+
   const accelFwd = updatePlayer(dt);
   animate(dt, elapsed, player.speed, player.yawRate, accelFwd);
   updateCamera(dt);
+
+  // clés : scintillement d'appel
+  for (const tl of tools) {
+    if (tl.taken) continue;
+    tl.mat.emissiveIntensity = 0.15 + 0.22 * (0.5 + 0.5 * Math.sin(elapsed * 2.6 + tl.i * 2));
+    tl.glint.material.opacity = 0.22 + 0.3 * (0.5 + 0.5 * Math.sin(elapsed * 3.1 + tl.i));
+    tl.glint.scale.setScalar(0.12 + 0.05 * Math.sin(elapsed * 2.2 + tl.i * 3));
+  }
+  // bouffées de poussière
+  for (const p of puffs) {
+    if (p.life <= 0) continue;
+    p.life -= dt;
+    p.s.position.x += p.vx * dt; p.s.position.y += p.vy * dt; p.s.position.z += p.vz * dt;
+    p.vy *= Math.max(0, 1 - 2 * dt);
+    p.s.scale.multiplyScalar(1 + 1.6 * dt);
+    p.s.material.opacity = Math.max(0, p.life / 0.55) * 0.4;
+  }
+  // porte : secousse (verrouillée) ou ouverture (déverrouillée)
+  if (doorState.shake > 0) {
+    doorState.shake -= dt * 1.6;
+    anchors.door.position.y = Math.max(0, Math.sin(elapsed * 42) * 0.02 * doorState.shake);
+  } else if (gameState.doorOpen && doorState.y < 1) {
+    doorState.y = Math.min(1, doorState.y + dt / 2.4);
+    const e = smooth(doorState.y);
+    anchors.door.position.y = e * 0.76;
+    doorGlow.intensity = e * 1.3;
+    doorState.dustT -= dt;
+    if (doorState.dustT <= 0 && doorState.y < 0.9) {
+      doorState.dustT = 0.12;
+      spawnPuff((Math.random() - .5) * 2.4, 0.12 + Math.random() * 0.3, -ROOM.d / 2 + 0.28, 0, 0.3);
+    }
+    if (doorState.y >= 1 && !doorState.done) { doorState.done = true; toast('À suivre — LA ROUTE.', 7); }
+  }
+  // bâche qui frémit
+  if (tarpWobble > 0) {
+    tarpWobble -= dt * 1.4;
+    const wob = 1 + Math.sin(elapsed * 16) * 0.035 * Math.max(0, tarpWobble);
+    anchors.tarp.scale.set(wob, 1 / wob, wob);
+  }
+  // toast
+  if (toastTimer > 0) { toastTimer -= dt; if (toastTimer <= 0) toastEl.style.opacity = 0; }
+  // LED de la radio, au rythme des notes
+  const beat = audio.musicOn ? Math.max(0, 1 - (performance.now() - audio.lastNote) / 450) : 0;
+  radioLED.material.color.setRGB(0.2 + beat * 0.8, 0.12 + beat * 0.25, 0.1 + beat * 0.12);
 
   // poussières qui dérivent
   const pa = dust.geometry.attributes.position;
@@ -1029,8 +1497,14 @@ function tick(now) {
     if (pa.array[i * 3 + 1] < 0.2) pa.array[i * 3 + 1] = 2.5;
   }
   pa.needsUpdate = true;
-  // scintillement à peine perceptible de l'ampoule
-  keyLight.intensity = 1.55 + Math.sin(elapsed * 13) * 0.014 + noise1(elapsed * 3.1) * 0.012;
+  // lumières : état de l'interrupteur + scintillement à peine perceptible
+  const flick = Math.sin(elapsed * 13) * 0.014 + noise1(elapsed * 3.1) * 0.012;
+  keyLight.intensity = damp(keyLight.intensity, gameState.lightsOn ? 1.55 + flick : 0, 5, dt);
+  keyFill.intensity = damp(keyFill.intensity, gameState.lightsOn ? 0.35 : 0.02, 5, dt);
+  hemi.intensity = damp(hemi.intensity, gameState.lightsOn ? 0.22 : 0.1, 5, dt);
+  moon.intensity = damp(moon.intensity, gameState.lightsOn ? 0.38 : 0.6, 5, dt);
+  anchors.bulb.material.color.setHex(gameState.lightsOn ? 0xffd9a0 : 0x2b2b36);
+  bulbHalo.material.opacity = 0.3 * Math.max(0, keyLight.intensity / 1.55);
 
   renderer.render(scene, camera);
 }
@@ -1038,7 +1512,7 @@ requestAnimationFrame(tick);
 
 // petites poignées pour l'outillage (captures, tests)
 window.__atelier = {
-  player, camCtl, anim, marcel, renderer,
+  player, camCtl, anim, marcel, renderer, gameState, tools, interact, tryInteract, toolSpots,
   setCam(yaw, pitch, dist) { camCtl.yaw = yaw; camCtl.pitch = pitch; camCtl.distTarget = dist; camCtl.distSmooth = dist; camCtl.dist = dist; },
   warp(x, z, yaw) { player.pos.set(x, 0, z); if (yaw !== undefined) player.yaw = yaw; },
   press(code, v) { keys[code] = v; },
