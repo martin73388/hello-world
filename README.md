@@ -1,12 +1,14 @@
 # Éolia — terres du vent 🍃
+### Un voyage au long cours
 
-Un jeu d'**exploration 3D en monde ouvert** : une grande île procédurale aux
-graphismes stylisés low-poly — prairies vallonnées, forêts, plages, un pic
-enneigé, un océan, des îles flottantes à l'horizon — baignée de brume et d'un
-cycle jour/nuit.
+Un jeu d'**exploration 3D en monde ouvert à l'échelle réelle** : 1 unité = 1 mètre,
+1 seconde réelle = 1 minute de jeu. Une île de **22 km²**, un pic à **1104 m**
+dont l'ascension à pied demande une **journée de jeu entière** (~25 minutes
+réelles), comme en vrai — avec la nuit qui tombe en route et la fatigue qui
+s'accumule.
 
-**Le but :** parcourir l'île pour éveiller les **sept sanctuaires**, signalés
-au loin par leurs piliers de lumière cyan. Une fois éveillés, ils passent à l'or.
+Tu y vis dans un **vieux camping-car vide**, que tu conduis et que tu aménages
+au fil de tes trouvailles.
 
 ## Jouer
 
@@ -14,32 +16,51 @@ Ouvre `index.html` dans un navigateur — aucun serveur nécessaire, tout est lo
 
 | Commande | Action |
 |---|---|
-| ZQSD / WASD / flèches | Se déplacer |
-| Maj | Courir |
-| Espace | Sauter |
-| Espace en l'air | Ouvrir / fermer le **paravoile** |
-| Glisser la souris | Orienter la caméra |
-| Molette | Zoom |
+| ZQSD / WASD / flèches | Marcher (7 km/h) — Maj : courir |
+| Espace | Sauter · en l'air : **paravoile** |
+| E | Ramasser / prendre le volant / descendre |
+| F | Entrer dans l'habitacle du van |
+| T | Manger (repas, sinon baies) |
+| Souris / molette | Caméra / zoom |
 
-## Ce qu'il faut savoir
+## La boucle de jeu
 
-- Le **paravoile** est la clé de l'exploration : grimpe sur une hauteur, saute,
-  et plane à travers l'île. Depuis le pic enneigé, on survole tout le monde.
-- La **boussole** en haut de l'écran montre les points cardinaux et la direction
-  de chaque sanctuaire (cyan = à éveiller, or = éveillé).
-- On peut nager, mais on avance lentement — et le vent te ramène si tu t'éloignes
-  trop d'Éolia.
-- Le monde vit : cycle jour/nuit (5 min), étoiles, nuages dérivants, vent audible
-  qui force quand tu planes.
+**Explorer → récolter → aménager le van → partir plus loin.**
+
+- **Le camping-car** se conduit (~80 km/h max, pentes raides infranchissables,
+  l'océan l'arrête). Il consomme du carburant : récupère des **jerricans**
+  près des épaves, repérables à leur colonne de fumée.
+- **Les ressources** : du **bois** (branches en forêt), des **baies**
+  (buissons), de la **ferraille** (épaves), des **cristaux** (offerts par les
+  sanctuaires éveillés).
+- **L'habitacle** (vue maison de poupée) s'aménage pièce par pièce :
+  vrai lit → kitchenette → étagères → plante & tapis → guirlande → radio
+  (musique générative !) → panneau solaire (−30 % de carburant).
+  Chaque meuble apparaît physiquement dans le van. Confort affiché en %.
+- **L'énergie** : marcher fatigue, grimper épuise, la nuit coûte plus cher.
+  Cueille des baies, cuisine des repas pour les expéditions, et dors dans le
+  van (sans lit, la nuit sur le siège récupère mal…).
+- **Les sept sanctuaires** aux piliers de lumière cyan restent le fil rouge :
+  chacun offre un cristal, nécessaire aux aménagements avancés.
+
+## Les dimensions, en vrai
+
+| Trajet | Durée |
+|---|---|
+| Ascension du pic à pied | ~25 h de jeu (≈ 25 min réelles) |
+| Traversée de l'île en van | ~6 h de jeu (≈ 6 min réelles) |
+| Une journée complète | 24 min réelles |
 
 ## Technique
 
-- `three.min.js` — Three.js r147 embarqué (aucun accès réseau requis)
-- `game.js` — tout le jeu : terrain procédural déterministe (bruit fractal +
-  masque d'île), couleurs par sommet, ombres dynamiques, végétation instanciée,
-  ciel en shader avec soleil et étoiles, personnage animé, physique (course,
-  saut, vol plané, nage), audio synthétisé au WebAudio (vent, nappe, carillons)
-- `index.html` — la page et le HUD
+- `three.min.js` — Three.js r147 embarqué (jouable hors ligne)
+- `game.js` — terrain procédural déterministe (bruit fractal + masque d'île),
+  couleurs par sommet, ombres dynamiques, végétation instanciée, ciel en
+  shader, cycle jour/nuit, personnage et van animés, trois modes de jeu
+  (marche / conduite / habitacle), audio 100 % WebAudio (vent réactif, moteur,
+  radio générative, carillons)
+- `index.html` — page et HUD (horloge, énergie, carburant, inventaire,
+  boussole, panneau d'aménagement)
 
 Les fonctions de terrain sont pures et testables sous Node :
 `node -e "console.log(require('./game.js').findPeak())"`

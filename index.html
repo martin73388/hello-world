@@ -49,10 +49,10 @@
   @media (prefers-reduced-motion: reduce) { #title .cta { animation: none; } }
 
   /* ----- HUD ----- */
-  .hud { position: fixed; color: #f3efe2; text-shadow: 0 1px 6px rgba(0,0,0,0.6); pointer-events: none; }
+  .hud { position: fixed; color: #f3efe2; text-shadow: 0 1px 6px rgba(0,0,0,0.6); pointer-events: none; z-index: 5; }
   #compass {
     top: 14px; left: 50%; transform: translateX(-50%);
-    width: min(420px, 70vw); height: 30px;
+    width: min(420px, 60vw); height: 30px;
     border-bottom: 1px solid rgba(243,239,226,0.35);
     overflow: hidden;
   }
@@ -62,44 +62,124 @@
   .cmark.dot { top: 9px; width: 9px; height: 9px; border-radius: 50%;
     background: #66e6d4; box-shadow: 0 0 8px #66e6d4; }
   .cmark.dot.found { background: #ffce54; box-shadow: 0 0 8px #ffce54; }
-  #count {
-    top: 16px; right: 22px;
-    font-size: 19px; letter-spacing: 0.12em; color: #e9dfc0;
-  }
+
+  #clock { top: 14px; left: 22px; font-size: 19px; letter-spacing: 0.1em; color: #e9dfc0; }
+  #bars { top: 46px; left: 22px; width: 180px; }
+  .bar { height: 7px; border-radius: 4px; background: rgba(243,239,226,0.16); margin-top: 7px; overflow: hidden; }
+  .bar > div { height: 100%; border-radius: 4px; transition: width 0.3s ease; }
+  #energyFill { background: linear-gradient(90deg, #a8d46a, #dfe89a); width: 100%; }
+  #fuelWrap { display: none; }
+  #fuelFill { background: linear-gradient(90deg, #e0a04c, #f2cf7a); width: 40%; }
+  .barLabel { font-family: 'Segoe UI', Avenir, system-ui, sans-serif; font-size: 11px;
+    letter-spacing: 0.14em; color: rgba(243,239,226,0.7); margin-top: 6px; }
+
+  #count { top: 16px; right: 22px; font-size: 19px; letter-spacing: 0.12em; color: #e9dfc0; text-align: right; }
   #count::before { content: '⬦ '; color: #66e6d4; }
+  #confort { top: 44px; right: 22px; font-size: 13px; letter-spacing: 0.14em; color: rgba(243,239,226,0.75);
+    font-family: 'Segoe UI', Avenir, system-ui, sans-serif; }
+
+  #inv {
+    right: 18px; bottom: 16px;
+    display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; max-width: 44vw;
+    font-family: 'Segoe UI', Avenir, system-ui, sans-serif;
+  }
+  .chip {
+    background: rgba(10,14,26,0.55); border: 1px solid rgba(243,239,226,0.2);
+    border-radius: 14px; padding: 3px 10px; font-size: 13px; color: #efe9d6;
+  }
+
   #toast {
-    top: 18%; left: 50%; transform: translateX(-50%);
-    font-size: clamp(18px, 3vw, 28px); font-style: italic;
+    top: 17%; left: 50%; transform: translateX(-50%);
+    font-size: clamp(17px, 2.6vw, 26px); font-style: italic;
     letter-spacing: 0.08em; color: #fdf6dd;
     opacity: 0; transition: opacity 0.8s ease;
     white-space: nowrap;
   }
   #toast.show { opacity: 1; }
+
+  #prompt {
+    bottom: 12%; left: 50%; transform: translateX(-50%);
+    font-family: 'Segoe UI', Avenir, system-ui, sans-serif;
+    font-size: 15px; letter-spacing: 0.06em; color: #fdf6dd;
+    background: rgba(10,14,26,0.55); border: 1px solid rgba(243,239,226,0.25);
+    border-radius: 8px; padding: 7px 16px;
+    display: none;
+  }
+  #prompt b { color: #ffce54; }
+
   #hints {
     left: 22px; bottom: 18px;
     font-family: 'Segoe UI', Avenir, system-ui, sans-serif;
-    font-size: 13px; line-height: 1.75; color: rgba(243,239,226,0.75);
+    font-size: 12.5px; line-height: 1.7; color: rgba(243,239,226,0.72);
     transition: opacity 3s ease;
   }
   #hints.hide { opacity: 0; }
   #hints b { color: #e9dfc0; font-weight: 600; }
+
+  /* ----- panneau habitacle ----- */
+  #panel {
+    position: fixed; top: 0; right: 0; height: 100%; width: min(360px, 92vw);
+    background: rgba(12,14,20,0.88);
+    border-left: 1px solid rgba(243,239,226,0.15);
+    color: #efe9d6;
+    font-family: 'Segoe UI', Avenir, system-ui, sans-serif;
+    padding: 22px 20px; box-sizing: border-box;
+    overflow-y: auto;
+    display: none; z-index: 10;
+  }
+  #panel h2 { font-family: Georgia, serif; font-weight: 400; letter-spacing: 0.15em;
+    font-size: 22px; color: #e9dfc0; margin: 0 0 4px; }
+  #panel .small { font-size: 12px; color: rgba(243,239,226,0.6); margin-bottom: 16px; }
+  #panel h3 { font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: #9fb8a8; margin: 20px 0 8px; font-weight: 600; }
+  .pbtn {
+    display: block; width: 100%; text-align: left;
+    background: rgba(243,239,226,0.07); border: 1px solid rgba(243,239,226,0.2);
+    border-radius: 8px; color: #efe9d6; font-family: inherit;
+    padding: 9px 12px; margin-bottom: 8px; font-size: 14px; cursor: pointer;
+  }
+  .pbtn:hover:not(:disabled) { background: rgba(243,239,226,0.15); }
+  .pbtn:disabled { opacity: 0.45; cursor: default; }
+  .pbtn .cost { display: block; font-size: 11.5px; color: #c9b98a; margin-top: 2px; }
+  .pbtn.done { border-color: rgba(255,206,84,0.5); }
+  .pbtn.done .cost { color: #86b25a; }
+
+  #fade {
+    position: fixed; inset: 0; background: #000; opacity: 0;
+    pointer-events: none; transition: opacity 0.9s ease; z-index: 20;
+  }
+  #fade.on { opacity: 1; }
 </style>
 </head>
 <body>
 <canvas id="cv"></canvas>
 <div class="hud" id="compass"><div id="compassInner"></div></div>
-<div class="hud" id="count">0 / 7</div>
-<div class="hud" id="toast"></div>
-<div class="hud" id="hints">
-  <b>ZQSD / flèches</b> — se déplacer &nbsp;·&nbsp; <b>Maj</b> — courir<br>
-  <b>Espace</b> — sauter &nbsp;·&nbsp; <b>Espace en l'air</b> — ouvrir le paravoile<br>
-  <b>Glisser la souris</b> — regarder &nbsp;·&nbsp; <b>Molette</b> — zoom<br>
-  Rejoins les piliers de lumière pour éveiller les sept sanctuaires.
+<div class="hud" id="clock">Jour 1 · 08:00</div>
+<div class="hud" id="bars">
+  <div class="barLabel">ÉNERGIE</div>
+  <div class="bar"><div id="energyFill"></div></div>
+  <div id="fuelWrap">
+    <div class="barLabel">CARBURANT</div>
+    <div class="bar"><div id="fuelFill"></div></div>
+  </div>
 </div>
+<div class="hud" id="count">0 / 7</div>
+<div class="hud" id="confort">Confort du van : 0 %</div>
+<div class="hud" id="inv"></div>
+<div class="hud" id="toast"></div>
+<div class="hud" id="prompt"></div>
+<div class="hud" id="hints">
+  <b>ZQSD / flèches</b> — marcher · <b>Maj</b> — courir · <b>Espace</b> — sauter, puis paravoile<br>
+  <b>E</b> — ramasser / conduire · <b>F</b> — habitacle du van · <b>T</b> — manger<br>
+  <b>Souris</b> — regarder · <b>Molette</b> — zoom<br>
+  Récolte, aménage ton camping-car, et éveille les sept sanctuaires.
+</div>
+<div id="panel"></div>
+<div id="fade"></div>
 <div id="overlay">
   <div id="title">
     <h1>ÉOLIA</h1>
-    <div class="sub">TERRES DU VENT</div>
+    <div class="sub">TERRES DU VENT · UN VOYAGE AU LONG COURS</div>
     <div class="cta">— clique pour t'éveiller —</div>
   </div>
 </div>
