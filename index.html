@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Minuit moins douze</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #06080f;
+    overflow: hidden;
+    touch-action: none;
+    -webkit-user-select: none; user-select: none;
+  }
+  #wrap {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="cv"></canvas></div>
+<script>
+'use strict';
+/* ============================================================
+   MINUIT MOINS DOUZE
+   Un jeu d'horlogerie : les aiguilles sont les plateformes.
+   Allume les douze heures avant que minuit ne sonne.
+   ============================================================ */
+
+const V = 1000;                    // taille du monde virtuel (carré)
+const CX = 500, CY = 500;          // centre du cadran
+const R = 440;                     // rayon du cadran
+const GRAV = 1100;                 // gravité (px/s²)
+const JUMP_V = 580;                // impulsion de saut
+const WALK_V = 230;                // vitesse de marche le long d'une aiguille
+const AIR_ACC = 520;               // contrôle aérien
+const AIR_CAP = 400;               // vitesse horizontale max ajoutée en l'air
+const LAND_W = 17;                 // demi-fenêtre de capture d'une aiguille
+const HUB_MIN = 26;                // distance minimale au moyeu
+const TOTAL_TIME = 99;             // secondes avant minuit
+const FALL_PENALTY = 6;            // secondes perdues en tombant
+const DT = 1 / 240;                // pas de simulation
+
+// Aiguilles : longueur, largeur, vitesse angulaire de base (rad/s)
+const hands = [
+  { L: 0.52 * R, w: 26, baseW: 2 * Math.PI / 240, a: 5.1, tip: 0 },  // heures
+  { L: 0.74 * R, w: 16, baseW: 2 * Math.PI / 60,  a: 2.4, tip: 0 },  // minutes
+  { L: 0.88 * R, w: 8,  baseW: 2 * Math.PI / 9,   a: 0.0, tip: 0 },  // secondes
+];
+
+const ROMANS = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'];
+const numerals = [];
+for (let i = 1; i <= 12; i++) {
+  const a = i * Math.PI / 6; // angle horloger depuis 12h, sens horaire
+  numerals.push({
+    x: CX + Math.sin(a) * 0.84 * R,
+    y: CY - Math.cos(a) * 0.84 * R,
+    label: ROMANS[i - 1],
+    lit: false,
+    glow: 0,
+  });
+}
+
+// direction d'une aiguille (angle horloger a, repère écran y vers le bas)
+function handU(a) { return { x: Math.sin(a), y: -Math.cos(a) }; }
+function handN(a) { return { x: Math.cos(a), y: Math.sin(a) }; }
+
+const player = {
+  state: 'hand', hand: 0, d: 130,
+  x: 0, y: 0, vx: 0, vy: 0,
+  cd: 0,            // délai avant recapture par une aiguille
+  trail: [],
+};
+
+let state = 'title';     // title | play | win | lose
+let timeLeft = TOTAL_TIME;
+let collected = 0;
+let speedMult = 1;
+let elapsed = 0;
+let flash = 0;           // flash rouge (chute)
+let lastTickSec = -1;
+let best = null;
+try { best = localStorage.getItem('mmd_best'); } catch (e) {}
+
+// ---------- entrées ----------
+const keys = { left: false, right: false };
+let jumpQueued = false, dropQueued = false, anyKey = false;
+
+addEventListener('keydown', e => {
+  if (e.repeat) { return; }
+  anyKey = true;
+  switch (e.code) {
+    case 'ArrowLeft': case 'KeyA': keys.left = true; break;
+    case 'ArrowRight': case 'KeyD': keys.right = true; break;
+    case 'ArrowUp': case 'KeyW': case 'Space': jumpQueued = true; e.preventDefault(); break;
+    case 'ArrowDown': case 'KeyS': dropQueued = true; break;
+  }
+  handleStateAdvance();
+});
+addEventListener('keyup', e => {
+  switch (e.code) {
+    case 'ArrowLeft': case 'KeyA': keys.left = false; break;
+    case 'ArrowRight': case 'KeyD': keys.right = false; break;
+  }
+});
+
+// tactile : tiers gauche = vers le centre, tiers droit = vers la pointe, milieu = saut
+const touches = new Map();
+function touchZone(t) {
+  const w = innerWidth;
+  if (t.clientX < w / 3) { return 'left'; }
+  if (t.clientX > 2 * w / 3) { return 'right'; }
+  return 'jump';
+}
+addEventListener('touchstart', e => {
+  e.preventDefault();
+  anyKey = true;
+  for (const t of e.changedTouches) {
+    const z = touchZone(t);
+    touches.set(t.identifier, z);
+    if (z === 'jump') { jumpQueued = true; } else { keys[z] = true; }
+  }
+  handleStateAdvance();
+}, { passive: false });
+function endTouch(e) {
+  for (const t of e.changedTouches) {
+    const z = touches.get(t.identifier);
+    if (z === 'left' || z === 'right') { keys[z] = false; }
+    touches.delete(t.identifier);
+  }
+}
+addEventListener('touchend', endTouch);
+addEventListener('touchcancel', endTouch);
+addEventListener('mousedown', () => { anyKey = true; handleStateAdvance(); });
+
+function handleStateAdvance() {
+  ensureAudio();
+  if (state === 'title') { startGame(); }
+  else if (state === 'win' || state === 'lose') { state = 'title'; jumpQueued = false; }
+}
+
+// ---------- audio (WebAudio, tout est synthétisé) ----------
+let AC = null;
+function ensureAudio() {
+  if (!AC) {
+    try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+  }
+  if (AC && AC.state === 'suspended') { AC.resume(); }
+}
+function tone(freq, dur, vol, type, when) {
+  if (!AC) { return; }
+  const t0 = AC.currentTime + (when || 0);
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type || 'sine';
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, t0);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g).connect(AC.destination);
+  o.start(t0); o.stop(t0 + dur + 0.05);
+}
+function bell(freq, vol, when) {
+  tone(freq, 1.1, vol, 'sine', when);
+  tone(freq * 2.76, 0.5, vol * 0.35, 'sine', when);
+  tone(freq * 5.4, 0.22, vol * 0.15, 'sine', when);
+}
+function sfxTick(urgent) { tone(urgent ? 1560 : 1040, 0.035, urgent ? 0.09 : 0.05, 'square'); }
+function sfxCollect(n) { bell(392 * Math.pow(2, n / 12), 0.22); }
+function sfxJump() { tone(300, 0.09, 0.06, 'triangle'); }
+function sfxLand() { tone(180, 0.06, 0.05, 'triangle'); }
+function sfxFall() {
+  if (!AC) { return; }
+  const t0 = AC.currentTime;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(220, t0);
+  o.frequency.exponentialRampToValueAtTime(50, t0 + 0.5);
+  g.gain.setValueAtTime(0.14, t0);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.5);
+  o.connect(g).connect(AC.destination);
+  o.start(t0); o.stop(t0 + 0.6);
+}
+function sfxWin() { [0, 4, 7, 12, 16].forEach((s, i) => bell(523 * Math.pow(2, s / 12), 0.22, i * 0.13)); }
+function sfxLose() { bell(98, 0.4); bell(65, 0.35, 0.15); tone(49, 2.2, 0.25, 'sine', 0.15); }
+
+// ---------- boucle de jeu ----------
+function startGame() {
+  state = 'play';
+  timeLeft = TOTAL_TIME;
+  collected = 0;
+  speedMult = 1;
+  elapsed = 0;
+  lastTickSec = -1;
+  numerals.forEach(n => { n.lit = false; n.glow = 0; });
+  hands[0].a = 5.1; hands[1].a = 2.4; hands[2].a = 0;
+  respawn();
+  player.trail.length = 0;
+  jumpQueued = false; dropQueued = false;
+}
+
+function respawn() {
+  player.state = 'hand';
+  player.hand = 0;
+  player.d = hands[0].L * 0.6;
+  player.vx = player.vy = 0;
+  player.cd = 0;
+  const u = handU(hands[0].a);
+  player.x = CX + u.x * player.d;
+  player.y = CY + u.y * player.d;
+}
+
+function walkInput() { return (keys.right ? 1 : 0) - (keys.left ? 1 : 0); }
+
+function pointVel(h, d) {
+  const w = h.baseW * speedMult, n = handN(h.a);
+  return { x: n.x * w * d, y: n.y * w * d };
+}
+
+function step(dt) {
+  // aiguilles
+  for (const h of hands) { h.a = (h.a + h.baseW * speedMult * dt) % (2 * Math.PI); }
+  if (state !== 'play') { return; }
+
+  player.cd = Math.max(0, player.cd - dt);
+  const wi = walkInput();
+
+  if (player.state === 'hand') {
+    const h = hands[player.hand];
+    player.d += wi * WALK_V * dt;
+    if (player.d < HUB_MIN) { player.d = HUB_MIN; }
+    const u = handU(h.a);
+    player.x = CX + u.x * player.d;
+    player.y = CY + u.y * player.d;
+
+    if (dropQueued) {                       // se laisser tomber
+      const pv = pointVel(h, player.d);
+      player.state = 'air'; player.vx = pv.x; player.vy = pv.y;
+      player.cd = 0.25;
+    } else if (jumpQueued) {                // saut : vitesse du point + impulsion
+      const pv = pointVel(h, player.d);
+      player.state = 'air';
+      player.vx = pv.x + u.x * wi * WALK_V;
+      player.vy = pv.y + u.y * wi * WALK_V - JUMP_V;
+      player.cd = 0.2;
+      sfxJump();
+    } else if (player.d > h.L + 6) {        // on marche au-delà de la pointe
+      const pv = pointVel(h, player.d);
+      player.state = 'air'; player.vx = pv.x; player.vy = pv.y;
+      player.cd = 0.15;
+    }
+  } else {
+    // phase aérienne
+    if (wi !== 0) {
+      const nv = player.vx + wi * AIR_ACC * dt;
+      if (wi > 0 ? nv < AIR_CAP : nv > -AIR_CAP) { player.vx = nv; }
+    }
+    if (jumpQueued && player.cd <= 0) { /* pas de double saut */ }
+    player.vy += GRAV * dt;
+    player.x += player.vx * dt;
+    player.y += player.vy * dt;
+
+    // capture par une aiguille
+    if (player.cd <= 0) {
+      const rx = player.x - CX, ry = player.y - CY;
+      for (let i = 0; i < hands.length; i++) {
+        const h = hands[i], u = handU(h.a), n = handN(h.a);
+        const d = rx * u.x + ry * u.y;
+        const perp = rx * n.x + ry * n.y;
+        if (d >= HUB_MIN - 4 && d <= h.L + 8 && Math.abs(perp) < LAND_W) {
+          player.state = 'hand'; player.hand = i; player.d = Math.max(HUB_MIN, Math.min(d, h.L));
+          player.vx = player.vy = 0;
+          sfxLand();
+          break;
+        }
+      }
+    }
+
+    // chute hors du cadran
+    if (player.y > V + 80 || Math.abs(player.x - CX) > V) {
+      timeLeft -= FALL_PENALTY;
+      flash = 1;
+      sfxFall();
+      respawn();
+    }
+  }
+
+  jumpQueued = false; dropQueued = false;
+
+  // ramassage des chiffres
+  for (const nu of numerals) {
+    if (!nu.lit) {
+      const dx = player.x - nu.x, dy = player.y - nu.y;
+      if (dx * dx + dy * dy < 36 * 36) {
+        nu.lit = true; nu.glow = 1;
+        collected++;
+        sfxCollect(collected);
+        speedMult = 1 + 0.11 * Math.floor(collected / 3); // ça s'emballe !
+        if (collected === 12) {
+          state = 'win';
+          sfxWin();
+          const score = Math.max(0, Math.ceil(timeLeft));
+          if (best === null || score > +best) {
+            best = String(score);
+            try { localStorage.setItem('mmd_best', best); } catch (e) {}
+          }
+        }
+      }
+    }
+  }
+}
+
+// ---------- rendu ----------
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let scale = 1;
+
+function resize() {
+  const s = Math.min(innerWidth, innerHeight);
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  cv.width = Math.round(s * dpr);
+  cv.height = Math.round(s * dpr);
+  cv.style.width = s + 'px';
+  cv.style.height = s + 'px';
+  scale = s * dpr / V;
+}
+addEventListener('resize', resize);
+resize();
+
+function fmtTime(t) {
+  t = Math.max(0, t);
+  const m = Math.floor(t / 60), s = Math.floor(t % 60);
+  return m + ':' + String(s).padStart(2, '0');
+}
+
+function drawGear(x, y, r, teeth, a, color) {
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(a);
+  ctx.beginPath();
+  for (let i = 0; i < teeth * 2; i++) {
+    const rr = i % 2 === 0 ? r : r * 0.86;
+    const ta = i * Math.PI / teeth;
+    ctx.lineTo(Math.cos(ta) * rr, Math.sin(ta) * rr);
+  }
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.3, 0, 2 * Math.PI);
+  ctx.fillStyle = '#06080f';
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawHand(h, style) {
+  const u = handU(h.a);
+  ctx.save();
+  ctx.translate(CX, CY);
+  ctx.rotate(Math.atan2(u.y, u.x));
+  const grad = ctx.createLinearGradient(0, -h.w, 0, h.w);
+  grad.addColorStop(0, style.hi); grad.addColorStop(0.5, style.mid); grad.addColorStop(1, style.lo);
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(-24, -h.w * 0.5);
+  ctx.lineTo(h.L * 0.92, -h.w * 0.5);
+  ctx.lineTo(h.L, 0);
+  ctx.lineTo(h.L * 0.92, h.w * 0.5);
+  ctx.lineTo(-24, h.w * 0.5);
+  ctx.closePath();
+  ctx.fill();
+  if (style.glow) {
+    ctx.shadowColor = style.glow; ctx.shadowBlur = 14;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+  ctx.restore();
+}
+
+let gearA = 0;
+function render(dtReal) {
+  gearA += dtReal * 0.12;
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+
+  // fond
+  const bg = ctx.createRadialGradient(CX, CY, 60, CX, CY, 700);
+  bg.addColorStop(0, '#101527');
+  bg.addColorStop(1, '#05060c');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, V, V);
+
+  // engrenages décoratifs
+  drawGear(140, 170, 110, 10, gearA, 'rgba(120,100,60,0.10)');
+  drawGear(870, 820, 150, 12, -gearA * 0.7, 'rgba(120,100,60,0.08)');
+  drawGear(880, 140, 70, 8, gearA * 1.4, 'rgba(120,100,60,0.09)');
+
+  // cadran
+  ctx.beginPath(); ctx.arc(CX, CY, R + 14, 0, 2 * Math.PI);
+  ctx.strokeStyle = '#8a6d3b'; ctx.lineWidth = 10; ctx.stroke();
+  ctx.beginPath(); ctx.arc(CX, CY, R + 4, 0, 2 * Math.PI);
+  ctx.fillStyle = 'rgba(16,20,36,0.75)'; ctx.fill();
+  ctx.strokeStyle = 'rgba(200,170,110,0.35)'; ctx.lineWidth = 2; ctx.stroke();
+
+  // graduations
+  for (let i = 0; i < 60; i++) {
+    const a = i * Math.PI / 30;
+    const big = i % 5 === 0;
+    const r1 = R - (big ? 26 : 14), r2 = R - 4;
+    ctx.beginPath();
+    ctx.moveTo(CX + Math.sin(a) * r1, CY - Math.cos(a) * r1);
+    ctx.lineTo(CX + Math.sin(a) * r2, CY - Math.cos(a) * r2);
+    ctx.strokeStyle = big ? 'rgba(200,170,110,0.5)' : 'rgba(200,170,110,0.18)';
+    ctx.lineWidth = big ? 4 : 2;
+    ctx.stroke();
+  }
+
+  // chiffres romains
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const nu of numerals) {
+    nu.glow = Math.max(0, nu.glow - dtReal * 0.8);
+    ctx.font = '600 44px Georgia, "Times New Roman", serif';
+    if (nu.lit) {
+      ctx.shadowColor = '#ffce54'; ctx.shadowBlur = 18 + nu.glow * 30;
+      ctx.fillStyle = '#ffd98a';
+    } else {
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(150,150,170,0.30)';
+    }
+    ctx.fillText(nu.label, nu.x, nu.y);
+    ctx.shadowBlur = 0;
+    if (!nu.lit && state === 'play') {
+      ctx.beginPath(); ctx.arc(nu.x, nu.y, 33, 0, 2 * Math.PI);
+      ctx.strokeStyle = 'rgba(255,206,84,' + (0.10 + 0.08 * Math.sin(elapsed * 3 + nu.x)) + ')';
+      ctx.lineWidth = 2; ctx.stroke();
+    }
+  }
+
+  // aiguilles
+  drawHand(hands[0], { hi: '#d8b56a', mid: '#a5813c', lo: '#6d5426' });
+  drawHand(hands[1], { hi: '#e3c98e', mid: '#b6934f', lo: '#7c6130' });
+  drawHand(hands[2], { hi: '#ffb37a', mid: '#e07840', lo: '#8d4520', glow: 'rgba(255,140,70,0.8)' });
+
+  // moyeu
+  ctx.beginPath(); ctx.arc(CX, CY, 20, 0, 2 * Math.PI);
+  ctx.fillStyle = '#d8b56a'; ctx.fill();
+  ctx.beginPath(); ctx.arc(CX, CY, 9, 0, 2 * Math.PI);
+  ctx.fillStyle = '#4a3a1c'; ctx.fill();
+
+  // traînée + joueur
+  player.trail.push({ x: player.x, y: player.y });
+  if (player.trail.length > 26) { player.trail.shift(); }
+  for (let i = 0; i < player.trail.length; i++) {
+    const t = player.trail[i], k = i / player.trail.length;
+    ctx.beginPath(); ctx.arc(t.x, t.y, 2 + 5 * k, 0, 2 * Math.PI);
+    ctx.fillStyle = 'rgba(255,240,190,' + (0.05 + 0.12 * k) + ')';
+    ctx.fill();
+  }
+  ctx.shadowColor = '#fff3c4'; ctx.shadowBlur = 22;
+  ctx.beginPath(); ctx.arc(player.x, player.y, 9, 0, 2 * Math.PI);
+  ctx.fillStyle = '#fff8e0'; ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // HUD
+  if (state === 'play' || state === 'win' || state === 'lose') {
+    const urgent = timeLeft <= 10 && state === 'play';
+    ctx.font = '700 46px Georgia, serif';
+    ctx.fillStyle = urgent ? (Math.floor(elapsed * 4) % 2 ? '#ff6b57' : '#ffd98a') : '#e8dcc0';
+    ctx.fillText('− ' + fmtTime(timeLeft) + ' avant minuit −', CX, 52);
+    ctx.font = '600 30px Georgia, serif';
+    ctx.fillStyle = '#ffce54';
+    ctx.fillText(collected + ' / 12', CX, 96);
+  }
+
+  // flash de chute
+  if (flash > 0) {
+    ctx.fillStyle = 'rgba(255,60,40,' + flash * 0.25 + ')';
+    ctx.fillRect(0, 0, V, V);
+    flash = Math.max(0, flash - dtReal * 3);
+  }
+
+  // écrans
+  if (state !== 'play') {
+    ctx.fillStyle = 'rgba(4,5,10,0.72)';
+    ctx.fillRect(0, 0, V, V);
+    ctx.textAlign = 'center';
+    if (state === 'title') {
+      ctx.font = '700 74px Georgia, serif';
+      ctx.fillStyle = '#ffd98a';
+      ctx.shadowColor = '#ffce54'; ctx.shadowBlur = 30;
+      ctx.fillText('MINUIT MOINS DOUZE', CX, 300);
+      ctx.shadowBlur = 0;
+      ctx.font = 'italic 400 30px Georgia, serif';
+      ctx.fillStyle = '#cfc4a6';
+      ctx.fillText('Les aiguilles sont tes plateformes.', CX, 375);
+      ctx.fillText('Allume les douze heures avant que minuit ne sonne.', CX, 418);
+      ctx.font = '400 26px Georgia, serif';
+      ctx.fillStyle = '#9a917c';
+      ctx.fillText('← → : courir vers le centre / la pointe', CX, 520);
+      ctx.fillText('Espace ou ↑ : sauter (la pointe des secondes fait fronde !)', CX, 558);
+      ctx.fillText('↓ : se laisser tomber', CX, 596);
+      if (best !== null) {
+        ctx.fillStyle = '#ffce54';
+        ctx.fillText('Record : ' + best + ' s d’avance sur minuit', CX, 660);
+      }
+      ctx.font = '600 32px Georgia, serif';
+      ctx.fillStyle = '#fff3c4';
+      ctx.fillText(Math.floor(elapsed * 1.5) % 2 ? '— appuie sur une touche —' : '', CX, 740);
+    } else if (state === 'win') {
+      ctx.font = '700 70px Georgia, serif';
+      ctx.fillStyle = '#ffd98a';
+      ctx.shadowColor = '#ffce54'; ctx.shadowBlur = 30;
+      ctx.fillText('LES DOUZE COUPS N’ONT', CX, 380);
+      ctx.fillText('JAMAIS SONNÉ', CX, 460);
+      ctx.shadowBlur = 0;
+      ctx.font = '400 34px Georgia, serif';
+      ctx.fillStyle = '#cfc4a6';
+      ctx.fillText('Tu as battu minuit avec ' + Math.max(0, Math.ceil(timeLeft)) + ' s d’avance.', CX, 550);
+      ctx.font = '600 28px Georgia, serif';
+      ctx.fillStyle = '#9a917c';
+      ctx.fillText('— appuie sur une touche —', CX, 640);
+    } else if (state === 'lose') {
+      ctx.font = '700 80px Georgia, serif';
+      ctx.fillStyle = '#ff6b57';
+      ctx.fillText('MINUIT A SONNÉ', CX, 420);
+      ctx.font = '400 34px Georgia, serif';
+      ctx.fillStyle = '#cfc4a6';
+      ctx.fillText(collected + ' heure' + (collected > 1 ? 's' : '') + ' allumée' + (collected > 1 ? 's' : '') + ' sur douze.', CX, 500);
+      ctx.font = '600 28px Georgia, serif';
+      ctx.fillStyle = '#9a917c';
+      ctx.fillText('— appuie sur une touche —', CX, 600);
+    }
+  }
+}
+
+// ---------- boucle principale ----------
+let last = performance.now(), acc = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  let dtReal = (now - last) / 1000;
+  last = now;
+  if (dtReal > 0.1) { dtReal = 0.1; }
+  elapsed += dtReal;
+
+  if (state === 'play') {
+    timeLeft -= dtReal;
+    const sec = Math.ceil(timeLeft);
+    if (sec !== lastTickSec) {
+      lastTickSec = sec;
+      if (sec > 0) { sfxTick(sec <= 10); }
+    }
+    if (timeLeft <= 0) {
+      timeLeft = 0;
+      state = 'lose';
+      sfxLose();
+    }
+  }
+
+  acc += dtReal;
+  while (acc >= DT) { step(DT); acc -= DT; }
+  render(dtReal);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
