@@ -9,7 +9,7 @@
 /* ---------------------------------------------------------- */
 /* 0. Constantes générales                                     */
 /* ---------------------------------------------------------- */
-const ROOM = { w: 12, d: 9, h: 3.6 };             // atelier : 12 m × 9 m, plafond 3,6 m
+const ROOM = { w: 16, d: 14, h: 4.2 };            // atelier : 16 m × 14 m — on peut y faire demi-tour
 const CHAR = {
   height: 1.78,
   radius: 0.26,          // capsule de collision
@@ -20,7 +20,7 @@ const CHAR = {
   accel: 30, friction: 11, turnRate: 11,
 };
 const CAM = {
-  fov: 55, minDist: 1.5, maxDist: 6.0, dist0: 3.4,
+  fov: 55, minDist: 1.5, maxDist: 7.5, dist0: 3.6,
   minPitch: -0.42, maxPitch: 1.22, sens: 0.0022,
   targetH: 1.38, margin: 0.22,
 };
@@ -308,7 +308,7 @@ function buildGarage() {
     m.position.set(x, h / 2, z); m.rotation.y = ry; m.receiveShadow = true; scene.add(m); return m;
   };
   // mur nord en trois pans : derrière la porte, la nuit
-  const doorW = 3.5, doorH = 3.02;
+  const doorW = 4.6, doorH = 3.6;
   const sideW = (w - doorW) / 2;
   mkWall(sideW, -(doorW / 2 + sideW / 2), -d / 2, 0);
   mkWall(sideW, (doorW / 2 + sideW / 2), -d / 2, 0);
@@ -326,19 +326,19 @@ function buildGarage() {
 
   // --- porte sectionnelle (fermée), mur nord — assez large pour le camping-car ---
   const door = new THREE.Group(); door.position.set(0, 0, -d / 2 + 0.07); scene.add(door);
-  for (let i = 0; i < 6; i++) {
-    const p = box(3.4, 0.46, 0.055, M.metalDark, 0, 0.27 + i * 0.5, 0, door);
-    box(3.22, 0.36, 0.02, M.metal, 0, 0.27 + i * 0.5, 0.032, door);
+  for (let i = 0; i < 7; i++) {
+    const p = box(4.5, 0.47, 0.055, M.metalDark, 0, 0.28 + i * 0.51, 0, door);
+    box(4.3, 0.37, 0.02, M.metal, 0, 0.28 + i * 0.51, 0.032, door);
     p.receiveShadow = true;
   }
-  box(0.6, 0.16, 0.03, M.metal, 0, 1.05, 0.06, door); // poignée
+  box(0.7, 0.16, 0.03, M.metal, 0, 1.05, 0.06, door); // poignée
   // rails de guidage et enseigne : fixés au mur, la porte coulisse entre eux
   const doorFrame = new THREE.Group(); doorFrame.position.copy(door.position); scene.add(doorFrame);
-  box(0.1, 3.2, 0.11, M.metalDark, -1.79, 1.6, 0, doorFrame);
-  box(0.1, 3.2, 0.11, M.metalDark, 1.79, 1.6, 0, doorFrame);
-  const sign = box(1.5, 0.34, 0.04, M.teal, 0, 3.24, 0.02, doorFrame);
+  box(0.1, 3.9, 0.11, M.metalDark, -2.36, 1.95, 0, doorFrame);
+  box(0.1, 3.9, 0.11, M.metalDark, 2.36, 1.95, 0, doorFrame);
+  const sign = box(1.6, 0.36, 0.04, M.teal, 0, 3.86, 0.02, doorFrame);
   // le bouton de commande de la porte, sur le mur à droite
-  const btnBox = new THREE.Group(); btnBox.position.set(2.35, 1.25, -d / 2 + 0.06); scene.add(btnBox);
+  const btnBox = new THREE.Group(); btnBox.position.set(2.95, 1.25, -d / 2 + 0.06); scene.add(btnBox);
   box(0.15, 0.21, 0.07, M.metalDark, 0, 0, 0, btnBox);
   const doorButton = cyl(0.038, 0.042, 0.035, M.red, 0, 0.035, 0.045, btnBox, 14);
   doorButton.rotation.x = Math.PI / 2;
@@ -437,12 +437,12 @@ function buildGarage() {
   breaker.receiveShadow = true;
   // bandeau vitré côté est (lueur de lune)
   const win = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.6), M.window);
-  win.position.set(w / 2 - 0.02, 2.95, -1.0); win.rotation.y = -Math.PI / 2; scene.add(win);
+  win.position.set(w / 2 - 0.02, 3.3, -1.0); win.rotation.y = -Math.PI / 2; scene.add(win);
   // cadre : traverses haut/bas + meneaux (rien devant la vitre)
-  box(0.06, 0.05, 3.72, M.metalDark, w / 2 - 0.035, 3.26, -1.0);
-  box(0.06, 0.05, 3.72, M.metalDark, w / 2 - 0.035, 2.64, -1.0);
+  box(0.06, 0.05, 3.72, M.metalDark, w / 2 - 0.035, 3.61, -1.0);
+  box(0.06, 0.05, 3.72, M.metalDark, w / 2 - 0.035, 2.99, -1.0);
   [-1.82, -0.6, 0.6, 1.82].forEach(o =>
-    box(0.06, 0.66, 0.05, M.metalDark, w / 2 - 0.035, 2.95, -1.0 + o));
+    box(0.06, 0.66, 0.05, M.metalDark, w / 2 - 0.035, 3.3, -1.0 + o));
 
   // --- deux luminaires suspendus (ampoule + abat-jour émaillé) ---
   const mkLamp = (x, z) => {
@@ -454,8 +454,8 @@ function buildGarage() {
     bl.position.y = -0.85; lampG.add(bl);
     return { pos: new THREE.Vector3(x, h - 0.88, z), bulb: bl };
   };
-  const lampA = mkLamp(1.0, -1.3);
-  const lampB = mkLamp(-1.2, 2.5);
+  const lampA = mkLamp(1.8, -3.0);
+  const lampB = mkLamp(-1.8, 3.2);
 
   // contours encrés sur les props héros (même langage graphique que le personnage)
   [bench, shelf, tires, cab].forEach(g2 => outlineTree(g2));
@@ -477,23 +477,23 @@ const anchors = buildGarage();
    Toutes les collisions intérieures se font dans CE repère :
    si le van bouge, l'intérieur suit — sans couture.            */
 const VAN = {
-  floorY: 0.42, innerX: 0.86, innerZ: 2.30,
-  doorZ0: 0.25, doorZ1: 1.35,
-  seat: { x: -0.45, z: -1.52 },                 // siège conducteur (local)
+  floorY: 0.45, innerX: 1.11, innerZ: 3.26,
+  doorZ0: 0.4, doorZ1: 1.6,
+  seat: { x: -0.55, z: -2.25 },                 // siège conducteur (local)
   cols: [                                        // AABB locaux {x0,x1,z0,z1}
-    { x0: -1.02, x1: -0.86, z0: -2.46, z1: 2.46 },              // paroi gauche
-    { x0: 0.86, x1: 1.02, z0: -2.46, z1: 0.25 },                // paroi droite avant
-    { x0: 0.86, x1: 1.02, z0: 1.35, z1: 2.46 },                 // paroi droite arrière
-    { x0: -1.02, x1: 1.02, z0: -2.46, z1: -2.30 },              // face avant
-    { x0: -1.02, x1: 1.02, z0: 2.30, z1: 2.46 },                // face arrière
-    { x0: -0.86, x1: 0.86, z0: 1.42, z1: 2.30 },                // lit
-    { x0: -0.86, x1: -0.42, z0: -0.27, z1: 1.37 },              // kitchenette
-    { x0: -0.86, x1: 0.86, z0: -2.30, z1: -1.95 },              // tableau de bord
-    { x0: -0.70, x1: -0.20, z0: -1.80, z1: -1.30 },             // siège gauche
-    { x0: 0.20, x1: 0.70, z0: -1.80, z1: -1.30 },               // siège droit
+    { x0: -1.27, x1: -1.11, z0: -3.42, z1: 3.42 },              // paroi gauche
+    { x0: 1.11, x1: 1.27, z0: -3.42, z1: 0.4 },                 // paroi droite avant
+    { x0: 1.11, x1: 1.27, z0: 1.6, z1: 3.42 },                  // paroi droite arrière
+    { x0: -1.27, x1: 1.27, z0: -3.42, z1: -3.26 },              // face avant
+    { x0: -1.27, x1: 1.27, z0: 3.26, z1: 3.42 },                // face arrière
+    { x0: -1.11, x1: 1.11, z0: 2.3, z1: 3.26 },                 // lit
+    { x0: -1.11, x1: -0.59, z0: -0.62, z1: 1.62 },              // kitchenette
+    { x0: -1.11, x1: 1.11, z0: -3.26, z1: -2.88 },              // tableau de bord
+    { x0: -0.84, x1: -0.26, z0: -2.55, z1: -1.95 },             // siège gauche
+    { x0: 0.26, x1: 0.84, z0: -2.55, z1: -1.95 },               // siège droit
   ],
 };
-const vanState = { x: -2.7, z: -0.4, yaw: 0, speed: 0, driving: false, driveHint: false };
+const vanState = { x: -4.0, z: 0.8, yaw: 0, speed: 0, driving: false, driveHint: false };
 
 function buildVan() {
   const van = new THREE.Group(); scene.add(van);
@@ -509,123 +509,136 @@ function buildVan() {
   const cloth = toon(0x51706a, { roughness: 1.0, metalness: 0 });
 
   // plancher, bas de caisse
-  box(1.86, 0.08, 4.66, woodFloor, 0, 0.38, 0, van);
-  box(2.0, 0.22, 4.74, cream, 0, 0.31, 0, van);
-  // parois basses (0.42 → 1.44) — la porte latérale droite est ouverte
-  box(0.12, 1.02, 4.88, cream, -0.93, 0.93, 0, van);                       // gauche
-  box(0.12, 1.02, 2.69, cream, 0.93, 0.93, (-2.44 + 0.25) / 2, van);       // droite, avant de la porte
-  box(0.12, 1.02, 1.09, cream, 0.93, 0.93, (1.35 + 2.44) / 2, van);        // droite, arrière
-  // bande haute (1.44 → 2.30) : piliers sarcelle + vitres
-  const upSeg = (sx, z0, z1) => box(0.12, 0.86, z1 - z0, teal, sx * 0.93, 1.87, (z0 + z1) / 2, van);
-  const pane = (sx, z0, z1) => box(0.03, 0.78, z1 - z0 - 0.06, glass, sx * 0.93, 1.87, (z0 + z1) / 2, van);
-  [[-1], [1]].forEach(([sx]) => {
-    upSeg(sx, -2.44, -2.1); upSeg(sx, -1.3, -0.95); upSeg(sx, 0.05, sx > 0 ? 0.25 : 0.4);
-    pane(sx, -2.1, -1.3); pane(sx, -0.95, 0.05);
+  box(2.36, 0.1, 7.0, woodFloor, 0, 0.4, 0, van);
+  box(2.5, 0.24, 7.1, cream, 0, 0.33, 0, van);
+  // parois basses (0.45 -> 1.55) — porte latérale droite ouverte
+  box(0.12, 1.1, 6.94, cream, -1.18, 1.0, 0, van);
+  box(0.12, 1.1, 3.8, cream, 1.18, 1.0, -1.5, van);
+  box(0.12, 1.1, 1.8, cream, 1.18, 1.0, 2.5, van);
+  // bande haute (1.55 -> 2.75) : piliers sarcelle + vitres
+  const upSeg = (sx, z0, z1) => box(0.12, 1.2, z1 - z0, teal, sx * 1.18, 2.15, (z0 + z1) / 2, van);
+  const pane = (sx, z0, z1) => box(0.03, 1.0, z1 - z0 - 0.08, glass, sx * 1.18, 2.12, (z0 + z1) / 2, van);
+  [-1, 1].forEach(sx => {
+    upSeg(sx, -3.4, -3.0); pane(sx, -3.0, -2.2);
+    upSeg(sx, -2.2, -1.7); pane(sx, -1.7, -0.6);
+    upSeg(sx, -0.6, sx > 0 ? 0.4 : -0.2);
   });
-  upSeg(-1, 1.5, 2.44); pane(-1, 0.4, 1.5);      // grande vitre gauche
-  upSeg(1, 1.35, 2.44);                           // droite : la porte est l'ouverture
-  // avant : tablier, pare-brise incliné, calandre, phares, pare-chocs
-  box(1.86, 0.95, 0.14, cream, 0, 0.945, -2.37, van);
-  const ws = box(1.7, 0.95, 0.04, glass, 0, 1.85, -2.34, van); ws.rotation.x = -0.09;
-  const grille = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 0.4), toon(0xffffff, { map: canvasTex(128, (g, s) => {
-    g.fillStyle = '#b7a888'; g.fillRect(0, 0, s, s);
+  pane(-1, -0.2, 1.1); upSeg(-1, 1.1, 1.5); pane(-1, 1.5, 2.8); upSeg(-1, 2.8, 3.4);
+  upSeg(1, 1.6, 2.0); pane(1, 2.0, 3.1); upSeg(1, 3.1, 3.4);   // droite : la porte est l'ouverture
+  // avant : tablier, pare-brise, calandre, phares, pare-chocs
+  box(2.26, 1.05, 0.14, cream, 0, 0.975, -3.33, van);
+  const ws = box(2.1, 1.15, 0.04, glass, 0, 2.12, -3.3, van); ws.rotation.x = -0.09;
+  const grille = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.5), toon(0xffffff, { map: canvasTex(128, (g, s2) => {
+    g.fillStyle = '#b7a888'; g.fillRect(0, 0, s2, s2);
     g.fillStyle = '#6d6250';
-    for (let y = 10; y < s; y += 22) g.fillRect(8, y, s - 16, 9);
+    for (let y = 10; y < s2; y += 22) g.fillRect(8, y, s2 - 16, 9);
   }), metalness: 0.6, roughness: 0.4 }));
-  grille.position.set(0, 0.92, -2.445); grille.rotation.y = Math.PI; van.add(grille);
+  grille.position.set(0, 1.0, -3.415); grille.rotation.y = Math.PI; van.add(grille);
   const lenses = [];
-  [-0.66, 0.66].forEach(x => {
-    cyl(0.11, 0.11, 0.06, chrome, x, 1.3, -2.42, van, 16).rotation.x = Math.PI / 2;
-    const lens = new THREE.Mesh(new THREE.CircleGeometry(0.082, 16),
+  [-0.85, 0.85].forEach(x => {
+    cyl(0.12, 0.12, 0.06, chrome, x, 1.42, -3.39, van, 16).rotation.x = Math.PI / 2;
+    const lens = new THREE.Mesh(new THREE.CircleGeometry(0.09, 16),
       new THREE.MeshStandardMaterial({ color: 0x6b5c40, emissive: 0x241c10, roughness: 0.2 }));
-    lens.position.set(x, 1.3, -2.455); lens.rotation.y = Math.PI; van.add(lens);
+    lens.position.set(x, 1.42, -3.425); lens.rotation.y = Math.PI; van.add(lens);
     lenses.push(lens.material);
   });
-  box(2.1, 0.17, 0.22, chrome, 0, 0.42, -2.5, van);
-  box(2.1, 0.17, 0.22, chrome, 0, 0.42, 2.5, van);
+  box(2.6, 0.18, 0.24, chrome, 0, 0.45, -3.48, van);
+  box(2.6, 0.18, 0.24, chrome, 0, 0.45, 3.48, van);
   // arrière : panneau plein + vitre + plaque
-  box(1.86, 1.23, 0.14, cream, 0, 1.035, 2.37, van);
-  box(1.4, 0.55, 0.04, glass, 0, 1.95, 2.37, van);
-  box(1.86, 0.2, 0.14, teal, 0, 2.22, 2.37, van);
-  const plateTex2 = canvasTex(128, (g, s) => {
-    g.fillStyle = '#1a1a20'; g.fillRect(0, 0, s, s);
+  box(2.26, 1.35, 0.14, cream, 0, 1.125, 3.33, van);
+  box(1.6, 0.62, 0.04, glass, 0, 2.18, 3.33, van);
+  box(2.26, 0.24, 0.14, teal, 0, 2.62, 3.33, van);
+  const plateTex2 = canvasTex(128, (g, s2) => {
+    g.fillStyle = '#1a1a20'; g.fillRect(0, 0, s2, s2);
     g.fillStyle = '#e8dcc8'; g.font = 'bold 40px Courier New'; g.textAlign = 'center';
-    g.fillText('GM·73·AT', s / 2, s / 2 + 14);
+    g.fillText('GM·73·AT', s2 / 2, s2 / 2 + 14);
   });
-  [[-2.51, Math.PI], [2.51, 0]].forEach(([z, ry]) => {
-    const pl = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.12), new THREE.MeshBasicMaterial({ map: plateTex2 }));
-    pl.position.set(0, 0.62, z); pl.rotation.y = ry; van.add(pl);
+  [[-3.49, Math.PI], [3.49, 0]].forEach(([z, ry]) => {
+    const pl = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.14), new THREE.MeshBasicMaterial({ map: plateTex2 }));
+    pl.position.set(0, 0.68, z); pl.rotation.y = ry; van.add(pl);
   });
   // toit + galerie + jerrican + roue de secours
-  box(2.06, 0.14, 4.88, teal, 0, 2.37, 0, van);
-  box(1.7, 0.1, 4.5, teal, 0, 2.47, 0, van);
-  [-0.72, 0.72].forEach(x => box(0.05, 0.09, 3.6, M.metalDark, x, 2.57, 0.2, van));
-  [-1.3, 0.1, 1.5].forEach(z => box(1.5, 0.05, 0.06, M.metalDark, 0, 2.59, z, van));
-  cyl(0.16, 0.16, 0.42, M.teal, -0.35, 2.72, -0.8, van, 12);
-  const spare = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.11, 10, 20), M.tire);
-  spare.position.set(0.25, 2.72, 1.4); spare.rotation.x = Math.PI / 2; spare.castShadow = true; van.add(spare);
+  box(2.5, 0.17, 7.0, teal, 0, 2.835, 0, van);
+  box(2.1, 0.12, 6.5, teal, 0, 2.97, 0, van);
+  [-0.95, 0.95].forEach(x => box(0.06, 0.1, 5.2, M.metalDark, x, 3.08, 0.3, van));
+  [-1.8, 0.2, 2.2].forEach(z => box(1.96, 0.06, 0.07, M.metalDark, 0, 3.1, z, van));
+  cyl(0.2, 0.2, 0.5, M.teal, -0.45, 3.3, -1.2, van, 12);
+  const spare = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.13, 10, 20), M.tire);
+  spare.position.set(0.35, 3.28, 1.9); spare.rotation.x = Math.PI / 2; spare.castShadow = true; van.add(spare);
   // le nom, peint à la main
-  const nameTex = canvasTex(256, (g, s) => {
+  const nameTex = canvasTex(256, (g, s2) => {
     g.fillStyle = '#e8dcc8'; g.font = 'italic 42px Georgia'; g.textAlign = 'center';
-    g.fillText("L'Hirondelle", s / 2, s / 2 + 10);
+    g.fillText("L'Hirondelle", s2 / 2, s2 / 2 + 10);
     g.strokeStyle = '#e8dcc8'; g.lineWidth = 2;
-    g.beginPath(); g.moveTo(s * .22, s * .61); g.quadraticCurveTo(s / 2, s * .70, s * .78, s * .61); g.stroke();
+    g.beginPath(); g.moveTo(s2 * .22, s2 * .61); g.quadraticCurveTo(s2 / 2, s2 * .70, s2 * .78, s2 * .61); g.stroke();
   });
   [-1, 1].forEach(sx => {
-    const nm = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.95),
+    const nm = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.1),
       toon(0xffffff, { map: nameTex, transparent: true, roughness: 0.6 }));
-    nm.position.set(sx * 1.0, 0.95, sx > 0 ? 1.9 : 0.6); nm.rotation.y = sx * Math.PI / 2; van.add(nm);
+    nm.position.set(sx * 1.26, 1.05, sx > 0 ? 2.5 : 0.9); nm.rotation.y = sx * Math.PI / 2; van.add(nm);
   });
   // roues
-  [[-0.86, -1.5], [0.86, -1.5], [-0.86, 1.5], [0.86, 1.5]].forEach(([x, z]) => {
-    const t = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.26, 20), M.tire);
-    t.position.set(x, 0.38, z); t.rotation.z = Math.PI / 2; t.castShadow = t.receiveShadow = true; van.add(t);
-    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.28, 14), cream);
+  [[-1.06, -2.2], [1.06, -2.2], [-1.06, 2.2], [1.06, 2.2]].forEach(([x, z]) => {
+    const t = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.3, 20), M.tire);
+    t.position.set(x, 0.42, z); t.rotation.z = Math.PI / 2; t.castShadow = t.receiveShadow = true; van.add(t);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.32, 14), cream);
     hub.position.copy(t.position); hub.rotation.z = Math.PI / 2; van.add(hub);
   });
   // rétroviseurs
   [-1, 1].forEach(sx => {
-    cyl(0.015, 0.015, 0.16, M.metalDark, sx * 1.1, 1.8, -2.2, van, 6).rotation.z = Math.PI / 2;
-    box(0.02, 0.15, 0.1, chrome, sx * 1.18, 1.8, -2.2, van);
+    cyl(0.016, 0.016, 0.2, M.metalDark, sx * 1.38, 2.0, -3.1, van, 6).rotation.z = Math.PI / 2;
+    box(0.025, 0.18, 0.12, chrome, sx * 1.48, 2.0, -3.1, van);
   });
   // marchepied sous la porte latérale
-  box(0.42, 0.06, 0.85, M.metalDark, 1.14, 0.2, 0.8, van);
+  box(0.5, 0.07, 1.0, M.metalDark, 1.42, 0.22, 1.0, van);
   // --- intérieur ---
-  box(1.7, 0.35, 0.85, M.wood, 0, 0.60, 1.85, van);            // lit
-  box(1.72, 0.14, 0.88, cloth, 0, 0.85, 1.85, van);            // matelas
-  box(0.5, 0.12, 0.32, M.cream, -0.5, 0.95, 1.7, van);         // oreiller
-  box(0.4, 0.9, 1.6, inner, -0.64, 0.87, 0.55, van);           // kitchenette
-  box(0.42, 0.04, 1.62, M.wood, -0.64, 1.34, 0.55, van);
-  cyl(0.11, 0.11, 0.03, M.metal, -0.64, 1.37, 0.15, van, 16);  // évier
-  cyl(0.012, 0.012, 0.14, chrome, -0.72, 1.44, 0.15, van, 8);
-  box(0.26, 0.02, 0.3, M.metalDark, -0.64, 1.36, 0.85, van);   // plaque de cuisson
-  box(1.72, 0.3, 0.32, inner, 0, 1.2, -2.1, van);              // tableau de bord
-  [[-0.45], [0.45]].forEach(([x]) => {                         // sièges
-    box(0.5, 0.4, 0.5, cloth, x, 0.63, -1.52, van);
-    const back = box(0.5, 0.55, 0.12, cloth, x, 1.12, -1.28, van); back.rotation.x = 0.12;
+  box(2.2, 0.5, 0.85, M.wood, 0, 0.7, 2.775, van);             // lit
+  box(2.22, 0.16, 0.88, cloth, 0, 1.03, 2.775, van);           // matelas
+  box(0.6, 0.14, 0.36, M.cream, -0.6, 1.18, 2.6, van);         // oreiller
+  box(0.5, 0.9, 2.2, inner, -0.86, 0.9, 0.5, van);             // kitchenette
+  box(0.52, 0.05, 2.24, M.wood, -0.86, 1.37, 0.5, van);
+  cyl(0.13, 0.13, 0.03, M.metal, -0.86, 1.41, 0.0, van, 16);   // évier
+  cyl(0.013, 0.013, 0.16, chrome, -0.96, 1.48, 0.0, van, 8);
+  box(0.3, 0.02, 0.34, M.metalDark, -0.86, 1.4, 1.05, van);    // plaque de cuisson
+  box(0.45, 0.55, 1.7, inner, -0.9, 2.35, 0.5, van);           // placards hauts
+  box(2.24, 0.35, 0.38, inner, 0, 1.28, -3.06, van);           // tableau de bord
+  [[-0.55], [0.55]].forEach(([x]) => {                         // sièges
+    box(0.55, 0.5, 0.55, cloth, x, 0.72, -2.25, van);
+    const back = box(0.55, 0.6, 0.13, cloth, x, 1.28, -1.98, van); back.rotation.x = 0.12;
   });
-  const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.025, 10, 22), M.metalDark);
-  wheel.position.set(-0.45, 1.22, -1.92); wheel.rotation.x = 1.05; wheel.castShadow = true; van.add(wheel);
-  cyl(0.02, 0.02, 0.3, M.metalDark, -0.45, 1.1, -1.98, van, 8).rotation.x = -0.5;
+  const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.21, 0.028, 10, 22), M.metalDark);
+  wheel.position.set(-0.55, 1.32, -2.68); wheel.rotation.x = 1.05; wheel.castShadow = true; van.add(wheel);
+  cyl(0.022, 0.022, 0.34, M.metalDark, -0.55, 1.18, -2.76, van, 8).rotation.x = -0.5;
+  // la radio, posée sur la kitchenette
+  const radioLed = (() => {
+    const r = new THREE.Group(); r.position.set(-0.8, 1.395, -0.42); r.rotation.y = 1.35; van.add(r);
+    box(0.26, 0.135, 0.09, M.teal.clone(), 0, 0.068, 0, r);
+    box(0.095, 0.085, 0.006, M.metalDark, -0.06, 0.068, 0.048, r);
+    box(0.075, 0.055, 0.006, M.cream, 0.068, 0.075, 0.048, r);
+    cyl(0.013, 0.013, 0.015, M.brass, 0.068, 0.038, 0.053, r, 10).rotation.x = Math.PI / 2;
+    cyl(0.004, 0.004, 0.24, M.metalDark, 0.11, 0.2, -0.02, r, 6).rotation.z = -0.5;
+    const led = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.015, 0.008), new THREE.MeshBasicMaterial({ color: 0x33201a }));
+    led.position.set(0.03, 0.105, 0.049); r.add(led);
+    return led;
+  })();
   // plafonnier chaleureux (avec ombres : la lumière ne doit pas fuir à travers la coque)
-  const cabinLight = new THREE.PointLight(0xffb877, 1.5, 5, 2);
-  cabinLight.position.set(0, 2.1, 0.5);
+  const cabinLight = new THREE.PointLight(0xffb877, 2.0, 6, 2);
+  cabinLight.position.set(0, 2.6, 0.6);
   cabinLight.castShadow = true;
   cabinLight.shadow.mapSize.set(512, 512);
   cabinLight.shadow.bias = -0.005;
   van.add(cabinLight);
-
   // faisceaux des phares (allumés en conduite)
   const beams = [];
-  [-0.66, 0.66].forEach(x => {
-    const b = new THREE.SpotLight(0xffe2b0, 0, 18, 0.52, 0.45, 2);
-    b.position.set(x, 1.3, -2.4);
-    b.target.position.set(x * 0.7, 0.2, -12);
+  [-0.85, 0.85].forEach(x => {
+    const b = new THREE.SpotLight(0xffe2b0, 0, 22, 0.52, 0.45, 2);
+    b.position.set(x, 1.42, -3.5);
+    b.target.position.set(x * 0.7, 0.2, -15);
     van.add(b, b.target); beams.push(b);
   });
 
   van.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-  return { group: van, lenses, cabinLight, beams };
+  return { group: van, lenses, cabinLight, beams, radioLed };
 }
 const hirondelle = buildVan();
 
@@ -635,8 +648,8 @@ const hirondelle = buildVan();
 function buildOutside() {
   const g = new THREE.Group(); scene.add(g);
   // sol forestier
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(90, 50), toon(0x141c2b, { roughness: 1 }));
-  ground.rotation.x = -Math.PI / 2; ground.position.set(0, -0.02, -16); ground.receiveShadow = true; g.add(ground);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(110, 62), toon(0x141c2b, { roughness: 1 }));
+  ground.rotation.x = -Math.PI / 2; ground.position.set(0, -0.02, -22); ground.receiveShadow = true; g.add(ground);
   // la route de terre, dans l'axe de la porte
   const roadTex = canvasTex(256, (gg, s) => {
     gg.fillStyle = '#2b3247'; gg.fillRect(0, 0, s, s);
@@ -647,8 +660,8 @@ function buildOutside() {
     gg.strokeStyle = 'rgba(10,14,24,.5)'; gg.lineWidth = 5;
     [s * .3, s * .7].forEach(x => { gg.beginPath(); gg.moveTo(x, 0); gg.lineTo(x + (Math.random() - .5) * 14, s); gg.stroke(); });
   }, 1, 8);
-  const road = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 27), toon(0xffffff, { map: roadTex, roughness: 0.8 }));
-  road.rotation.x = -Math.PI / 2; road.position.set(0, 0, -18); road.receiveShadow = true; g.add(road);
+  const road = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 29), toon(0xffffff, { map: roadTex, roughness: 0.8 }));
+  road.rotation.x = -Math.PI / 2; road.position.set(0, 0, -21.5); road.receiveShadow = true; g.add(road);
   // sapins (déterministes), qui laissent la route et le seuil libres
   const trunkMat = toon(0x2a2019, { roughness: 1 }), pineMat = toon(0x122018, { roughness: 1 });
   const pine = (x, z, s) => {
@@ -663,9 +676,9 @@ function buildOutside() {
   let seed = 7;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   for (let i = 0; i < 44; i++) {
-    const x = (rnd() - 0.5) * 42, z = -6.5 - rnd() * 22;
-    if (Math.abs(x) < 3.1) continue;
-    if (z > -8.5 && Math.abs(x) < 5.5) continue;
+    const x = (rnd() - 0.5) * 46, z = -9.5 - rnd() * 24;
+    if (Math.abs(x) < 3.6) continue;
+    if (z > -11.5 && Math.abs(x) < 6.5) continue;
     pine(x, z, 0.8 + rnd() * 0.9);
   }
   // crête lointaine, lune, étoiles (hors brouillard)
@@ -678,10 +691,10 @@ function buildOutside() {
   });
   const ridge = new THREE.Mesh(new THREE.PlaneGeometry(90, 13),
     new THREE.MeshBasicMaterial({ map: ridgeTex, fog: false }));
-  ridge.position.set(0, 5.2, -34); g.add(ridge);
+  ridge.position.set(0, 6.2, -38); g.add(ridge);
   const moonDisc = new THREE.Mesh(new THREE.CircleGeometry(1.9, 26),
     new THREE.MeshBasicMaterial({ color: 0xe6eefc, fog: false }));
-  moonDisc.position.set(13, 14.5, -32); moonDisc.lookAt(0, 1.5, 0); g.add(moonDisc);
+  moonDisc.position.set(14, 15.5, -36); moonDisc.lookAt(0, 1.5, 0); g.add(moonDisc);
   const starGeo = new THREE.BufferGeometry();
   const sp = new Float32Array(240 * 3);
   for (let i = 0; i < 240; i++) {
@@ -696,23 +709,23 @@ function buildOutside() {
     transparent: true, opacity: 0.85 })));
   // façade extérieure du garage
   const fac = toon(0x212a3c, { roughness: 0.95 });
-  const sideW2 = (12 - 3.5) / 2;
-  box(sideW2, 3.6, 0.2, fac, -(1.75 + sideW2 / 2), 1.8, -4.62);
-  box(sideW2, 3.6, 0.2, fac, (1.75 + sideW2 / 2), 1.8, -4.62);
-  box(3.5, 0.6, 0.2, fac, 0, 3.32, -4.62);
-  box(0.2, 3.6, 9.7, fac, -6.15, 1.8, 0);
-  box(0.2, 3.6, 9.7, fac, 6.15, 1.8, 0);
-  box(12.7, 3.6, 0.2, fac, 0, 1.8, 4.64);
-  box(12.9, 0.28, 10.1, fac, 0, 3.76, 0);
+  const sideW2 = (ROOM.w - 4.7) / 2;
+  box(sideW2, ROOM.h, 0.2, fac, -(2.35 + sideW2 / 2), ROOM.h / 2, -7.12);
+  box(sideW2, ROOM.h, 0.2, fac, (2.35 + sideW2 / 2), ROOM.h / 2, -7.12);
+  box(4.7, ROOM.h - 3.6, 0.2, fac, 0, 3.6 + (ROOM.h - 3.6) / 2, -7.12);
+  box(0.2, ROOM.h, 14.3, fac, -8.15, ROOM.h / 2, 0);
+  box(0.2, ROOM.h, 14.3, fac, 8.15, ROOM.h / 2, 0);
+  box(16.7, ROOM.h, 0.2, fac, 0, ROOM.h / 2, 7.14);
+  box(16.9, 0.28, 14.7, fac, 0, ROOM.h + 0.16, 0);
   // lampe de seuil au-dessus de la porte, dehors
-  const porch = new THREE.PointLight(0xffa25c, 6, 8, 2);
-  porch.position.set(0, 3.35, -5.1); scene.add(porch);
+  const porch = new THREE.PointLight(0xffa25c, 7, 9, 2);
+  porch.position.set(0, 3.95, -7.6); scene.add(porch);
   const porchBulb = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), M.bulb.clone());
-  porchBulb.position.set(0, 3.3, -4.78); scene.add(porchBulb);
+  porchBulb.position.set(0, 3.9, -7.28); scene.add(porchBulb);
 }
 buildOutside();
 
-// transformations monde ↔ local du van
+// transformations monde <-> local du van
 function vanToLocal(wx, wz, out) {
   const dx = wx - vanState.x, dz = wz - vanState.z;
   const c = Math.cos(vanState.yaw), sn = Math.sin(vanState.yaw);
@@ -727,6 +740,40 @@ function syncVan() {
   hirondelle.group.rotation.y = vanState.yaw;
 }
 syncVan();
+
+/* --- traces de pneus dans la terre (persistantes) --- */
+const TRACKS = { x0: -23, x1: 23, z0: -35, z1: -6.9, lastX: 0, lastZ: 0 };
+const trackCanvas = document.createElement('canvas');
+trackCanvas.width = 1024; trackCanvas.height = 640;
+const trackCtx = trackCanvas.getContext('2d');
+const trackTex = new THREE.CanvasTexture(trackCanvas);
+{
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(TRACKS.x1 - TRACKS.x0, TRACKS.z1 - TRACKS.z0),
+    new THREE.MeshBasicMaterial({ map: trackTex, transparent: true, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2;
+  m.position.set((TRACKS.x0 + TRACKS.x1) / 2, 0.02, (TRACKS.z0 + TRACKS.z1) / 2);
+  scene.add(m);
+}
+function stampTracks() {
+  const moved = Math.hypot(vanState.x - TRACKS.lastX, vanState.z - TRACKS.lastZ);
+  if (moved < 0.14) return;
+  TRACKS.lastX = vanState.x; TRACKS.lastZ = vanState.z;
+  let dirty = false;
+  for (const wl of [[-1.06, 2.2], [1.06, 2.2], [-1.06, -2.2], [1.06, -2.2]]) {
+    vanToWorld(wl[0], wl[1], _w);
+    if (_w.x < TRACKS.x0 || _w.x > TRACKS.x1 || _w.z < TRACKS.z0 || _w.z > TRACKS.z1) continue;
+    const px = (_w.x - TRACKS.x0) / (TRACKS.x1 - TRACKS.x0) * trackCanvas.width;
+    const py = (1 - (_w.z - TRACKS.z0) / (TRACKS.z1 - TRACKS.z0)) * trackCanvas.height;
+    trackCtx.save();
+    trackCtx.translate(px, py); trackCtx.rotate(-vanState.yaw);
+    trackCtx.fillStyle = 'rgba(8,7,9,0.28)';
+    trackCtx.beginPath(); trackCtx.ellipse(0, 0, 3.4, 4.6, 0, 0, 7); trackCtx.fill();
+    trackCtx.restore();
+    dirty = true;
+  }
+  if (dirty) trackTex.needsUpdate = true;
+}
 
 /* ---------------------------------------------------------- */
 /* 7. Lumières                                                 */
@@ -776,9 +823,9 @@ const dustSprite = (() => {
 const dustGeo = new THREE.BufferGeometry();
 const dustN = 60, dustPos = new Float32Array(dustN * 3), dustSeed = [];
 for (let i = 0; i < dustN; i++) {
-  dustPos[i * 3] = (Math.random() - .5) * 6.5;      // concentrées sous les luminaires
-  dustPos[i * 3 + 1] = 0.5 + Math.random() * 2.0;
-  dustPos[i * 3 + 2] = 0.5 + (Math.random() - .5) * 5.5;
+  dustPos[i * 3] = (Math.random() - .5) * 9;        // concentrées sous les luminaires
+  dustPos[i * 3 + 1] = 0.5 + Math.random() * 2.4;
+  dustPos[i * 3 + 2] = 0.4 + (Math.random() - .5) * 8;
   dustSeed.push(Math.random() * 20);
 }
 dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
@@ -978,7 +1025,7 @@ function spawnPuff(x, y, z, vx, vz) {
 
 // --- les cinq clés égarées ---
 const toolSpots = [
-  { x: -1.0, y: 0.947, z: 4.12 },     // la clé de contact, oubliée sur l'établi
+  { x: -1.0, y: 0.947, z: ROOM.d / 2 - 0.38 },   // la clé de contact, oubliée sur l'établi
 ];
 const tools = toolSpots.map((p, i) => {
   const g = new THREE.Group();
@@ -1014,7 +1061,7 @@ tools.forEach(t => addInteract({
   action: () => startPickup(t),
 }));
 addInteract({   // le bouton de commande de la porte
-  x: 2.35, z: -ROOM.d / 2 + 0.42, r: 1.2,
+  x: 2.95, z: -ROOM.d / 2 + 0.42, r: 1.2,
   label: () => !gameState.doorUnlocked ? 'Le bouton — verrouillé'
     : (gameState.doorOpen ? 'Fermer la porte' : 'Ouvrir la porte'),
   action: () => {
@@ -1028,20 +1075,21 @@ addInteract({   // le bouton de commande de la porte
   },
 });
 addInteract({   // l'interrupteur
-  x: 2.85, z: -ROOM.d / 2 + 0.42, r: 1.0,
+  x: 3.45, z: -ROOM.d / 2 + 0.42, r: 1.0,
   label: () => gameState.lightsOn ? 'Éteindre la lumière' : 'Rallumer la lumière',
   action: () => {
     gameState.lightsOn = !gameState.lightsOn; clickSound();
     toast(gameState.lightsOn ? 'Voilà qui est mieux.' : 'La lune suffit, parfois.');
   },
 });
-addInteract({   // la radio
-  x: -1.7, z: 3.85, r: 1.3,
+addInteract({   // la radio, sur la kitchenette du van
+  pos: () => vanToWorld(-0.5, -0.35, _w), r: 1.15,
   label: () => audio.musicOn ? 'Éteindre la radio' : 'Allumer la radio',
+  enabled: () => player.onVan && !vanState.driving,
   action: () => { audio.toggleMusic(); toast(audio.musicOn ? 'Un peu de musique.' : 'Silence, alors.'); },
 });
 addInteract({   // devant la porte latérale du van
-  pos: () => vanToWorld(1.25, 0.8, _w), r: 1.3,
+  pos: () => vanToWorld(1.55, 1.0, _w), r: 1.4,
   label: () => 'L’Hirondelle — monter à bord',
   enabled: () => !player.onVan && !vanState.driving,
   action: () => {
@@ -1050,7 +1098,7 @@ addInteract({   // devant la porte latérale du van
   },
 });
 addInteract({   // le volant
-  pos: () => vanToWorld(VAN.seat.x + 0.4, VAN.seat.z + 0.35, _w), r: 0.95,
+  pos: () => vanToWorld(VAN.seat.x + 0.5, VAN.seat.z + 0.45, _w), r: 1.05,
   label: () => 'Prendre le volant',
   enabled: () => player.onVan && !vanState.driving,
   action: () => enterDrive(),
@@ -1061,22 +1109,10 @@ addInteract({   // l'affiche
   action: () => toast('« Un jour, la route. » — un jour proche.'),
 });
 
-// --- petits meshes : radio et interrupteur ---
-const radioLED = (() => {
-  const r = new THREE.Group(); r.position.set(-1.7, 0.935, 4.12); r.rotation.y = 0.15; scene.add(r);
-  box(0.24, 0.125, 0.085, M.teal.clone(), 0, 0.062, 0, r);
-  box(0.088, 0.078, 0.006, M.metalDark, -0.055, 0.062, 0.045, r);      // grille
-  box(0.07, 0.05, 0.006, M.cream, 0.062, 0.07, 0.045, r);              // cadran
-  cyl(0.012, 0.012, 0.014, M.brass, 0.062, 0.035, 0.05, r, 10).rotation.x = Math.PI / 2;
-  const ant = cyl(0.004, 0.004, 0.22, M.metalDark, 0.1, 0.19, -0.02, r, 6);
-  ant.rotation.z = -0.5;
-  const led = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.014, 0.008), new THREE.MeshBasicMaterial({ color: 0x33201a }));
-  led.position.set(0.028, 0.098, 0.046); r.add(led);
-  outlineTree(r);
-  return led;
-})();
-(() => {  // interrupteur près du bouton de porte
-  const p = new THREE.Group(); p.position.set(2.85, 1.25, -ROOM.d / 2 + 0.045); scene.add(p);
+// la radio vit desormais dans L'Hirondelle (voir buildVan) ; l'interrupteur reste au mur
+const radioLED = hirondelle.radioLed;
+(() => {  // interrupteur pres du bouton de porte
+  const p = new THREE.Group(); p.position.set(3.45, 1.25, -ROOM.d / 2 + 0.045); scene.add(p);
   box(0.07, 0.11, 0.025, M.cream, 0, 0, 0, p);
   box(0.024, 0.04, 0.02, M.brass, 0, 0.01, 0.015, p);
 })();
@@ -1381,7 +1417,7 @@ const keyAxis = () => {
 /* 11. État du joueur + collisions                             */
 /* ---------------------------------------------------------- */
 const player = {
-  pos: new THREE.Vector3(1.3, 0, 2.2),
+  pos: new THREE.Vector3(2.0, 0, 4.4),
   vel: new THREE.Vector3(),
   yaw: Math.PI,            // face à la porte du garage
   yawRate: 0,
@@ -1390,18 +1426,18 @@ const player = {
 };
 
 // murs du garage en colliders (le passage de la porte s'ouvre avec elle)
-const doorBlock = { minX: -1.79, maxX: 1.79, minZ: -4.74, maxZ: -4.4, maxY: 3.3, active: true };
+const doorBlock = { minX: -2.36, maxX: 2.36, minZ: -7.24, maxZ: -6.9, maxY: 3.9, active: true };
 const vanCamCol = { minX: 0, maxX: 0, minZ: 0, maxZ: 0, maxY: 2.6, active: true, noBody: true };
 colliders.push(
-  { minX: -6.34, maxX: -5.97, minZ: -4.78, maxZ: 4.78, maxY: 4.2 },   // ouest
-  { minX: 5.97, maxX: 6.34, minZ: -4.78, maxZ: 4.78, maxY: 4.2 },     // est
-  { minX: -6.34, maxX: 6.34, minZ: 4.47, maxZ: 4.82, maxY: 4.2 },     // sud
-  { minX: -6.34, maxX: -1.79, minZ: -4.82, maxZ: -4.47, maxY: 4.2 },  // nord, gauche de la porte
-  { minX: 1.79, maxX: 6.34, minZ: -4.82, maxZ: -4.47, maxY: 4.2 },    // nord, droite
+  { minX: -8.36, maxX: -7.97, minZ: -7.28, maxZ: 7.28, maxY: 4.8 },   // ouest
+  { minX: 7.97, maxX: 8.36, minZ: -7.28, maxZ: 7.28, maxY: 4.8 },     // est
+  { minX: -8.36, maxX: 8.36, minZ: 6.97, maxZ: 7.32, maxY: 4.8 },     // sud
+  { minX: -8.36, maxX: -2.36, minZ: -7.32, maxZ: -6.97, maxY: 4.8 },  // nord, gauche de la porte
+  { minX: 2.36, maxX: 8.36, minZ: -7.32, maxZ: -6.97, maxY: 4.8 },    // nord, droite
   doorBlock, vanCamCol,
 );
 
-const WORLD = { xMin: -22, xMax: 22, zMin: -30, zMax: 8 };
+const WORLD = { xMin: -24, xMax: 24, zMin: -36, zMax: 10 };
 const _l = { x: 0, z: 0 }, _w = { x: 0, z: 0 };
 
 function resolveCircle(pos, r, minX, maxX, minZ, maxZ) {
@@ -1509,7 +1545,7 @@ function updatePlayer(dt) {
   // hauteur du sol : plancher du van, marchepied, ou bitume
   vanToLocal(player.pos.x, player.pos.z, _l);
   player.onVan = Math.abs(_l.x) < VAN.innerX && Math.abs(_l.z) < VAN.innerZ;
-  const onStep = !player.onVan && _l.x > 0.86 && _l.x < 1.48 && _l.z > 0.3 && _l.z < 1.3;
+  const onStep = !player.onVan && _l.x > 1.11 && _l.x < 1.78 && _l.z > 0.45 && _l.z < 1.55;
   player.groundY = damp(player.groundY, player.onVan ? VAN.floorY : (onStep ? 0.2 : 0), 11, dt);
   player.pos.y = player.groundY;
 
@@ -1519,8 +1555,8 @@ function updatePlayer(dt) {
 }
 
 /* --- conduite de L'Hirondelle --- */
-const vanCorners = [[-1.06, -2.56], [1.06, -2.56], [-1.06, 2.56], [1.06, 2.56],
-  [-1.06, 0], [1.06, 0], [0, -2.56], [0, 2.56]];
+const vanCorners = [[-1.3, -3.47], [1.3, -3.47], [-1.3, 3.47], [1.3, 3.47],
+  [-1.3, 0], [1.3, 0], [0, -3.47], [0, 3.47]];
 let camPrevDist = CAM.dist0;
 function updateVan(dt) {
   if (vanState.driving) {
@@ -1551,7 +1587,16 @@ function updateVan(dt) {
       if (blocked) {
         if (Math.abs(vanState.speed) > 0.6) thumpSound();
         vanState.speed *= -0.15;
-      } else { vanState.x = nx; vanState.z = nz; }
+      } else {
+        vanState.x = nx; vanState.z = nz;
+        stampTracks();
+        // poussiere soulevee par les roues sur la terre
+        if (Math.abs(vanState.speed) > 1.4 && vanState.z < -6.9 && Math.random() < 0.5) {
+          const side = Math.random() < 0.5 ? -1.06 : 1.06;
+          vanToWorld(side, 2.3, _w);
+          spawnPuff(_w.x, 0.12, _w.z, 0, 0);
+        }
+      }
     }
   } else {
     vanState.speed *= Math.max(0, 1 - 5 * dt);
@@ -1561,7 +1606,7 @@ function updateVan(dt) {
 function enterDrive() {
   vanState.driving = true;
   camPrevDist = camCtl.distTarget;
-  camCtl.distTarget = 7.5;
+  camCtl.distTarget = 9.0;
   engineStart();
   if (!vanState.driveHint) {
     vanState.driveHint = true;
@@ -1573,7 +1618,7 @@ function exitDrive() {
   vanState.speed = 0;
   engineStop();
   camCtl.distTarget = camPrevDist;
-  vanToWorld(0.35, -1.4, _w);            // debout dans le couloir de la cabine
+  vanToWorld(0.35, -2.1, _w);            // debout dans le couloir de la cabine
   player.pos.set(_w.x, VAN.floorY, _w.z);
   player.yaw = vanState.yaw + Math.PI;
 }
@@ -1632,8 +1677,8 @@ function cameraRayLimit(origin, dir, want) {
     if (t > 0) tMax = Math.min(tMax, t);
   }
   // ni à travers le plafond du garage quand on est dedans
-  if (dir.y > 1e-6 && origin.y < 3.4 && Math.abs(origin.x) < 6 && Math.abs(origin.z) < 4.5) {
-    const t = (3.42 - origin.y) / dir.y;
+  if (dir.y > 1e-6 && origin.y < ROOM.h - 0.2 && Math.abs(origin.x) < ROOM.w / 2 && Math.abs(origin.z) < ROOM.d / 2) {
+    const t = (ROOM.h - 0.18 - origin.y) / dir.y;
     if (t > 0) tMax = Math.min(tMax, t);
   }
   // obstacles (gonflés) — méthode des « slabs »
@@ -1661,7 +1706,7 @@ function updateCamera(dt) {
   if (_v.length() > 0.34) _v.setLength(0.34);
   const tx = player.pos.x + _v.x, tz = player.pos.z + _v.z;
   camCtl.target.x = damp(camCtl.target.x, tx, 7, dt);
-  camCtl.target.y = damp(camCtl.target.y, player.pos.y + (vanState.driving ? 2.3 : CAM.targetH), 7, dt);
+  camCtl.target.y = damp(camCtl.target.y, player.pos.y + (vanState.driving ? 2.45 : CAM.targetH), 7, dt);
   camCtl.target.z = damp(camCtl.target.z, tz, 7, dt);
 
   const cp = Math.cos(camCtl.pitch), sp = Math.sin(camCtl.pitch);
@@ -1882,7 +1927,7 @@ function tick(now) {
     doorState.y += clamp(doorTgt - doorState.y, -dt / 3.2, dt / 3.2);
     doorState.y = clamp(doorState.y, 0, 1);
     const e = smooth(doorState.y);
-    anchors.door.position.y = e * 2.65;
+    anchors.door.position.y = e * 3.35;
     doorGlow.intensity = e * 14;
     doorState.dustT -= dt;
     if (doorState.dustT <= 0 && doorState.y > 0.03 && doorState.y < 0.92) {
@@ -1906,7 +1951,7 @@ function tick(now) {
   // collider caméra du van (approximation englobante, inactif quand on est à bord)
   {
     const cA = Math.abs(Math.cos(vanState.yaw)), sA = Math.abs(Math.sin(vanState.yaw));
-    const hx = cA * 1.05 + sA * 2.55, hz = sA * 1.05 + cA * 2.55;
+    const hx = cA * 1.32 + sA * 3.5, hz = sA * 1.32 + cA * 3.5;
     vanCamCol.minX = vanState.x - hx; vanCamCol.maxX = vanState.x + hx;
     vanCamCol.minZ = vanState.z - hz; vanCamCol.maxZ = vanState.z + hz;
     vanCamCol.active = !player.onVan && !vanState.driving;
@@ -1929,7 +1974,7 @@ function tick(now) {
   for (let i = 0; i < dustN; i++) {
     pa.array[i * 3 + 1] += Math.sin(elapsed * 0.5 + dustSeed[i]) * 0.0004 - 0.0002;
     pa.array[i * 3] += Math.sin(elapsed * 0.3 + dustSeed[i] * 2) * 0.0003;
-    if (pa.array[i * 3 + 1] < 0.2) pa.array[i * 3 + 1] = 3.1;
+    if (pa.array[i * 3 + 1] < 0.2) pa.array[i * 3 + 1] = 3.6;
   }
   pa.needsUpdate = true;
   // lumières : état de l'interrupteur + scintillement à peine perceptible

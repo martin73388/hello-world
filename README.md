@@ -14,8 +14,8 @@ conduis dans la forêt de nuit, phares allumés.
 peinture clearcoat sur le van, chromes, vitres transparentes, sol de béton
 ciré, faisceaux de phares dans la nuit. Nuit bleue profonde contre
 tungstène ambré.
-1 unité = 1 mètre partout (atelier 12 × 9 m, plafond 3,6 m, personnage 1,78 m,
-camping-car 4,5 m).
+1 unité = 1 mètre partout (atelier 16 × 14 m — on y fait demi-tour —, porte
+de 4,6 × 3,6 m, personnage 1,78 m, camping-car de 6,8 m).
 
 ## Ce qui est soigné
 
@@ -40,11 +40,13 @@ camping-car 4,5 m).
   IK), bouton mural qui commande la porte sectionnelle, interrupteur
   (clair de lune), radio lo-fi générative.
 - **L'Hirondelle, praticable façon Star Citizen** : coque creuse avec
-  intérieur réel (lit, kitchenette, cabine), on monte à bord par la porte
-  latérale sans écran de chargement, les collisions intérieures vivent
-  dans le repère local du van — et au volant (E), on conduit vraiment :
-  Z/S/Q/D, moteur audible, phares, sortie du garage vers la route
-  forestière et la clairière.
+  intérieur réel (lit double, kitchenette avec radio, placards, cabine),
+  on monte à bord par la porte latérale sans écran de chargement, les
+  collisions intérieures vivent dans le repère local du van — et au
+  volant (E), on conduit vraiment : Z/S/Q/D, moteur audible, phares,
+  sortie du garage vers la route forestière.
+- **La terre garde la trace** : les roues marquent le sol dehors
+  (traces persistantes) et soulèvent la poussière.
 
 ## Lancer
 
