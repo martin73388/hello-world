@@ -1,8 +1,7 @@
 /**
  * Pins en thin instances : un maillage de feuillage + un de tronc, mêmes
  * matrices. Placement déterministe, la route et ses talus restent libres.
- * (Le vent hiérarchique — tronc/branche/aiguille — est un chantier M2b :
- * consigné dans DECISIONS.md.)
+ * Vent hiérarchique + translucidité des aiguilles via WindPlugin (M2b).
  */
 import '@babylonjs/core/Meshes/thinInstanceMesh.js';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js';
@@ -11,6 +10,7 @@ import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js'
 import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { height, roadQuery } from '../terrain/road.js';
+import { WindPlugin } from './wind.js';
 
 export function plantPines(scene, shadows) {
   // gabarit feuillage : 3 étages de cône
@@ -23,6 +23,7 @@ export function plantPines(scene, shadows) {
   const fmat = new StandardMaterial('pineMat', scene);
   fmat.diffuseColor = new Color3(0.115, 0.2, 0.135);
   fmat.specularColor = new Color3(0.02, 0.03, 0.02);
+  new WindPlugin(fmat, { strength: 1.0, transl: 0.55 });
   foliage.material = fmat;
 
   const trunk = MeshBuilder.CreateCylinder('pineTrunk', { diameterTop: 0.22, diameterBottom: 0.34, height: 2.4, tessellation: 7 }, scene);
@@ -33,6 +34,7 @@ export function plantPines(scene, shadows) {
   const tmat = new StandardMaterial('trunkMat', scene);
   tmat.diffuseColor = new Color3(0.21, 0.15, 0.1);
   tmat.specularColor = new Color3(0.02, 0.02, 0.02);
+  new WindPlugin(tmat, { strength: 0.26 });                 // le bois plie à peine
   trunk.material = tmat;
 
   // placement

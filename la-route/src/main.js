@@ -19,6 +19,7 @@ import { createOverlay } from './ui/overlay.js';
 import { buildTerrain } from './terrain/terrain.js';
 import { height } from './terrain/road.js';
 import { plantPines } from './vegetation/pines.js';
+import { windClock } from './vegetation/wind.js';
 import { buildSky } from './world/sky.js';
 
 const canvas = document.getElementById('rc');
@@ -124,7 +125,8 @@ async function start() {
   document.addEventListener('pointerlockchange', () => { state.locked = document.pointerLockElement === canvas; });
   addEventListener('mousemove', (e) => {
     if (!state.locked) return;
-    state.camYaw -= e.movementX * 0.0022;
+    // repère main gauche : yaw croissant = tourner à droite (l'inverse de Three)
+    state.camYaw += e.movementX * 0.0022;
     state.camPitch = Math.min(1.25, Math.max(-0.4, state.camPitch + e.movementY * 0.0022));
   });
   addEventListener('wheel', (e) => {
@@ -140,6 +142,7 @@ async function start() {
     const now = performance.now();
     const dt = Math.min((now - last) / 1000, 0.05);
     last = now;
+    windClock.t = now / 1000;
 
     // entrée caméra-relative
     let ix = 0, iz = 0;
