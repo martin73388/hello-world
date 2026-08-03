@@ -119,3 +119,16 @@ export function height(x, z) {
   const t = sstep(ROAD_HALF, SHOULDER, r.dist);   // 0 sur la chaussée → 1 au-delà du talus
   return roadH * (1 - t) + h * t;
 }
+
+/** hauteur de MARCHE/ROULAGE : terrain + épaisseur du ruban de route (bombé
+ * 14 cm au centre → 5 cm au bord). Le ruban est un maillage posé AU-DESSUS
+ * du terrain : joueur et van doivent rouler dessus, pas dedans. */
+export function groundHeight(x, z) {
+  const h = height(x, z);
+  const r = roadQuery(x, z);
+  if (r.dist >= ROAD_HALF + 0.4) return h;
+  const inT = Math.min(1, r.dist / ROAD_HALF);
+  const crown = 0.14 - 0.09 * inT;
+  const fade = r.dist <= ROAD_HALF ? 1 : 1 - (r.dist - ROAD_HALF) / 0.4;
+  return h + crown * fade;
+}

@@ -13,15 +13,15 @@ import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight.js';
 import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight.js';
 import { CascadedShadowGenerator } from '@babylonjs/core/Lights/Shadows/cascadedShadowGenerator.js';
 import '@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent.js';
-import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js';
-import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
 import { createOverlay } from './ui/overlay.js';
 import { buildTerrain } from './terrain/terrain.js';
 import { createDeform } from './terrain/deform.js';
-import { height, roadQuery, ROAD_HALF } from './terrain/road.js';
+import { height, groundHeight, roadQuery, ROAD_HALF } from './terrain/road.js';
 import { plantPines } from './vegetation/pines.js';
 import { windClock } from './vegetation/wind.js';
 import { buildSky } from './world/sky.js';
+import { buildVan } from './vehicle/van.js';
+import { buildDriver } from './character/driver.js';
 
 const canvas = document.getElementById('rc');
 const boot = document.getElementById('boot');
@@ -100,25 +100,98 @@ async function start() {
   const pines = plantPines(scene, shadows);
   console.log('pins plantés :', pines.count);
 
-  // Marcheur provisoire : capsule (la silhouette robe/capuche arrive au M4)
-  const player = MeshBuilder.CreateCapsule('player', { height: 1.78, radius: 0.3 }, scene);
-  player.position.y = height(0, 20) + 0.89;
-  const pmat = new StandardMaterial('pmat', scene);
-  pmat.diffuseColor = new Color3(0.75, 0.45, 0.25);
-  player.material = pmat;
-  shadows.addShadowCaster(player);
+  // M4 : le mécano articulé remplace la capsule, le van attend sur la route
+  const driver = buildDriver(scene, shadows);
+  const van = buildVan(scene, shadows, groundHeight);
+
+  // obstacles (troncs + rochers) : hachage spatial 4 m pour les collisions
+  const OBS = new Map();
+  const okey = (cx, cz) => cx * 8192 + cz;
+  for (const o of [...pines.trunks, ...terrain.rocks]) {
+    const span = Math.ceil((o.r + 1.4) / 4);
+    const cx = Math.round(o.x / 4), cz = Math.round(o.z / 4);
+    for (let a = -span; a <= span; a++) {
+      for (let b = -span; b <= span; b++) {
+        const k = okey(cx + a, cz + b);
+        if (!OBS.has(k)) OBS.set(k, []);
+        OBS.get(k).push(o);
+      }
+    }
+  }
+  const pushOut = (x, z, r) => {
+    const cell = OBS.get(okey(Math.round(x / 4), Math.round(z / 4)));
+    if (!cell) return null;
+    for (const o of cell) {
+      const dx = x - o.x, dz = z - o.z, rr = r + o.r;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < rr * rr && d2 > 1e-6) {
+        const d = Math.sqrt(d2);
+        return { x: o.x + (dx / d) * rr, z: o.z + (dz / d) * rr };
+      }
+    }
+    return null;
+  };
+  const vanBlocked = (nx, nz) => {
+    const c = Math.cos(van.st.yaw), s = Math.sin(van.st.yaw);
+    for (const off of [1.6, -1.6]) {
+      if (pushOut(nx + s * off, nz + c * off, 1.02)) return true;
+    }
+    return false;
+  };
 
   const camera = new FreeCamera('cam', new Vector3(0, 2.2, -4), scene);
   camera.minZ = 0.05; camera.maxZ = 800;
   camera.fov = 0.95;
 
   /* ---- état & scratch (aucune allocation dans la boucle) ---- */
+  // camYaw 0 : caméra au nord du joueur, regard vers le SUD — la route
+  // descend, le van attend à 10 m (dos au voyage depuis M1, corrigé au M4)
   const state = {
-    px: 0, pz: 20, py: height(0, 20), vx: 0, vz: 0, yaw: Math.PI,
-    camYaw: Math.PI, camPitch: 0.22, dist: 4.2, distTarget: 4.2,
-    tx: 0, ty: height(0, 20) + 1.55, tz: 20,
-    locked: false,
+    px: 0, pz: 20, py: groundHeight(0, 20), vx: 0, vz: 0, yaw: Math.PI,
+    camYaw: 0, camPitch: 0.22, dist: 4.2, distTarget: 4.2,
+    tx: 0, ty: groundHeight(0, 20) + 1.55, tz: 20,
+    locked: false, drive: false,
   };
+  let walkDist = 4.2, wheelAcc = 0;
+
+  // aide contextuelle (E) — DOM léger, mis à jour hors alloc
+  const hint = document.createElement('div');
+  hint.style.cssText = 'position:fixed;left:50%;bottom:9%;transform:translateX(-50%);'
+    + 'color:#e8dfc8;font:500 15px system-ui;background:rgba(10,12,16,.55);'
+    + 'padding:8px 14px;border-radius:8px;display:none;letter-spacing:.4px;z-index:5';
+  document.body.appendChild(hint);
+  let hintShown = false, hintText = '';
+  const setHint = (text) => {
+    if (text !== hintText) { hintText = text; hint.textContent = text; }
+    if (!!text !== hintShown) { hintShown = !!text; hint.style.display = text ? 'block' : 'none'; }
+  };
+
+  // porte conducteur (côté gauche de la cabine)
+  const doorWorld = () => {
+    const c = Math.cos(van.st.yaw), s = Math.sin(van.st.yaw);
+    return { x: van.st.x - 1.35 * c + 1.6 * s, z: van.st.z + 1.35 * s + 1.6 * c };
+  };
+  addEventListener('keydown', (e) => {
+    if (e.code !== 'KeyE') return;
+    if (state.drive) {
+      if (Math.abs(van.st.speed) > 1.6) return;        // pas en marche
+      state.drive = false;
+      driver.setSeated(false);
+      const d = doorWorld();
+      state.px = d.x; state.pz = d.z; state.vx = 0; state.vz = 0;
+      state.py = groundHeight(d.x, d.z);
+      state.yaw = van.st.yaw;
+      state.distTarget = walkDist;
+    } else {
+      const d = doorWorld();
+      if (Math.hypot(state.px - d.x, state.pz - d.z) < 2.3) {
+        state.drive = true;
+        driver.setSeated(true, van.body);
+        walkDist = state.distTarget;
+        state.distTarget = 8.4;
+      }
+    }
+  });
   const keys = Object.create(null);
   const TMP = new Vector3();
 
@@ -149,64 +222,103 @@ async function start() {
     last = now;
     windClock.t = now / 1000;
 
-    // entrée caméra-relative
+    // entrées
     let ix = 0, iz = 0;
     if (keys.KeyW || keys.ArrowUp) iz += 1;
     if (keys.KeyS || keys.ArrowDown) iz -= 1;
     if (keys.KeyA || keys.ArrowLeft) ix -= 1;
     if (keys.KeyD || keys.ArrowRight) ix += 1;
-    const il = Math.hypot(ix, iz);
-    const max = (keys.ShiftLeft || keys.ShiftRight) ? RUN : WALK;
-    if (il > 0) {
-      ix /= il; iz /= il;
-      const cy = state.camYaw;
-      // avant caméra = -(sin cy, cos cy) ; droite écran (main gauche) = (-cos cy, sin cy)
-      const dx = -Math.sin(cy) * iz - Math.cos(cy) * ix;
-      const dz = -Math.cos(cy) * iz + Math.sin(cy) * ix;
-      state.vx += dx * ACCEL * dt;
-      state.vz += dz * ACCEL * dt;
-      const sp = Math.hypot(state.vx, state.vz);
-      if (sp > max) { state.vx *= max / sp; state.vz *= max / sp; }
-      state.yaw += ((Math.atan2(state.vx, state.vz) - state.yaw + Math.PI * 3) % (Math.PI * 2) - Math.PI)
-        * Math.min(1, 12 * dt);
-    } else {
-      const f = Math.max(0, 1 - DAMP * dt);
-      state.vx *= f; state.vz *= f;
-    }
-    state.px += state.vx * dt;
-    state.pz += state.vz * dt;
-    // empreintes de pas : un splat par foulée, alterné gauche/droite
-    const spd = Math.hypot(state.vx, state.vz);
-    if (spd > 0.4) {
-      stepAcc += spd * dt;
-      const stride = spd > 3.5 ? 1.05 : 0.62;
-      if (stepAcc > stride) {
-        stepAcc = 0; footSide = -footSide;
-        // le gravier compacté de la chaussée ne prend pas l'empreinte
-        if (roadQuery(state.px, state.pz).dist > ROAD_HALF + 0.2) {
-          const fx = state.vx / spd, fz = state.vz / spd;
-          deform.addSplat(
-            state.px - fz * footSide * 0.15, state.pz + fx * footSide * 0.15,
-            0.13, spd > 3.5 ? 0.045 : 0.03);
+
+    let focX, focY, focZ, fvx, fvz, speed;
+    if (state.drive) {
+      /* ---- conduite ---- */
+      const offroad = roadQuery(van.st.x, van.st.z).dist > ROAD_HALF + 0.5;
+      van.update(dt, { throttle: iz, steer: ix, offroad }, vanBlocked);
+      // les pneus creusent hors chaussée — sillons continus (pas de 0,24 m)
+      wheelAcc += Math.abs(van.st.speed) * dt;
+      if (wheelAcc > 0.24 && Math.abs(van.st.speed) > 0.4) {
+        wheelAcc = 0;
+        for (const w of van.wheels) {
+          const p = van.wheelWorld(w);
+          if (roadQuery(p.x, p.z).dist > ROAD_HALF + 0.15) {
+            deform.addSplat(p.x, p.z, 0.19,
+              Math.min(0.04, 0.012 + Math.abs(van.st.speed) * 0.003));
+          }
         }
       }
+      deform.update(dt, van.st.x, van.st.z);
+      terrain.patchTick(van.st.x, van.st.z);
+      // caméra chase : suit le cap du van avec du retard
+      speed = Math.abs(van.st.speed);
+      const wantYaw = van.st.yaw + Math.PI;
+      const dy = ((wantYaw - state.camYaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+      state.camYaw += dy * Math.min(1, (1.1 + speed * 0.22) * dt);
+      state.camPitch = Math.max(0.1, state.camPitch);
+      focX = van.st.x; focZ = van.st.z; focY = van.st.bodyY + 1.1;
+      fvx = Math.sin(van.st.yaw) * van.st.speed;
+      fvz = Math.cos(van.st.yaw) * van.st.speed;
+      setHint(Math.abs(van.st.speed) <= 1.6 ? 'E — descendre' : '');
+    } else {
+      /* ---- à pied ---- */
+      const il = Math.hypot(ix, iz);
+      const max = (keys.ShiftLeft || keys.ShiftRight) ? RUN : WALK;
+      if (il > 0) {
+        ix /= il; iz /= il;
+        const cy = state.camYaw;
+        // avant caméra = -(sin cy, cos cy) ; droite écran (main gauche) = (-cos cy, sin cy)
+        const dx = -Math.sin(cy) * iz - Math.cos(cy) * ix;
+        const dz = -Math.cos(cy) * iz + Math.sin(cy) * ix;
+        state.vx += dx * ACCEL * dt;
+        state.vz += dz * ACCEL * dt;
+        const sp = Math.hypot(state.vx, state.vz);
+        if (sp > max) { state.vx *= max / sp; state.vz *= max / sp; }
+        state.yaw += ((Math.atan2(state.vx, state.vz) - state.yaw + Math.PI * 3) % (Math.PI * 2) - Math.PI)
+          * Math.min(1, 12 * dt);
+      } else {
+        const f = Math.max(0, 1 - DAMP * dt);
+        state.vx *= f; state.vz *= f;
+      }
+      state.px += state.vx * dt;
+      state.pz += state.vz * dt;
+      const po = pushOut(state.px, state.pz, 0.32);
+      if (po) { state.px = po.x; state.pz = po.z; }
+      // empreintes de pas : un splat par foulée, alterné gauche/droite
+      const spd = Math.hypot(state.vx, state.vz);
+      if (spd > 0.4) {
+        stepAcc += spd * dt;
+        const stride = spd > 3.5 ? 1.05 : 0.62;
+        if (stepAcc > stride) {
+          stepAcc = 0; footSide = -footSide;
+          // le gravier compacté de la chaussée ne prend pas l'empreinte
+          if (roadQuery(state.px, state.pz).dist > ROAD_HALF + 0.2) {
+            const fx = state.vx / spd, fz = state.vz / spd;
+            deform.addSplat(
+              state.px - fz * footSide * 0.15, state.pz + fx * footSide * 0.15,
+              0.13, spd > 3.5 ? 0.045 : 0.03);
+          }
+        }
+      }
+      deform.update(dt, state.px, state.pz);
+      terrain.patchTick(state.px, state.pz);
+      van.update(dt, { throttle: 0, steer: 0, offroad: false }, vanBlocked);
+      const gy = groundHeight(state.px, state.pz);
+      state.py += (gy - state.py) * Math.min(1, 14 * dt);
+      driver.root.position.set(state.px, state.py, state.pz);
+      driver.root.rotation.y = state.yaw;
+      driver.update(dt, spd);
+      speed = spd;
+      focX = state.px; focZ = state.pz; focY = state.py + 1.55;
+      fvx = state.vx; fvz = state.vz;
+      const d = doorWorld();
+      setHint(Math.hypot(state.px - d.x, state.pz - d.z) < 2.3 ? 'E — monter à bord' : '');
     }
-    deform.update(dt, state.px, state.pz);
-    terrain.patchTick(state.px, state.pz);
-    const gy = height(state.px, state.pz);
-    state.py += (gy - state.py) * Math.min(1, 14 * dt);
-    player.position.x = state.px;
-    player.position.y = state.py + 0.89;
-    player.position.z = state.pz;
-    player.rotation.y = state.yaw;
 
     // caméra épaule : cible amortie, distance aisée, FOV qui s'élargit à la vitesse
-    const speed = Math.hypot(state.vx, state.vz);
     const lead = Math.min(0.5, speed * 0.08);
     const k = 1 - Math.exp(-7 * dt);
-    state.tx += (state.px + state.vx * lead - state.tx) * k;
-    state.ty += (state.py + 1.55 - state.ty) * k;
-    state.tz += (state.pz + state.vz * lead - state.tz) * k;
+    state.tx += (focX + fvx * lead - state.tx) * k;
+    state.ty += (focY - state.ty) * k;
+    state.tz += (focZ + fvz * lead - state.tz) * k;
     state.dist += (state.distTarget - state.dist) * (1 - Math.exp(-8 * dt));
     const cp = Math.cos(state.camPitch), sp2 = Math.sin(state.camPitch);
     const shoulder = 0.4;
@@ -229,5 +341,5 @@ async function start() {
   scene.executeWhenReady(() => boot.classList.add('gone'));
 
   // poignées de développement (cadrage des captures d'itération)
-  window.__laroute = { state, scene, engine, deform };
+  window.__laroute = { state, scene, engine, deform, van, driver };
 }

@@ -41,12 +41,14 @@ export function plantPines(scene, shadows) {
   let seed = 17;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const mats = [];
+  const trunks = [];                                   // {x, z, r} pour les collisions
   const q = new Quaternion(), sc = new Vector3(), tr = new Vector3();
   for (let i = 0; i < 9000 && mats.length < 1900; i++) {
     const x = (rnd() - 0.5) * 330 - 8;
     const z = 40 - rnd() * 320;
     const rq = roadQuery(x, z);
-    if (rq.dist < 6.5) continue;                       // la route respire
+    if (rq.dist < 8.0) continue;                       // la route respire — et les
+    // couronnes (jusqu'à ~3 m de rayon) ne surplombent jamais la chaussée
     const s = 0.75 + rnd() * 1.15;
     const y = height(x, z) - 0.08;
     Quaternion.RotationYawPitchRollToRef(rnd() * Math.PI * 2, (rnd() - 0.5) * 0.06, (rnd() - 0.5) * 0.06, q);
@@ -54,6 +56,7 @@ export function plantPines(scene, shadows) {
     tr.set(x, y, z);
     const m = Matrix.Compose(sc, q, tr);
     mats.push(m);
+    trunks.push({ x, z, r: 0.17 * s + 0.1 });
   }
   const buf = new Float32Array(mats.length * 16);
   for (let i = 0; i < mats.length; i++) mats[i].copyToArray(buf, i * 16);
@@ -62,5 +65,5 @@ export function plantPines(scene, shadows) {
   foliage.receiveShadows = true;
   shadows.addShadowCaster(foliage);
   shadows.addShadowCaster(trunk);
-  return { count: mats.length };
+  return { count: mats.length, trunks };
 }

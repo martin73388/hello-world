@@ -52,3 +52,26 @@ Chaque écart au brief, en une ligne, avec sa raison.
 - M3 : validé sur le chemin dev WebGL (CI sans WebGPU) ; la passe
   EffectWrapper, le texelFetch au vertex et les hooks de plugin doivent être
   confirmés sur WebGPU réel (Mac M4) — premier point à vérifier au retour.
+- M4 : van procédural (boîtes + textures dynamiques) plutôt qu'un asset
+  importé — cohérent avec la DA low-poly du reste ; le budget est allé à la
+  silhouette (galerie, jerrican, bavettes, jonc chromé, lettrage) et au
+  mouvement (suspension, sapin désodorisant à ressort).
+- M4 : suspension par sondage du sol aux 4 roues + ressort-amortisseur —
+  pas de raycast physique, le sol est analytique (groundHeight). Transfert
+  de masse par termes accélération/braquage dans tangage/roulis.
+- M4 : pas d'animation de porte à la montée — la transition est masquée par
+  le fondu de la caméra chase (le brief l'autorise si le fondu couvre).
+  L'échappement au démarrage attend les particules du M5.
+- M4 : groundHeight = height + épaisseur du ruban (bombé 14→5 cm) — joueur
+  et van roulaient DANS le ruban de route depuis le M2, corrigé.
+- M4 : caméra initiale retournée (camYaw 0, regard vers le sud) — on
+  démarrait dos au van et au voyage depuis le M1.
+- M4 : exclusion des pins portée à 8 m du tracé — les couronnes (≈3 m de
+  rayon) surplombaient la chaussée et traversaient la caisse du van.
+- M4 : plans Babylon : face avant vers -z (main gauche) — le lettrage
+  arrière était retourné vers l'intérieur du van.
+- M4 : collisions troncs/rochers par hachage spatial 4 m (cercle joueur,
+  deux essieux pour le van) — on traversait les arbres depuis le M2.
+- M4 : les sillons de pneus sont continus à 60 fps (pas d'émission 0,24 m
+  < diamètre de tampon 0,38 m) ; en dev SwiftShader (~2,5 fps) ils
+  apparaissent pointillés — artefact d'itération, pas du produit.

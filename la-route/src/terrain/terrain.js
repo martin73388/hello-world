@@ -227,10 +227,12 @@ export function buildTerrain(scene, shadows, deformState) {
   rockMat.specularColor = new Color3(0.05, 0.05, 0.05);
   let seed = 5;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const rocks = [];                                  // {x, z, r} pour les collisions
   for (let i = 0; i < 10; i++) {
     const x = (rnd() - 0.5) * 260 - 8, z = -rnd() * 220 + 10;
     if (roadQuery(x, z).dist < 12) continue;
     const s = 1.2 + rnd() * 2.6;
+    rocks.push({ x, z, r: s * 0.9 });
     const rock = MeshBuilder.CreateIcoSphere('rock' + i, { radius: s, subdivisions: 1 }, scene);
     rock.position.set(x, height(x, z) + s * 0.18, z);
     rock.scaling.set(1 + rnd() * 0.7, 0.45 + rnd() * 0.25, 1 + rnd() * 0.7);
@@ -240,5 +242,5 @@ export function buildTerrain(scene, shadows, deformState) {
     shadows.addShadowCaster(rock);
     rock.freezeWorldMatrix();
   }
-  return { inner, outer, road, patchTick: patch.tick };
+  return { inner, outer, road, patchTick: patch.tick, rocks };
 }
