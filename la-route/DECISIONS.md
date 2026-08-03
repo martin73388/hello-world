@@ -31,3 +31,24 @@ Chaque écart au brief, en une ligne, avec sa raison.
   pour des cônes de feuillage, vérifié par A/B (0 → sombre, 3 → halo or).
 - M2b : caméra souris, yaw corrigé en `+=` — en main gauche, yaw croissant
   tourne à droite (l'inverse de la convention Three de L'Atelier).
+- M3 : buffer d'état 2048² RGBA16F sur 80 m (≈ 4 cm/texel) au lieu du 4096²
+  sur 120-160 m du brief — dimensionné pour un marcheur ; on élargira quand
+  le van roulera (le côté et la résolution sont des paramètres).
+- M3 : recentrage par redraw décalé plutôt que scroll toroïdal — même coût
+  GPU, sans l'arithmétique d'adressage ; cranté au texel (pas de nage).
+- M3 : « clipmap » réduit à l'anneau utile : un patch de 32 m à ~12,5 cm/vertex
+  suit le joueur (re-remplissage CPU en 2 phases via la grille d'accélération
+  roadQuery) ; le terrain grossier plonge de 32 cm sous son emprise pour que
+  les ornières ne crèvent jamais le maillage à 1,15 m.
+- M3 : roadQuery interpole désormais la hauteur par projection sur les
+  segments — la version « plus proche échantillon » faisait des marches de
+  2 m sous le ruban de route (le patch les révélait en tirets de z-fight).
+- M3 : la chaussée en gravier compacté ne prend pas l'empreinte des pas ;
+  elle recevra ses propres ornières avec les pneus du van.
+- M3 : la passe de profondeur des ombres n'applique pas le déplacement —
+  l'« auto-ombrage » des ornières vient des normales recalculées du buffer
+  + assombrissement de la terre compressée (une empreinte de 4 cm est de
+  toute façon sous le texel de la shadow map).
+- M3 : validé sur le chemin dev WebGL (CI sans WebGPU) ; la passe
+  EffectWrapper, le texelFetch au vertex et les hooks de plugin doivent être
+  confirmés sur WebGPU réel (Mac M4) — premier point à vérifier au retour.

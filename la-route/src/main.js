@@ -17,7 +17,8 @@ import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
 import { createOverlay } from './ui/overlay.js';
 import { buildTerrain } from './terrain/terrain.js';
-import { height } from './terrain/road.js';
+import { createDeform } from './terrain/deform.js';
+import { height, roadQuery, ROAD_HALF } from './terrain/road.js';
 import { plantPines } from './vegetation/pines.js';
 import { windClock } from './vegetation/wind.js';
 import { buildSky } from './world/sky.js';
@@ -92,7 +93,10 @@ async function start() {
 
   // Le monde du M2 : terrain sculpté par la route, forêt, ciel
   buildSky(scene);
-  buildTerrain(scene, shadows);
+  // M3 : buffer d'état de déformation (2048² ≈ 4 cm/texel sur 80 m ; réduit
+  // sur le chemin dev WebGL logiciel)
+  const deform = createDeform(engine, { res: DEV_GL ? 768 : 2048 });
+  const terrain = buildTerrain(scene, shadows, deform.state);
   const pines = plantPines(scene, shadows);
   console.log('pins plantés :', pines.count);
 
@@ -137,6 +141,7 @@ async function start() {
 
   const WALK = 2.2, RUN = 6.5, ACCEL = 26, DAMP = 10;
   let last = performance.now();
+  let stepAcc = 0, footSide = 1;                     // cadence des empreintes
 
   engine.runRenderLoop(() => {
     const now = performance.now();
@@ -170,6 +175,24 @@ async function start() {
     }
     state.px += state.vx * dt;
     state.pz += state.vz * dt;
+    // empreintes de pas : un splat par foulée, alterné gauche/droite
+    const spd = Math.hypot(state.vx, state.vz);
+    if (spd > 0.4) {
+      stepAcc += spd * dt;
+      const stride = spd > 3.5 ? 1.05 : 0.62;
+      if (stepAcc > stride) {
+        stepAcc = 0; footSide = -footSide;
+        // le gravier compacté de la chaussée ne prend pas l'empreinte
+        if (roadQuery(state.px, state.pz).dist > ROAD_HALF + 0.2) {
+          const fx = state.vx / spd, fz = state.vz / spd;
+          deform.addSplat(
+            state.px - fz * footSide * 0.15, state.pz + fx * footSide * 0.15,
+            0.13, spd > 3.5 ? 0.045 : 0.03);
+        }
+      }
+    }
+    deform.update(dt, state.px, state.pz);
+    terrain.patchTick(state.px, state.pz);
     const gy = height(state.px, state.pz);
     state.py += (gy - state.py) * Math.min(1, 14 * dt);
     player.position.x = state.px;
@@ -206,5 +229,5 @@ async function start() {
   scene.executeWhenReady(() => boot.classList.add('gone'));
 
   // poignées de développement (cadrage des captures d'itération)
-  window.__laroute = { state, scene, engine };
+  window.__laroute = { state, scene, engine, deform };
 }

@@ -1,7 +1,10 @@
 /**
  * Terrain M2 : grille dense au centre + tablier lointain grossier.
- * (Le vrai clipmap suivant la caméra arrive avec la déformation, au M3 —
- * consigné dans DECISIONS.md.)
+ * M3 : un patch de 32 m à ~12,5 cm/vertex suit le joueur (l'esprit clipmap,
+ * réduit à l'anneau utile) et lit le buffer de déformation au vertex ; le
+ * terrain grossier plonge sous son emprise pour ne jamais crever les ornières.
+ * Recentrage en deux phases (hauteurs, puis normales + upload) pour étaler
+ * le coût CPU sur deux frames.
  */
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData.js';
@@ -9,7 +12,9 @@ import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js';
 import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js';
+import { VertexBuffer } from '@babylonjs/core/Buffers/buffer.js';
 import { height, roadQuery, ROAD_HALF, samples } from './road.js';
+import { DeformPlugin } from './deformPlugin.js';
 
 function buildGrid(scene, name, size, subdiv, cx, cz, hole) {
   const pos = new Float32Array((subdiv + 1) * (subdiv + 1) * 3);
@@ -99,18 +104,86 @@ function roadTexture(scene) {
   return tex;
 }
 
-export function buildTerrain(scene, shadows) {
+/* Patch de déformation : grille dense recentrée sur le joueur. */
+function buildPatch(scene, deformState, floorTex) {
+  const SIZE = 32, SUB = 256;                        // 12,5 cm / vertex
+  const NV = (SUB + 1) * (SUB + 1);
+  const pos = new Float32Array(NV * 3);
+  const uv = new Float32Array(NV * 2);
+  const nrm = new Float32Array(NV * 3);
+  const idx = new Uint32Array(SUB * SUB * 6);
+  let k = 0;
+  for (let j = 0; j < SUB; j++) {
+    for (let i = 0; i < SUB; i++) {
+      const a = j * (SUB + 1) + i, b = a + 1, c = a + SUB + 1, d = c + 1;
+      idx[k++] = a; idx[k++] = b; idx[k++] = c;
+      idx[k++] = b; idx[k++] = d; idx[k++] = c;
+    }
+  }
+  const mesh = new Mesh('deformPatch', scene);
+  const fill = (cx, cz) => {
+    let p = 0, u = 0;
+    for (let j = 0; j <= SUB; j++) {
+      for (let i = 0; i <= SUB; i++) {
+        const x = cx + (i / SUB - 0.5) * SIZE;
+        const z = cz + (j / SUB - 0.5) * SIZE;
+        pos[p++] = x; pos[p++] = height(x, z); pos[p++] = z;
+        uv[u++] = x / 9.5; uv[u++] = z / 9.5;
+      }
+    }
+  };
+  fill(deformState.patchX, deformState.patchZ);
+  VertexData.ComputeNormals(pos, idx, nrm);
+  const vd = new VertexData();
+  vd.positions = pos; vd.indices = idx; vd.normals = nrm; vd.uvs = uv;
+  vd.applyToMesh(mesh, true);
+  mesh.alwaysSelectAsActiveMesh = true;              // suit le joueur : pas de culling
+  mesh.receiveShadows = true;
+
+  const mat = new StandardMaterial('patchMat', scene);
+  mat.diffuseTexture = floorTex;
+  mat.specularColor = new Color3(0.015, 0.015, 0.015);
+  mat.zOffset = -2;                                  // gagne les égalités de profondeur au bord
+  new DeformPlugin(mat, deformState, { patch: true });
+  mesh.material = mat;
+
+  // recentrage en deux phases : 1) hauteurs CPU, 2) normales + upload GPU
+  let phase = 0, tx = 0, tz = 0;
+  deformState.patchHalf = SIZE / 2;
+  const tick = (px, pz) => {
+    if (phase === 0) {
+      if (Math.max(Math.abs(px - deformState.patchX), Math.abs(pz - deformState.patchZ)) > 6) {
+        tx = Math.round(px * 2) / 2; tz = Math.round(pz * 2) / 2;
+        phase = 1;
+      }
+      return;
+    }
+    if (phase === 1) { fill(tx, tz); phase = 2; return; }
+    VertexData.ComputeNormals(pos, idx, nrm);
+    mesh.updateVerticesData(VertexBuffer.PositionKind, pos);
+    mesh.updateVerticesData(VertexBuffer.NormalKind, nrm);
+    mesh.updateVerticesData(VertexBuffer.UVKind, uv);
+    deformState.patchX = tx; deformState.patchZ = tz; // les deux matériaux basculent la même frame
+    phase = 0;
+  };
+  return { mesh, tick };
+}
+
+export function buildTerrain(scene, shadows, deformState) {
   // sol : centre dense (≈1,15 m/vertex), tablier lointain
   const inner = buildGrid(scene, 'terrainInner', 320, 278, -8, -110, null);
   const outer = buildGrid(scene, 'terrainOuter', 1100, 90, -8, -110,
     { x0: -166, x1: 150, z0: -268, z1: 48 });
   const mat = new StandardMaterial('terrainMat', scene);
-  mat.diffuseTexture = floorTexture(scene);
+  const floorTex = floorTexture(scene);
+  mat.diffuseTexture = floorTex;
   mat.diffuseTexture.uScale = 1; mat.diffuseTexture.vScale = 1;
   mat.specularColor = new Color3(0.015, 0.015, 0.015);
+  new DeformPlugin(mat, deformState);                // plongée sous le patch + ombrage des traces
   inner.material = mat; outer.material = mat;
   inner.receiveShadows = true;
   outer.receiveShadows = true;
+  const patch = buildPatch(scene, deformState, floorTex);
 
   // ruban de route posé juste au-dessus du terrain sculpté
   const CROSS = [-1, 0, 1], LIFT = [0.05, 0.14, 0.05];
@@ -167,5 +240,5 @@ export function buildTerrain(scene, shadows) {
     shadows.addShadowCaster(rock);
     rock.freezeWorldMatrix();
   }
-  return { inner, outer, road };
+  return { inner, outer, road, patchTick: patch.tick };
 }

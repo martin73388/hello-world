@@ -11,5 +11,13 @@
 | Post           | 1,6 ms | —      |
 | Marge          | 0,7 ms | —      |
 
-Mesures à faire sur la machine cible (RTX 5070 Ti, 2560×1440) à chaque
-milestone. Le milestone 1 n'a pas encore de mesure — la scène est un plan.
+Mesures à faire sur la machine cible à chaque milestone (machine réelle du
+joueur : MacBook M4, WebGPU/Metal — le brief visait une RTX, on juge sur le
+M4). Le milestone 1 n'a pas encore de mesure — la scène est un plan.
+
+Coûts M3 à surveiller (overlay F1 sur le M4) :
+- passe de déformation : 2048² RGBA16F, 5 taps + 16 splats max par frame ;
+- patch : 131 k triangles supplémentaires, texelFetch au vertex ;
+- recentrage du patch : ~66 k `height()` CPU en phase 1 + ComputeNormals en
+  phase 2 (étalé sur 2 frames, tous les ~6 m de marche) — si un à-coup se
+  sent, découper la phase 1 en bandes.

@@ -49,16 +49,60 @@ for (let i = 0; i < samples.length; i++) {
 export const ROAD_HALF = 2.9;     // demi-largeur roulable
 export const SHOULDER = 8.5;      // fin du talus
 
-/** distance au tracé + hauteur de la route au droit du point */
-export function roadQuery(x, z) {
-  let best = Infinity, by = 0;
+/* Grille d'accélération : candidat « échantillon le plus proche » par cellule
+ * de 2 m (BFS multi-source), affiné par un balayage local exact. Fait passer
+ * roadQuery de O(n) à O(1) — indispensable au re-remplissage du patch de
+ * déformation (66 k sommets par recentrage). */
+const GX0 = -210, GZ0 = -330, GCELL = 2, GW = 220, GH = 210;
+const roadGrid = new Int32Array(GW * GH).fill(-1);
+{
+  const qx = [], qz = [];
   for (let i = 0; i < samples.length; i++) {
+    const cx = Math.round((samples[i].x - GX0) / GCELL);
+    const cz = Math.round((samples[i].z - GZ0) / GCELL);
+    if (cx >= 0 && cx < GW && cz >= 0 && cz < GH) {
+      const c = cz * GW + cx;
+      if (roadGrid[c] < 0) { roadGrid[c] = i; qx.push(cx); qz.push(cz); }
+    }
+  }
+  for (let h = 0; h < qx.length; h++) {              // BFS 4-connexe
+    const cx = qx[h], cz = qz[h], src = roadGrid[cz * GW + cx];
+    if (cx > 0 && roadGrid[cz * GW + cx - 1] < 0) { roadGrid[cz * GW + cx - 1] = src; qx.push(cx - 1); qz.push(cz); }
+    if (cx < GW - 1 && roadGrid[cz * GW + cx + 1] < 0) { roadGrid[cz * GW + cx + 1] = src; qx.push(cx + 1); qz.push(cz); }
+    if (cz > 0 && roadGrid[(cz - 1) * GW + cx] < 0) { roadGrid[(cz - 1) * GW + cx] = src; qx.push(cx); qz.push(cz - 1); }
+    if (cz < GH - 1 && roadGrid[(cz + 1) * GW + cx] < 0) { roadGrid[(cz + 1) * GW + cx] = src; qx.push(cx); qz.push(cz + 1); }
+  }
+}
+
+/** distance au tracé + hauteur de la route au droit du point.
+ * La hauteur est INTERPOLÉE par projection sur les segments voisins — la
+ * version « plus proche échantillon » créait des marches de 2 m sous le
+ * ruban de route. */
+export function roadQuery(x, z) {
+  const cx = Math.min(GW - 1, Math.max(0, Math.round((x - GX0) / GCELL)));
+  const cz = Math.min(GH - 1, Math.max(0, Math.round((z - GZ0) / GCELL)));
+  const c = roadGrid[cz * GW + cx];
+  let best = Infinity, bi = 0;
+  const i0 = Math.max(0, c - 10), i1 = Math.min(samples.length - 1, c + 10);
+  for (let i = i0; i <= i1; i++) {
     const s = samples[i];
     const dx = x - s.x, dz = z - s.z;
     const d2 = dx * dx + dz * dz;
-    if (d2 < best) { best = d2; by = s.y; }
+    if (d2 < best) { best = d2; bi = i; }
   }
-  return { dist: Math.sqrt(best), y: by };
+  let dist = Math.sqrt(best), y = samples[bi].y;
+  for (let j = bi - 1; j <= bi; j++) {
+    if (j < 0 || j + 1 >= samples.length) continue;
+    const a = samples[j], b = samples[j + 1];
+    const ex = b.x - a.x, ez = b.z - a.z;
+    const l2 = ex * ex + ez * ez || 1;
+    let t = ((x - a.x) * ex + (z - a.z) * ez) / l2;
+    t = Math.max(0, Math.min(1, t));
+    const dx = x - (a.x + ex * t), dz = z - (a.z + ez * t);
+    const d = Math.sqrt(dx * dx + dz * dz);
+    if (d <= dist) { dist = d; y = a.y + (b.y - a.y) * t; }
+  }
+  return { dist, y };
 }
 
 function sstep(a, b, v) {
