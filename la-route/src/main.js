@@ -152,8 +152,9 @@ async function start() {
     if (il > 0) {
       ix /= il; iz /= il;
       const cy = state.camYaw;
-      const dx = Math.sin(cy) * iz + Math.cos(cy) * ix;
-      const dz = Math.cos(cy) * iz - Math.sin(cy) * ix;
+      // avant caméra = -(sin cy, cos cy) ; droite écran (main gauche) = (-cos cy, sin cy)
+      const dx = -Math.sin(cy) * iz - Math.cos(cy) * ix;
+      const dz = -Math.cos(cy) * iz + Math.sin(cy) * ix;
       state.vx += dx * ACCEL * dt;
       state.vz += dz * ACCEL * dt;
       const sp = Math.hypot(state.vx, state.vz);
