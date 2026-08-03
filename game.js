@@ -110,7 +110,7 @@ document.body.insertAdjacentHTML('beforeend', `
   <div id="stage"></div>
   <div class="vignette"></div>
   <div class="hud" id="title"><div class="t1">L'ATELIER</div><div class="t2">Prologue&nbsp;— minuit et quart</div></div>
-  <div class="hud" id="keys"><b>ZQSD</b> / <b>WASD</b>&nbsp; se déplacer<br><b>Shift</b>&nbsp; courir&nbsp; · &nbsp;<b>E</b>&nbsp; interagir / conduire<br><b>Souris</b>&nbsp; caméra (sans clic)&nbsp; · &nbsp;<b>Molette</b>&nbsp; zoom → 1ʳᵉ personne&nbsp; · &nbsp;<b>M</b>&nbsp; son</div>
+  <div class="hud" id="keys"><b>ZQSD</b> / <b>WASD</b>&nbsp; se déplacer<br><b>Shift</b>&nbsp; courir&nbsp; · &nbsp;<b>E</b>&nbsp; interagir / conduire<br><b>Clic</b>&nbsp; capturer la souris&nbsp; · &nbsp;<b>Échap</b>&nbsp; libérer<br><b>Molette</b>&nbsp; zoom → 1ʳᵉ personne&nbsp; · &nbsp;<b>M</b>&nbsp; son</div>
   <div class="hud" id="hint">Échap pour libérer la souris</div>
   <div class="hud" id="objective">Retrouve <b>la clé de contact</b><span id="objN" style="display:none">0</span></div>
   <div class="hud" id="prompt"><b>E</b><span id="promptText"></span></div>
@@ -1650,27 +1650,22 @@ const camCtl = {
     if (performance.now() - (touch.lastT || 0) < 700) return;
     if (el.requestPointerLock) el.requestPointerLock();
   };
-  enter.addEventListener('click', () => { entered = true; audio.start(); tryLock(); enter.classList.add('hidden'); });
+  enter.addEventListener('click', () => {
+    entered = true; audio.start(); tryLock(); enter.classList.add('hidden');
+    if (!camCtl.locked) { hint.textContent = 'Clique pour piloter la caméra'; hint.style.opacity = 0.7; }
+  });
   enter.addEventListener('touchstart', () => { touch.lastT = performance.now(); }, { passive: true });
   el.addEventListener('click', () => { if (!camCtl.locked) tryLock(); });
   document.addEventListener('pointerlockchange', () => {
     camCtl.locked = document.pointerLockElement === el;
-    hint.style.opacity = camCtl.locked ? 0.7 : 0;
+    hint.textContent = camCtl.locked ? 'Échap pour libérer la souris' : 'Clique pour piloter la caméra';
+    hint.style.opacity = 0.7;
   });
-  // la souris pilote la caméra directement, sans clic ni capture
-  let lastMX = null, lastMY = null;
+  // clic dans la fenêtre = capture de la souris ; la caméra ne bouge que capturée
   addEventListener('mousemove', e => {
-    if (!entered) { lastMX = e.clientX; lastMY = e.clientY; return; }
-    if (camCtl.locked) {
-      camCtl.yaw -= e.movementX * CAM.sens;
-      camCtl.pitch = clamp(camCtl.pitch + e.movementY * CAM.sens, CAM.minPitch, CAM.maxPitch);
-      return;
-    }
-    if (lastMX !== null) {
-      camCtl.yaw -= (e.clientX - lastMX) * CAM.sens * 1.15;
-      camCtl.pitch = clamp(camCtl.pitch + (e.clientY - lastMY) * CAM.sens * 1.15, CAM.minPitch, CAM.maxPitch);
-    }
-    lastMX = e.clientX; lastMY = e.clientY;
+    if (!camCtl.locked) return;
+    camCtl.yaw -= e.movementX * CAM.sens;
+    camCtl.pitch = clamp(camCtl.pitch + e.movementY * CAM.sens, CAM.minPitch, CAM.maxPitch);
   });
   addEventListener('wheel', e => {
     camCtl.distTarget = clamp(camCtl.distTarget + Math.sign(e.deltaY) * 0.3, 0.34, CAM.maxDist);

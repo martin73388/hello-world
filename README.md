@@ -28,10 +28,10 @@ de 5,6 × 3,8 m, personnage 1,78 m, camping-car de 6,8 m).
   balancier des bras, inclinaison dans les virages et à l'accélération.
 - **Vie au repos** : respiration, transferts d'appui, regards curieux,
   clignements des yeux.
-- **Caméra libre** : la souris oriente la caméra sans clic (clic = capture
-  du pointeur en option), zoom molette continu **jusqu'à la première
-  personne** (la tête se masque, le corps reste visible, Marcel suit le
-  regard), amortissements distincts, collision caméra, FOV dynamique.
+- **Caméra** : clic dans la fenêtre = capture de la souris (la caméra
+  suit le pointeur), Échap pour libérer ; zoom molette continu **jusqu'à
+  la première personne** (la tête se masque, le corps reste visible,
+  Marcel suit le regard), collision caméra, FOV dynamique.
 - **Contrôles** : ZQSD **et** WASD (codes physiques → AZERTY géré
   nativement), flèches, Shift pour courir, déplacement relatif à la caméra,
   accélération/friction, glissement le long des obstacles — et **contrôles
@@ -59,6 +59,6 @@ Ouvrir `index.html` dans un navigateur (ou servir le dossier avec
 | ZQSD / WASD / flèches | se déplacer |
 | Shift | courir |
 | E | interagir · prendre le volant / couper le moteur |
-| Souris | caméra, sans clic (clic = capturer, Échap = libérer) |
+| Clic | capturer la souris (la caméra suit) · Échap pour libérer |
 | Molette | zoom, jusqu'à la 1ʳᵉ personne |
 | M | couper le son |
