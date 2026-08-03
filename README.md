@@ -2,16 +2,17 @@
 
 Un jeu construit pas à pas. **Prologue : le garage.**
 
-Un personnage en vue 3ᵉ personne — Marcel, mécanicien de nuit — dans son
-garage fermé, à minuit et quart. Pas encore de monde ouvert : ce chapitre
-se concentre sur les fondations qui doivent être irréprochables avant tout
-le reste : le personnage, ses animations, les contrôles et la caméra.
+Marcel, mécanicien de nuit, dans son grand atelier à minuit et quart —
+avec **L'Hirondelle**, son camping-car, garé face à la porte. Cinq clés se
+sont égarées dans l'atelier : retrouve-les, puis appuie sur **le bouton du
+mur** pour ouvrir la porte du garage sur la nuit.
 
 ## Direction artistique
 
 **Toon-shading à paliers + contours encrés.** Nuit bleue profonde, lumière
 tungstène ambrée sous abat-jour émaillé, clair de lune par le bandeau vitré.
-1 unité = 1 mètre partout (garage 7,2 × 5,6 m, plafond 2,9 m, personnage 1,78 m).
+1 unité = 1 mètre partout (atelier 12 × 9 m, plafond 3,6 m, personnage 1,78 m,
+camping-car 4,5 m).
 
 ## Ce qui est soigné
 
@@ -30,7 +31,11 @@ tungstène ambrée sous abat-jour émaillé, clair de lune par le bandeau vitré
   en courant.
 - **Contrôles** : ZQSD **et** WASD (codes physiques → AZERTY géré
   nativement), flèches, Shift pour courir, déplacement relatif à la caméra,
-  accélération/friction, glissement le long des obstacles.
+  accélération/friction, glissement le long des obstacles — et **contrôles
+  tactiles** (stick virtuel, boutons E/courir) sur mobile.
+- **Boucle de jeu** : 5 clés à retrouver (ramassage animé en IK), bouton
+  mural qui commande la porte sectionnelle, interrupteur (clair de lune),
+  radio lo-fi générative, L'Hirondelle qui fait un appel de phares.
 
 ## Lancer
 
@@ -42,6 +47,7 @@ Ouvrir `index.html` dans un navigateur (ou servir le dossier avec
 | --- | --- |
 | ZQSD / WASD / flèches | se déplacer |
 | Shift | courir |
+| E | interagir (clés, bouton de porte, interrupteur, radio, van) |
 | Souris | caméra (clic pour capturer, Échap pour libérer) |
 | Molette | zoom |
 | M | couper le son |

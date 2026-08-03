@@ -9,7 +9,7 @@
 /* ---------------------------------------------------------- */
 /* 0. Constantes générales                                     */
 /* ---------------------------------------------------------- */
-const ROOM = { w: 7.2, d: 5.6, h: 2.9 };          // garage : 7,2 m × 5,6 m, plafond 2,9 m
+const ROOM = { w: 12, d: 9, h: 3.6 };             // atelier : 12 m × 9 m, plafond 3,6 m
 const CHAR = {
   height: 1.78,
   radius: 0.26,          // capsule de collision
@@ -20,7 +20,7 @@ const CHAR = {
   accel: 30, friction: 11, turnRate: 11,
 };
 const CAM = {
-  fov: 55, minDist: 1.5, maxDist: 4.8, dist0: 3.1,
+  fov: 55, minDist: 1.5, maxDist: 6.0, dist0: 3.4,
   minPitch: -0.42, maxPitch: 1.22, sens: 0.0022,
   targetH: 1.38, margin: 0.22,
 };
@@ -56,9 +56,9 @@ const X_AXIS = new THREE.Vector3(1, 0, 0), Y_AXIS = new THREE.Vector3(0, 1, 0), 
 /* ---------------------------------------------------------- */
 const css = document.createElement('style');
 css.textContent = `
-  html,body{margin:0;height:100%;overflow:hidden;background:#0c1220}
-  #stage{position:fixed;inset:0}
-  #stage canvas{display:block;width:100%;height:100%}
+  html,body{margin:0;height:100%;overflow:hidden;background:#0c1220;overscroll-behavior:none}
+  #stage{position:fixed;inset:0;touch-action:none}
+  #stage canvas{display:block;width:100%;height:100%;touch-action:none}
   .vignette{position:fixed;inset:0;pointer-events:none;z-index:5;
     background:radial-gradient(ellipse at 50% 42%, transparent 52%, rgba(5,8,16,.55) 100%)}
   .hud{position:fixed;z-index:10;color:#e8dcc8;user-select:none;pointer-events:none;
@@ -160,7 +160,7 @@ function canvasTex(size, draw, repX = 1, repY = 1) {
 // palier de toon-shading (4 tons)
 const gradCanvas = document.createElement('canvas'); gradCanvas.width = 4; gradCanvas.height = 1;
 { const g = gradCanvas.getContext('2d');
-  ['#30303a', '#6a6a74', '#b8b8c0', '#efefef'].forEach((col, i) => { g.fillStyle = col; g.fillRect(i, 0, 1, 1); }); }
+  ['#26262f', '#55555f', '#a2a2ac', '#e9e9ec'].forEach((col, i) => { g.fillStyle = col; g.fillRect(i, 0, 1, 1); }); }
 const gradMap = new THREE.CanvasTexture(gradCanvas);
 gradMap.minFilter = gradMap.magFilter = THREE.NearestFilter;
 
@@ -246,7 +246,7 @@ M.teal = toon(0x33605a); M.metal = toon(0x5c6572);
 M.metalDark = toon(0x363d4c); M.wood = toon(0x6e5236);
 M.tire = toon(0x23262c); M.tarp = toon(0x40514a);
 M.eye = new THREE.MeshBasicMaterial({ color: 0x241a14 });
-M.bulb = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
+M.bulb = new THREE.MeshBasicMaterial({ color: 0xffc078 });
 M.window = new THREE.MeshBasicMaterial({ map: canvasTex(256, (g, s) => {
   const grad = g.createLinearGradient(0, 0, 0, s);
   grad.addColorStop(0, '#2a4372'); grad.addColorStop(1, '#101c38');
@@ -289,14 +289,15 @@ function buildGarage() {
     m.position.set(x, h / 2, z); m.rotation.y = ry; m.receiveShadow = true; scene.add(m); return m;
   };
   // mur nord en trois pans : derrière la porte, la nuit
-  const sideW = (w - 2.72) / 2;
-  mkWall(sideW, -(2.72 / 2 + sideW / 2), -d / 2, 0);
-  mkWall(sideW, (2.72 / 2 + sideW / 2), -d / 2, 0);
+  const doorW = 3.5, doorH = 3.02;
+  const sideW = (w - doorW) / 2;
+  mkWall(sideW, -(doorW / 2 + sideW / 2), -d / 2, 0);
+  mkWall(sideW, (doorW / 2 + sideW / 2), -d / 2, 0);
   {
-    const strip = new THREE.Mesh(new THREE.PlaneGeometry(2.72, h - 2.18), M.wall.clone());
+    const strip = new THREE.Mesh(new THREE.PlaneGeometry(doorW, h - doorH), M.wall.clone());
     strip.material.map = wallTex.clone(); strip.material.map.needsUpdate = true;
-    strip.material.map.repeat.set(2.72 / 2.9, (h - 2.18) / h);
-    strip.position.set(0, 2.18 + (h - 2.18) / 2, -d / 2); strip.receiveShadow = true; scene.add(strip);
+    strip.material.map.repeat.set(doorW / 2.9, (h - doorH) / h);
+    strip.position.set(0, doorH + (h - doorH) / 2, -d / 2); strip.receiveShadow = true; scene.add(strip);
   }
   // le dehors : ciel étoilé, sapins, et la route qui attend
   const nightTex = canvasTex(512, (g, s) => {
@@ -321,26 +322,34 @@ function buildGarage() {
     g.fillRect(s * .497, s * .70, s * .006, s * .06);
     g.fillRect(s * .497, s * .82, s * .008, s * .08);
   });
-  const night = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 2.7), new THREE.MeshBasicMaterial({ map: nightTex }));
-  night.position.set(0, 1.05, -d / 2 - 0.75); scene.add(night);
+  const night = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 3.6), new THREE.MeshBasicMaterial({ map: nightTex }));
+  night.position.set(0, 1.35, -d / 2 - 0.85); scene.add(night);
 
   mkWall(w, 0, d / 2, Math.PI);       // mur sud (établi)
   mkWall(d, -w / 2, 0, Math.PI / 2);  // ouest
   mkWall(d, w / 2, 0, -Math.PI / 2);  // est
 
-  // --- porte sectionnelle (fermée), mur nord ---
-  const door = new THREE.Group(); door.position.set(0, 0, -d / 2 + 0.06); scene.add(door);
-  for (let i = 0; i < 5; i++) {
-    const p = box(2.6, 0.40, 0.055, M.metalDark, 0, 0.22 + i * 0.43, 0, door);
-    box(2.44, 0.30, 0.02, M.metal, 0, 0.22 + i * 0.43, 0.032, door);
+  // --- porte sectionnelle (fermée), mur nord — assez large pour le camping-car ---
+  const door = new THREE.Group(); door.position.set(0, 0, -d / 2 + 0.07); scene.add(door);
+  for (let i = 0; i < 6; i++) {
+    const p = box(3.4, 0.46, 0.055, M.metalDark, 0, 0.27 + i * 0.5, 0, door);
+    box(3.22, 0.36, 0.02, M.metal, 0, 0.27 + i * 0.5, 0.032, door);
     p.receiveShadow = true;
   }
-  box(0.55, 0.16, 0.03, M.metal, 0, 1.02, 0.06, door); // poignée
+  box(0.6, 0.16, 0.03, M.metal, 0, 1.05, 0.06, door); // poignée
   // rails de guidage et enseigne : fixés au mur, la porte coulisse entre eux
   const doorFrame = new THREE.Group(); doorFrame.position.copy(door.position); scene.add(doorFrame);
-  box(0.09, 2.6, 0.10, M.metalDark, -1.38, 1.3, 0, doorFrame);
-  box(0.09, 2.6, 0.10, M.metalDark, 1.38, 1.3, 0, doorFrame);
-  const sign = box(1.5, 0.34, 0.04, M.teal, 0, 2.55, 0.02, doorFrame);
+  box(0.1, 3.2, 0.11, M.metalDark, -1.79, 1.6, 0, doorFrame);
+  box(0.1, 3.2, 0.11, M.metalDark, 1.79, 1.6, 0, doorFrame);
+  const sign = box(1.5, 0.34, 0.04, M.teal, 0, 3.24, 0.02, doorFrame);
+  // le bouton de commande de la porte, sur le mur à droite
+  const btnBox = new THREE.Group(); btnBox.position.set(2.35, 1.25, -d / 2 + 0.06); scene.add(btnBox);
+  box(0.15, 0.21, 0.07, M.metalDark, 0, 0, 0, btnBox);
+  const doorButton = cyl(0.038, 0.042, 0.035, M.red, 0, 0.035, 0.045, btnBox, 14);
+  doorButton.rotation.x = Math.PI / 2;
+  const doorLampMesh = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0x552222 }));
+  doorLampMesh.position.set(0, -0.062, 0.04); btnBox.add(doorLampMesh);
   sign.add(new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.24),
     toon(0xffffff, { map: canvasTex(256, (g, s) => {
       g.fillStyle = '#3f6f6a'; g.fillRect(0, 0, s, s);
@@ -423,18 +432,85 @@ function buildGarage() {
   box(0.55, 0.34, 0.4, M.wood, -2.2, 0.17, -d / 2 + 0.5).rotation.y = -0.25;
   addCollider(-2.2, -d / 2 + 0.5, 0.72, 0.6, 0.4);
 
-  // --- la forme sous la bâche (mystère…) ---
-  const tarp = new THREE.Group(); tarp.position.set(1.6, 0, 1.7); tarp.rotation.y = -0.35; scene.add(tarp);
-  const blob = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), M.tarp);
-  blob.scale.set(1.05, 0.62, 0.52); blob.position.y = 0.52; blob.castShadow = blob.receiveShadow = true; tarp.add(blob);
-  const blob2 = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 12), M.tarp);
-  blob2.scale.set(0.55, 0.5, 0.45); blob2.position.set(0.45, 0.75, 0); blob2.castShadow = true; tarp.add(blob2);
-  const skirt = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.12, 0.5, 22, 1, true), M.tarp.clone());
-  skirt.scale.set(1.05, 1, 0.55); skirt.position.y = 0.25; skirt.material.side = THREE.DoubleSide; skirt.castShadow = true; tarp.add(skirt);
-  // corde
-  const rope = new THREE.Mesh(new THREE.TorusGeometry(1.09, 0.018, 6, 30), toon(0xb08d55));
-  rope.rotation.x = Math.PI / 2; rope.scale.set(1.03, 0.56, 1); rope.position.y = 0.34; tarp.add(rope);
-  addCollider(1.6, 1.7, 2.3, 1.45, 1.1);
+  // --- le camping-car : « L'Hirondelle », garé face à la porte ---
+  const van = new THREE.Group(); van.position.set(-2.55, 0, -0.7); scene.add(van);
+  const vanCream = toon(0xcfc0a0), vanTeal = toon(0x3a6b64), vanDark = toon(0x2c3140);
+  const glass = new THREE.MeshBasicMaterial({ color: 0x141f36 });
+  const chrome = toon(0x8a93a4);
+  box(1.95, 0.92, 4.5, vanCream, 0, 0.98, 0, van);             // caisse basse
+  box(1.95, 0.72, 4.5, vanTeal, 0, 1.8, 0, van);               // bandeau haut
+  box(2.0, 0.07, 4.54, chrome, 0, 1.42, 0, van);               // jonc chromé
+  box(1.82, 0.16, 4.32, vanTeal, 0, 2.24, 0, van);             // toit
+  box(1.55, 0.12, 3.9, vanTeal, 0, 2.36, 0, van);
+  // galerie, jerrican, roue de secours
+  [-0.72, 0.72].forEach(x => box(0.05, 0.09, 3.6, M.metalDark, x, 2.47, 0.1, van));
+  [-1.4, 0, 1.4].forEach(z => box(1.5, 0.05, 0.06, M.metalDark, 0, 2.49, z, van));
+  cyl(0.16, 0.16, 0.42, M.teal, -0.35, 2.62, -0.9, van, 12);
+  const spare = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.11, 10, 20), M.tire);
+  spare.position.set(0.25, 2.62, 1.3); spare.rotation.x = Math.PI / 2; spare.castShadow = true; van.add(spare);
+  // avant : pare-brise, calandre, phares, pare-chocs
+  const wind = box(1.6, 0.72, 0.05, glass, 0, 1.82, -2.26, van); wind.rotation.x = -0.1;
+  box(1.7, 0.1, 0.06, vanCream, 0, 1.44, -2.27, van);
+  const grille = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.42), toon(0xffffff, { map: canvasTex(128, (g, s) => {
+    g.fillStyle = '#b7a888'; g.fillRect(0, 0, s, s);
+    g.fillStyle = '#6d6250';
+    for (let y = 10; y < s; y += 22) g.fillRect(8, y, s - 16, 9);
+  }) }));
+  grille.position.set(0, 0.98, -2.265); grille.rotation.y = Math.PI; van.add(grille);
+  const vanLenses = [];
+  [-0.68, 0.68].forEach(x => {
+    cyl(0.1, 0.1, 0.05, chrome, x, 1.28, -2.26, van, 14).rotation.x = Math.PI / 2;
+    const lens = new THREE.Mesh(new THREE.CircleGeometry(0.075, 14), new THREE.MeshBasicMaterial({ color: 0x6b5c40 }));
+    lens.position.set(x, 1.28, -2.29); lens.rotation.y = Math.PI; van.add(lens);
+    vanLenses.push(lens.material);
+  });
+  box(2.05, 0.16, 0.2, chrome, 0, 0.52, -2.32, van);
+  box(2.05, 0.16, 0.2, chrome, 0, 0.52, 2.32, van);
+  const plateTex = canvasTex(128, (g, s) => {
+    g.fillStyle = '#1a1a20'; g.fillRect(0, 0, s, s);
+    g.fillStyle = '#e8dcc8'; g.font = 'bold 40px Courier New'; g.textAlign = 'center';
+    g.fillText('GM·73·AT', s / 2, s / 2 + 14);
+  });
+  [[-2.34, Math.PI], [2.34, 0]].forEach(([z, ry]) => {
+    const pl = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.12), new THREE.MeshBasicMaterial({ map: plateTex }));
+    pl.position.set(0, 0.62, z); pl.rotation.y = ry; van.add(pl);
+  });
+  // flancs : vitres, rainures de portes, poignées
+  [-1, 1].forEach(sx => {
+    [-0.7, 0.25, 1.35].forEach(z => box(0.02, 0.5, 0.78, glass, sx * 0.985, 1.82, z, van));
+    box(0.02, 0.55, 0.62, glass, sx * 0.985, 1.78, -1.75, van);
+    box(0.015, 1.5, 0.02, vanDark, sx * 0.982, 1.15, -1.35, van);
+    box(0.015, 1.5, 0.02, vanDark, sx * 0.982, 1.15, -2.08, van);
+    box(0.03, 0.05, 0.16, M.brass, sx * 0.99, 1.06, -1.5, van);
+  });
+  box(0.015, 1.6, 0.02, vanDark, 0.982, 1.2, 0.9, van);        // porte coulissante
+  box(0.015, 1.6, 0.02, vanDark, 0.982, 1.2, -0.15, van);
+  box(0.03, 0.05, 0.18, M.brass, 0.99, 1.12, 0.72, van);
+  // le nom, peint à la main sur les flancs
+  const nameTex = canvasTex(256, (g, s) => {
+    g.fillStyle = '#e8dcc8'; g.font = 'italic 42px Georgia'; g.textAlign = 'center';
+    g.fillText("L'Hirondelle", s / 2, s / 2 + 10);
+    g.strokeStyle = '#e8dcc8'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(s * .22, s * .61); g.quadraticCurveTo(s / 2, s * .70, s * .78, s * .61); g.stroke();
+  });
+  [-1, 1].forEach(sx => {
+    const nm = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.95),
+      toon(0xffffff, { map: nameTex, transparent: true }));
+    nm.position.set(sx * 0.988, 1.0, 0.35); nm.rotation.y = sx * Math.PI / 2; van.add(nm);
+  });
+  // roues et rétroviseurs
+  [[-0.83, -1.45], [0.83, -1.45], [-0.83, 1.45], [0.83, 1.45]].forEach(([x, z]) => {
+    const t = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.24, 18), M.tire);
+    t.position.set(x, 0.34, z); t.rotation.z = Math.PI / 2; t.castShadow = t.receiveShadow = true; van.add(t);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.26, 12), vanCream);
+    hub.position.copy(t.position); hub.rotation.z = Math.PI / 2; van.add(hub);
+  });
+  [-1, 1].forEach(sx => {
+    cyl(0.015, 0.015, 0.16, M.metalDark, sx * 1.06, 1.7, -2.1, van, 6).rotation.z = Math.PI / 2;
+    box(0.02, 0.14, 0.1, chrome, sx * 1.14, 1.7, -2.1, van);
+  });
+  outlineTree(van);
+  addCollider(-2.55, -0.7, 2.35, 4.9, 2.5);
 
   // --- affiches, tableau électrique, fenêtre haute ---
   const poster = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.62), toon(0xffffff, { map: posterTex }));
@@ -443,27 +519,35 @@ function buildGarage() {
   box(0.1, 0.06, 0.03, M.red, -2.6, 1.78, d / 2 - 0.1);
   breaker.receiveShadow = true;
   // bandeau vitré côté est (lueur de lune)
-  const win = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.5), M.window);
-  win.position.set(w / 2 - 0.02, 2.42, -0.6); win.rotation.y = -Math.PI / 2; scene.add(win);
+  const win = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.6), M.window);
+  win.position.set(w / 2 - 0.02, 2.95, -1.0); win.rotation.y = -Math.PI / 2; scene.add(win);
   // cadre : traverses haut/bas + meneaux (rien devant la vitre)
-  box(0.06, 0.05, 2.72, M.metalDark, w / 2 - 0.035, 2.68, -0.6);
-  box(0.06, 0.05, 2.72, M.metalDark, w / 2 - 0.035, 2.16, -0.6);
-  [-1.32, -0.44, 0.44, 1.32].forEach(o =>
-    box(0.06, 0.56, 0.05, M.metalDark, w / 2 - 0.035, 2.42, -0.6 + o));
+  box(0.06, 0.05, 3.72, M.metalDark, w / 2 - 0.035, 3.26, -1.0);
+  box(0.06, 0.05, 3.72, M.metalDark, w / 2 - 0.035, 2.64, -1.0);
+  [-1.82, -0.6, 0.6, 1.82].forEach(o =>
+    box(0.06, 0.66, 0.05, M.metalDark, w / 2 - 0.035, 2.95, -1.0 + o));
 
-  // --- luminaire central (ampoule + abat-jour émaillé) ---
-  const lampG = new THREE.Group(); lampG.position.set(0.15, h, -0.2); scene.add(lampG);
-  cyl(0.012, 0.012, 0.62, M.metalDark, 0, -0.31, 0, lampG);
-  const shade2 = new THREE.Mesh(new THREE.ConeGeometry(0.23, 0.18, 26, 1, true), M.teal);
-  shade2.material = M.teal.clone(); shade2.material.side = THREE.DoubleSide;
-  shade2.position.y = -0.66; lampG.add(shade2);
-  const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), M.bulb);
-  bulb.position.y = -0.74; lampG.add(bulb);
+  // --- deux luminaires suspendus (ampoule + abat-jour émaillé) ---
+  const mkLamp = (x, z) => {
+    const lampG = new THREE.Group(); lampG.position.set(x, h, z); scene.add(lampG);
+    cyl(0.012, 0.012, 0.72, M.metalDark, 0, -0.36, 0, lampG);
+    const sh = new THREE.Mesh(new THREE.ConeGeometry(0.25, 0.19, 26, 1, true), M.teal.clone());
+    sh.material.side = THREE.DoubleSide; sh.position.y = -0.76; lampG.add(sh);
+    const bl = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), M.bulb.clone());
+    bl.position.y = -0.85; lampG.add(bl);
+    return { pos: new THREE.Vector3(x, h - 0.88, z), bulb: bl };
+  };
+  const lampA = mkLamp(1.0, -1.3);
+  const lampB = mkLamp(-1.2, 2.5);
+
+  // contours encrés sur les props héros (même langage graphique que le personnage)
+  [bench, shelf, tires, cab].forEach(g2 => outlineTree(g2));
 
   return {
-    lampPos: new THREE.Vector3(0.15, h - 0.78, -0.2),
+    lampPos: lampA.pos, lamp2Pos: lampB.pos,
     benchLampPos: new THREE.Vector3(-0.3, 2.13, d / 2 - 0.58),
-    door, tarp, bulb,
+    door, bulb: lampA.bulb, bulb2: lampB.bulb,
+    vanLenses, doorLamp: doorLampMesh.material,
   };
 }
 const anchors = buildGarage();
@@ -474,7 +558,7 @@ const anchors = buildGarage();
 const hemi = new THREE.HemisphereLight(0x223052, 0x100c09, 0.22);
 scene.add(hemi);
 // ampoule centrale sous abat-jour — cône chaud vers le sol
-const keyLight = new THREE.SpotLight(0xffa25c, 2.0, 13, 1.0, 0.6, 1.3);
+const keyLight = new THREE.SpotLight(0xff9440, 2.0, 13, 1.0, 0.6, 1.3);
 keyLight.position.copy(anchors.lampPos);
 keyLight.target.position.set(0.15, 0, -0.2);
 keyLight.castShadow = true;
@@ -482,9 +566,14 @@ keyLight.shadow.mapSize.set(1024, 1024);
 keyLight.shadow.bias = -0.004;
 keyLight.shadow.camera.near = 0.1; keyLight.shadow.camera.far = 12;
 scene.add(keyLight, keyLight.target);
-// halo chaud résiduel de l'ampoule (sans ombre)
-const keyFill = new THREE.PointLight(0xffa25c, 0.35, 7, 1.8);
-keyFill.position.copy(anchors.lampPos);
+// second luminaire au-dessus de l'établi (cône chaud, sans ombre portée)
+const keyLight2 = new THREE.SpotLight(0xff9440, 1.7, 12, 1.0, 0.6, 1.3);
+keyLight2.position.copy(anchors.lamp2Pos);
+keyLight2.target.position.set(-1.2, 0, 2.6);
+scene.add(keyLight2, keyLight2.target);
+// halo chaud résiduel (sans ombre)
+const keyFill = new THREE.PointLight(0xff9440, 0.4, 11, 1.8);
+keyFill.position.set(0, ROOM.h - 1.2, 0.6);
 scene.add(keyFill);
 // lampe d'établi
 const benchLight = new THREE.PointLight(0xffc27d, 0.7, 4.5, 1.8);
@@ -492,11 +581,11 @@ benchLight.position.copy(anchors.benchLampPos);
 scene.add(benchLight);
 // lune par le bandeau vitré — contre-jour froid
 const moon = new THREE.DirectionalLight(PAL.moon, 0.38);
-moon.position.set(ROOM.w / 2 + 2, 3.4, -0.6);
-moon.target.position.set(0, 0.5, 0.2);
+moon.position.set(ROOM.w / 2 + 3, 4.6, -1.2);
+moon.target.position.set(-0.5, 0.5, 0.4);
 scene.add(moon, moon.target);
 // discret contre haut-arrière pour détacher le personnage
-const rim = new THREE.DirectionalLight(0x9db4e8, 0.16);
+const rim = new THREE.DirectionalLight(0x9db4e8, 0.1);
 rim.position.set(-2, 3.2, -3); scene.add(rim);
 
 // poussières dans la lumière (points ronds et doux)
@@ -509,16 +598,16 @@ const dustSprite = (() => {
   return new THREE.CanvasTexture(c);
 })();
 const dustGeo = new THREE.BufferGeometry();
-const dustN = 80, dustPos = new Float32Array(dustN * 3), dustSeed = [];
+const dustN = 60, dustPos = new Float32Array(dustN * 3), dustSeed = [];
 for (let i = 0; i < dustN; i++) {
-  dustPos[i * 3] = 0.15 + (Math.random() - .5) * 2.2;
-  dustPos[i * 3 + 1] = 0.4 + Math.random() * 2.0;
-  dustPos[i * 3 + 2] = -0.2 + (Math.random() - .5) * 2.2;
+  dustPos[i * 3] = (Math.random() - .5) * 6.5;      // concentrées sous les luminaires
+  dustPos[i * 3 + 1] = 0.5 + Math.random() * 2.0;
+  dustPos[i * 3 + 2] = 0.5 + (Math.random() - .5) * 5.5;
   dustSeed.push(Math.random() * 20);
 }
 dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
 const dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({
-  map: dustSprite, size: 0.022, transparent: true, opacity: 0.35,
+  map: dustSprite, size: 0.018, transparent: true, opacity: 0.24,
   depthWrite: false, blending: THREE.AdditiveBlending }));
 scene.add(dust);
 
@@ -692,7 +781,7 @@ const marcel = buildCharacter();
 /* ---------------------------------------------------------- */
 const gameState = { tools: 0, toolsTotal: 5, doorUnlocked: false, doorOpen: false, lightsOn: true };
 const doorState = { y: 0, shake: 0, dustT: 0, done: false };
-let tarpWobble = 0, toastTimer = 0;
+let vanBlink = 0, toastTimer = 0, entered = false;
 
 const toastEl = document.getElementById('toast');
 function toast(msg, dur = 3.4) { toastEl.textContent = msg; toastEl.style.opacity = 1; toastTimer = dur; }
@@ -704,12 +793,13 @@ function softSprite(color, size, opacity) {
   s.scale.setScalar(size); scene.add(s); return s;
 }
 // halo chaud autour de l'ampoule (matériau propre : l'ampoule doit pouvoir s'éteindre seule)
-anchors.bulb.material = anchors.bulb.material.clone();
-const bulbHalo = softSprite(0xffc27d, 0.9, 0.3);
+const bulbHalo = softSprite(0xffb066, 0.9, 0.3);
 bulbHalo.position.copy(anchors.lampPos); bulbHalo.position.y -= 0.02;
+const bulbHalo2 = softSprite(0xffb066, 0.9, 0.3);
+bulbHalo2.position.copy(anchors.lamp2Pos); bulbHalo2.position.y -= 0.02;
 // lueur froide au pied de la porte (montera quand elle s'ouvre)
-const doorGlow = new THREE.PointLight(0x7fa8ff, 0, 4, 1.8);
-doorGlow.position.set(0, 0.5, -ROOM.d / 2 + 0.4); scene.add(doorGlow);
+const doorGlow = new THREE.PointLight(0x7fa8ff, 0, 7, 1.8);
+doorGlow.position.set(0, 0.8, -ROOM.d / 2 + 0.6); scene.add(doorGlow);
 
 // bouffées de poussière (pas de course, porte)
 const puffs = [];
@@ -727,11 +817,11 @@ function spawnPuff(x, y, z, vx, vz) {
 
 // --- les cinq clés égarées ---
 const toolSpots = [
-  { x: -2.95, y: 0.015, z: 0.9 },     // au pied des pneus
-  { x: -0.35, y: 0.947, z: 2.42 },    // sur l'établi
-  { x: 2.72, y: 1.012, z: 0.32 },     // sur la servante
-  { x: -2.1, y: 0.355, z: -2.05 },    // sur la caisse
-  { x: 0.55, y: 0.015, z: 1.05 },     // au sol, près de la bâche
+  { x: -5.5, y: 0.015, z: 2.35 },     // au pied des pneus
+  { x: -1.0, y: 0.947, z: 4.12 },     // sur l'établi
+  { x: 5.52, y: 1.012, z: 0.7 },      // sur la servante
+  { x: -2.2, y: 0.355, z: -3.98 },    // sur la caisse
+  { x: -2.55, y: 0.62, z: -3.04 },    // sur le pare-chocs de L'Hirondelle
 ];
 const tools = toolSpots.map((p, i) => {
   const g = new THREE.Group();
@@ -753,7 +843,7 @@ const TOOL_LINES = [
   'Deux. Le compte remonte.',
   'Trois. La moitié du chemin.',
   'Quatre. Plus qu’une.',
-  'Cinq. La porte n’attend plus que toi.',
+  'Cinq. Le bouton de la porte n’attend plus que toi.',
 ];
 
 // --- registre des interactions ---
@@ -770,19 +860,22 @@ tools.forEach(t => addInteract({
   enabled: () => !t.taken,
   action: () => startPickup(t),
 }));
-addInteract({   // la porte du garage
-  x: 0, z: -ROOM.d / 2 + 0.3, r: 1.6,
-  label: () => gameState.doorUnlocked ? 'Ouvrir la porte' : 'La porte — verrouillée',
-  enabled: () => !gameState.doorOpen,
+addInteract({   // le bouton de commande de la porte
+  x: 2.35, z: -ROOM.d / 2 + 0.42, r: 1.2,
+  label: () => !gameState.doorUnlocked ? 'Le bouton — verrouillé'
+    : (gameState.doorOpen ? 'Fermer la porte' : 'Ouvrir la porte'),
   action: () => {
     if (!gameState.doorUnlocked) {
       doorState.shake = 0.5; thumpSound();
-      toast('Verrouillée. Où sont passées mes clés ?');
-    } else { gameState.doorOpen = true; rumbleSound(); }
+      toast('Le bouton refuse. Où sont passées mes clés ?');
+    } else {
+      gameState.doorOpen = !gameState.doorOpen;
+      clickSound(); rumbleSound();
+    }
   },
 });
 addInteract({   // l'interrupteur
-  x: 1.45, z: -ROOM.d / 2 + 0.4, r: 1.1,
+  x: 2.85, z: -ROOM.d / 2 + 0.42, r: 1.0,
   label: () => gameState.lightsOn ? 'Éteindre la lumière' : 'Rallumer la lumière',
   action: () => {
     gameState.lightsOn = !gameState.lightsOn; clickSound();
@@ -790,14 +883,17 @@ addInteract({   // l'interrupteur
   },
 });
 addInteract({   // la radio
-  x: -1.75, z: 2.15, r: 1.3,
+  x: -1.7, z: 3.85, r: 1.3,
   label: () => audio.musicOn ? 'Éteindre la radio' : 'Allumer la radio',
   action: () => { audio.toggleMusic(); toast(audio.musicOn ? 'Un peu de musique.' : 'Silence, alors.'); },
 });
-addInteract({   // la bâche
-  x: 1.6, z: 1.7, r: 2.0,
-  label: () => 'Soulever la bâche ?',
-  action: () => { tarpWobble = 1; toast('Chut. Pas encore.'); },
+addInteract({   // le camping-car
+  x: -1.55, z: -0.35, r: 1.5,
+  label: () => 'L’Hirondelle',
+  action: () => {
+    vanBlink = 1.4; clickSound();
+    toast('Encore quelques réparations, et ce sera la route.');
+  },
 });
 addInteract({   // l'affiche
   x: ROOM.w / 2 - 0.15, z: 1.6, r: 1.25,
@@ -807,7 +903,7 @@ addInteract({   // l'affiche
 
 // --- petits meshes : radio et interrupteur ---
 const radioLED = (() => {
-  const r = new THREE.Group(); r.position.set(-1.75, 0.935, 2.40); r.rotation.y = 0.15; scene.add(r);
+  const r = new THREE.Group(); r.position.set(-1.7, 0.935, 4.12); r.rotation.y = 0.15; scene.add(r);
   box(0.24, 0.125, 0.085, M.teal.clone(), 0, 0.062, 0, r);
   box(0.088, 0.078, 0.006, M.metalDark, -0.055, 0.062, 0.045, r);      // grille
   box(0.07, 0.05, 0.006, M.cream, 0.062, 0.07, 0.045, r);              // cadran
@@ -816,10 +912,11 @@ const radioLED = (() => {
   ant.rotation.z = -0.5;
   const led = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.014, 0.008), new THREE.MeshBasicMaterial({ color: 0x33201a }));
   led.position.set(0.028, 0.098, 0.046); r.add(led);
+  outlineTree(r);
   return led;
 })();
-(() => {  // interrupteur près de la porte
-  const p = new THREE.Group(); p.position.set(1.45, 1.15, -ROOM.d / 2 + 0.045); scene.add(p);
+(() => {  // interrupteur près du bouton de porte
+  const p = new THREE.Group(); p.position.set(2.85, 1.25, -ROOM.d / 2 + 0.045); scene.add(p);
   box(0.07, 0.11, 0.025, M.cream, 0, 0, 0, p);
   box(0.024, 0.04, 0.02, M.brass, 0, 0.01, 0.015, p);
 })();
@@ -834,7 +931,7 @@ function updateObjective() {
   document.getElementById('objN').textContent = gameState.tools;
   if (gameState.tools >= gameState.toolsTotal) {
     gameState.doorUnlocked = true;
-    document.getElementById('objective').innerHTML = 'Clés retrouvées — <b>ouvre la porte</b>';
+    document.getElementById('objective').innerHTML = 'Clés retrouvées — <b>le bouton, près de la porte</b>';
   }
 }
 
@@ -852,7 +949,7 @@ function updateInteract() {
   btnE.style.opacity = show ? 1 : 0.35;
   if (show) promptText.textContent = ' ' + best.label();
 }
-function tryInteract() { if (interact.nearest && !anim.action) interact.nearest.action(); }
+function tryInteract() { if (entered && interact.nearest && !anim.action) interact.nearest.action(); }
 
 /* --- contrôles tactiles --- */
 const touch = { on: 'ontouchstart' in window, ax: 0, az: 0, run: false, stickId: null, camId: null, camX: 0, camY: 0 };
@@ -867,6 +964,7 @@ if (touch.on) {
     if (touch.stickId === null) touch.stickId = e.changedTouches[0].identifier;
   }, { passive: false });
   renderer.domElement.addEventListener('touchstart', e => {
+    touch.lastT = performance.now();
     if (touch.camId === null) {
       const t = e.changedTouches[0];
       touch.camId = t.identifier; touch.camX = t.clientX; touch.camY = t.clientY;
@@ -881,6 +979,7 @@ if (touch.on) {
         touch.ax = dx; touch.az = -dy;
         nub.style.left = (44 + dx * 34) + 'px'; nub.style.top = (44 + dy * 34) + 'px';
       } else if (t.identifier === touch.camId) {
+        if (camCtl.locked) continue;
         camCtl.yaw -= (t.clientX - touch.camX) * 0.006;
         camCtl.pitch = clamp(camCtl.pitch + (t.clientY - touch.camY) * 0.006, CAM.minPitch, CAM.maxPitch);
         touch.camX = t.clientX; touch.camY = t.clientY;
@@ -977,7 +1076,7 @@ function animate(dt, t, speed, yawRate, accelFwd) {
   // paramètres d'allure — la course introduit une phase de vol (appui court)
   const duty = lerp(0.58, 0.30, r);
   const cadence0 = lerp(1.3, 2.0, r);            // cycles/s « naturels »
-  const strideCap = lerp(0.58, 0.66, r);
+  const strideCap = lerp(0.58, 0.62, r);         // borné par l'allonge réelle des jambes
   const sweep = clamp(duty * speed / cadence0, 0.2, strideCap);
   const freq = speed > 0.05 ? duty * speed / sweep : 0;   // synchro exacte pied/sol
   anim.phase = (anim.phase + dt * freq) % 1;
@@ -993,7 +1092,7 @@ function animate(dt, t, speed, yawRate, accelFwd) {
 
   // --- bassin ---
   // marche : point bas au double appui (phase 0) ; course : point haut en vol
-  const bobBase = lerp(0.975, lerp(0.915, 0.90, r), m);
+  const bobBase = lerp(0.975, lerp(0.915, 0.885, r), m);
   const bobPhase = r * 0.6 * Math.PI;
   const bob = m * lerp(0.016, 0.055, r) * (0.5 - 0.5 * Math.cos(2 * p2 - bobPhase));
   const sway = m * lerp(0.022, 0.012, r) * Math.sin(p2);
@@ -1075,9 +1174,10 @@ function animate(dt, t, speed, yawRate, accelFwd) {
 /* ---------------------------------------------------------- */
 const keys = {};
 addEventListener('keydown', e => {
+  if (e.repeat) return;
   keys[e.code] = true;
   if (e.code === 'KeyM') audio.toggle();
-  if (e.code === 'KeyE' && !e.repeat) tryInteract();
+  if (e.code === 'KeyE') tryInteract();
 });
 addEventListener('keyup', e => keys[e.code] = false);
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
@@ -1095,7 +1195,7 @@ const keyAxis = () => {
 /* 11. État du joueur + collisions                             */
 /* ---------------------------------------------------------- */
 const player = {
-  pos: new THREE.Vector3(-0.3, 0, 0.1),
+  pos: new THREE.Vector3(1.3, 0, 2.2),
   vel: new THREE.Vector3(),
   yaw: Math.PI,            // face à la porte du garage
   yawRate: 0,
@@ -1117,12 +1217,15 @@ function collide(pos) {
         const d = Math.sqrt(d2), push = (r - d) / d;
         pos.x += dx * push; pos.z += dz * push;
       } else {
-        // au cœur de la boîte : expulser par la face la plus proche
+        // au cœur de la boîte : expulser par la face la plus proche qui reste DANS la pièce
+        const xMin = -ROOM.w / 2 + r + 0.05, xMax = ROOM.w / 2 - r - 0.05;
+        const zMin = -ROOM.d / 2 + r + 0.12, zMax = ROOM.d / 2 - r - 0.05;
         const outs = [
-          { p: c.maxX + r - pos.x, ax: 'x', s: 1 }, { p: pos.x - (c.minX - r), ax: 'x', s: -1 },
-          { p: c.maxZ + r - pos.z, ax: 'z', s: 1 }, { p: pos.z - (c.minZ - r), ax: 'z', s: -1 },
-        ].sort((A, B2) => A.p - B2.p)[0];
-        if (outs.ax === 'x') pos.x += outs.s * outs.p; else pos.z += outs.s * outs.p;
+          { p: c.maxX + r - pos.x, ax: 'x', v: c.maxX + r }, { p: pos.x - (c.minX - r), ax: 'x', v: c.minX - r },
+          { p: c.maxZ + r - pos.z, ax: 'z', v: c.maxZ + r }, { p: pos.z - (c.minZ - r), ax: 'z', v: c.minZ - r },
+        ].sort((A, B2) => A.p - B2.p);
+        const ok = outs.find(o => o.ax === 'x' ? (o.v >= xMin && o.v <= xMax) : (o.v >= zMin && o.v <= zMax)) || outs[0];
+        if (ok.ax === 'x') pos.x = ok.v; else pos.z = ok.v;
       }
     }
   }
@@ -1136,8 +1239,9 @@ function updatePlayer(dt) {
   if (touch.on && touch.stickId !== null && (touch.ax || touch.az)) {
     mag = Math.min(1, Math.hypot(touch.ax, touch.az));
     if (mag > 0.05) axis = { x: touch.ax / mag, z: touch.az / mag };
+    else mag = 1;                                    // déflexion rejetée : ne pas brider le clavier
   }
-  if (anim.action) axis = { x: 0, z: 0 };            // immobile pendant le ramassage
+  if (anim.action || !entered) axis = { x: 0, z: 0 };  // immobile pendant le ramassage / l'écran-titre
   const running = (keys.ShiftLeft || keys.ShiftRight || touch.run) && !anim.action;
   const maxSpeed = (running ? CHAR.runSpeed : CHAR.walkSpeed) * mag;
   // direction voulue, relative à la caméra (l'avant écran est −(sin cy, cos cy))
@@ -1201,8 +1305,13 @@ const camCtl = {
   const el = renderer.domElement;
   const enter = document.getElementById('enter');
   const hint = document.getElementById('hint');
-  const tryLock = () => { if (el.requestPointerLock) el.requestPointerLock(); };
-  enter.addEventListener('click', () => { audio.start(); tryLock(); enter.classList.add('hidden'); });
+  // sur un tap tactile émulé en clic, ne pas capturer le pointeur
+  const tryLock = () => {
+    if (performance.now() - (touch.lastT || 0) < 700) return;
+    if (el.requestPointerLock) el.requestPointerLock();
+  };
+  enter.addEventListener('click', () => { entered = true; audio.start(); tryLock(); enter.classList.add('hidden'); });
+  enter.addEventListener('touchstart', () => { touch.lastT = performance.now(); }, { passive: true });
   el.addEventListener('click', () => { if (!camCtl.locked) tryLock(); });
   document.addEventListener('pointerlockchange', () => {
     camCtl.locked = document.pointerLockElement === el;
@@ -1301,9 +1410,10 @@ const audio = {
     this.musicOn = !this.musicOn;
     if (this.musicOn && !this.music) this.buildMusic();
     if (this.music) {
-      const t = this.ctx.currentTime;
-      this.music.g.gain.cancelScheduledValues(t);
-      this.music.g.gain.linearRampToValueAtTime(this.musicOn ? 0.42 : 0.0001, t + 1.1);
+      const t = this.ctx.currentTime, g = this.music.g.gain;
+      g.cancelScheduledValues(t);
+      g.setValueAtTime(g.value, t);        // ancre : sans elle, la rampe part de la dernière valeur PLANIFIÉE
+      g.linearRampToValueAtTime(this.musicOn ? 0.42 : 0.0001, t + 1.1);
     }
   },
   buildMusic() {
@@ -1339,7 +1449,7 @@ const audio = {
     try {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.5;
+      this.master.gain.value = this.muted ? 0 : 0.5;   // respecter un M pressé avant le clic
       this.master.connect(this.ctx.destination);
       if (this.ctx.state === 'suspended') this.ctx.resume();
       // ronronnement électrique très bas
@@ -1461,28 +1571,37 @@ function tick(now) {
     p.s.scale.multiplyScalar(1 + 1.6 * dt);
     p.s.material.opacity = Math.max(0, p.life / 0.55) * 0.4;
   }
-  // porte : secousse (verrouillée) ou ouverture (déverrouillée)
+  // porte : secousse (verrouillée) ou va-et-vient commandé par le bouton
+  const doorTgt = gameState.doorOpen ? 1 : 0;
   if (doorState.shake > 0) {
     doorState.shake -= dt * 1.6;
     anchors.door.position.y = Math.max(0, Math.sin(elapsed * 42) * 0.02 * doorState.shake);
-  } else if (gameState.doorOpen && doorState.y < 1) {
-    doorState.y = Math.min(1, doorState.y + dt / 2.4);
+  } else if (doorState.y !== doorTgt) {
+    doorState.y += clamp(doorTgt - doorState.y, -dt / 3.2, dt / 3.2);
+    doorState.y = clamp(doorState.y, 0, 1);
     const e = smooth(doorState.y);
-    anchors.door.position.y = e * 0.76;
-    doorGlow.intensity = e * 1.3;
+    anchors.door.position.y = e * 2.65;
+    doorGlow.intensity = e * 1.5;
     doorState.dustT -= dt;
-    if (doorState.dustT <= 0 && doorState.y < 0.9) {
+    if (doorState.dustT <= 0 && doorState.y > 0.03 && doorState.y < 0.92) {
       doorState.dustT = 0.12;
-      spawnPuff((Math.random() - .5) * 2.4, 0.12 + Math.random() * 0.3, -ROOM.d / 2 + 0.28, 0, 0.3);
+      spawnPuff((Math.random() - .5) * 3.2, 0.12 + Math.random() * 0.35, -ROOM.d / 2 + 0.32, 0, 0.3);
     }
-    if (doorState.y >= 1 && !doorState.done) { doorState.done = true; toast('À suivre — LA ROUTE.', 7); }
+    if (doorState.y >= 1 && !doorState.done) {
+      doorState.done = true;
+      anchors.vanLenses.forEach(l => l.color.setHex(0xffedc0));   // L'Hirondelle veille
+      toast('À suivre — LA ROUTE.', 7);
+    }
   }
-  // bâche qui frémit
-  if (tarpWobble > 0) {
-    tarpWobble -= dt * 1.4;
-    const wob = 1 + Math.sin(elapsed * 16) * 0.035 * Math.max(0, tarpWobble);
-    anchors.tarp.scale.set(wob, 1 / wob, wob);
+  // appel de phares de L'Hirondelle
+  if (vanBlink > 0) {
+    vanBlink -= dt;
+    const on = Math.sin(vanBlink * 13) > 0;
+    anchors.vanLenses.forEach(l => l.color.setHex(on ? 0xffedc0 : 0x6b5c40));
+    if (vanBlink <= 0 && !doorState.done) anchors.vanLenses.forEach(l => l.color.setHex(0x6b5c40));
   }
+  // LED du bouton de porte
+  anchors.doorLamp.color.setHex(gameState.doorUnlocked ? 0x59d68a : 0x552222);
   // toast
   if (toastTimer > 0) { toastTimer -= dt; if (toastTimer <= 0) toastEl.style.opacity = 0; }
   // LED de la radio, au rythme des notes
@@ -1494,17 +1613,21 @@ function tick(now) {
   for (let i = 0; i < dustN; i++) {
     pa.array[i * 3 + 1] += Math.sin(elapsed * 0.5 + dustSeed[i]) * 0.0004 - 0.0002;
     pa.array[i * 3] += Math.sin(elapsed * 0.3 + dustSeed[i] * 2) * 0.0003;
-    if (pa.array[i * 3 + 1] < 0.2) pa.array[i * 3 + 1] = 2.5;
+    if (pa.array[i * 3 + 1] < 0.2) pa.array[i * 3 + 1] = 3.1;
   }
   pa.needsUpdate = true;
   // lumières : état de l'interrupteur + scintillement à peine perceptible
   const flick = Math.sin(elapsed * 13) * 0.014 + noise1(elapsed * 3.1) * 0.012;
-  keyLight.intensity = damp(keyLight.intensity, gameState.lightsOn ? 1.55 + flick : 0, 5, dt);
-  keyFill.intensity = damp(keyFill.intensity, gameState.lightsOn ? 0.35 : 0.02, 5, dt);
+  keyLight.intensity = damp(keyLight.intensity, gameState.lightsOn ? 2.1 + flick : 0, 5, dt);
+  keyLight2.intensity = damp(keyLight2.intensity, gameState.lightsOn ? 1.7 + flick : 0, 5, dt);
+  keyFill.intensity = damp(keyFill.intensity, gameState.lightsOn ? 0.4 : 0.02, 5, dt);
   hemi.intensity = damp(hemi.intensity, gameState.lightsOn ? 0.22 : 0.1, 5, dt);
   moon.intensity = damp(moon.intensity, gameState.lightsOn ? 0.38 : 0.6, 5, dt);
-  anchors.bulb.material.color.setHex(gameState.lightsOn ? 0xffd9a0 : 0x2b2b36);
-  bulbHalo.material.opacity = 0.3 * Math.max(0, keyLight.intensity / 1.55);
+  const bulbCol = gameState.lightsOn ? 0xffc078 : 0x2b2b36;
+  anchors.bulb.material.color.setHex(bulbCol);
+  anchors.bulb2.material.color.setHex(bulbCol);
+  const haloOp = 0.3 * Math.max(0, keyLight.intensity / 2.1);
+  bulbHalo.material.opacity = haloOp; bulbHalo2.material.opacity = haloOp;
 
   renderer.render(scene, camera);
 }
