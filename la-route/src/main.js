@@ -24,19 +24,37 @@ import { buildSky } from './world/sky.js';
 const canvas = document.getElementById('rc');
 const boot = document.getElementById('boot');
 
-function showNoGpu() {
+const NOGPU_MSGS = {
+  insecure: `WebGPU est masqué hors contexte sécurisé.<br>
+    Ouvre la démo via <b>http://localhost:5173</b> (<code>npm run dev</code>) —
+    pas en <code>file://</code> ni via une adresse IP du réseau.`,
+  noapi: `Ce navigateur n'expose pas WebGPU.<br>
+    Mets <b>Chrome à jour</b> (dernière version), puis vérifie
+    <code>chrome://gpu</code> → section « WebGPU ».`,
+  noadapter: `WebGPU est présent mais <b>aucun adaptateur GPU</b> n'est disponible.<br>
+    1. Active l'accélération matérielle : <code>chrome://settings/system</code><br>
+    2. Mets les pilotes GPU à jour, puis redémarre Chrome<br>
+    3. Le détail est dans <code>chrome://gpu</code> (section WebGPU)`,
+  error: `L'initialisation WebGPU a échoué (détail dans la console F12).`,
+};
+function showNoGpu(reason) {
   boot.style.display = 'none';
+  document.getElementById('nogpuMsg').innerHTML = NOGPU_MSGS[reason] || NOGPU_MSGS.error;
   document.getElementById('nogpu').style.display = 'flex';
 }
+document.getElementById('glBtn').addEventListener('click', () => {
+  location.search = '?gl';
+});
 // « ?gl » : chemin WebGL réservé au DÉVELOPPEMENT (captures d'itération en CI
 // sans adaptateur WebGPU). La cible livrée reste WebGPU, sans repli.
 const DEV_GL = new URLSearchParams(location.search).has('gl');
-if (!DEV_GL && !navigator.gpu) {
-  showNoGpu();
-} else {
-  // navigator.gpu peut exister sans adaptateur utilisable : même sortie unique
-  start().catch((e) => { console.error(e); showNoGpu(); });
-}
+(async () => {
+  if (DEV_GL) return start();
+  if (!navigator.gpu) return showNoGpu(window.isSecureContext ? 'noapi' : 'insecure');
+  const adapter = await navigator.gpu.requestAdapter().catch(() => null);
+  if (!adapter) return showNoGpu('noadapter');
+  return start();
+})().catch((e) => { console.error(e); showNoGpu('error'); });
 
 async function start() {
   let engine;

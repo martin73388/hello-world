@@ -34,7 +34,17 @@
   <div class="s">préparation des pipelines…</div>
   <div class="bar"><i></i></div>
 </div>
-<div id="nogpu">WebGPU n'est pas disponible dans ce navigateur. La démo requiert Chrome récent avec WebGPU.</div>
+<div id="nogpu">
+  <div style="max-width:560px">
+    <div style="letter-spacing:.4em;color:#ffb066;margin-bottom:14px">LA ROUTE</div>
+    <div id="nogpuMsg" style="line-height:1.7;font-size:14px"></div>
+    <div style="margin-top:22px">
+      <button id="glBtn" style="background:none;border:1px solid rgba(232,220,200,.4);color:#e8dcc8;
+        font:13px Georgia,serif;letter-spacing:.1em;padding:10px 18px;border-radius:6px;cursor:pointer">
+        Lancer quand même en WebGL (mode développement)</button>
+    </div>
+  </div>
+</div>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
