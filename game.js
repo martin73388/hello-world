@@ -110,7 +110,7 @@ document.body.insertAdjacentHTML('beforeend', `
   <div id="stage"></div>
   <div class="vignette"></div>
   <div class="hud" id="title"><div class="t1">L'ATELIER</div><div class="t2">Prologue&nbsp;— minuit et quart</div></div>
-  <div class="hud" id="keys"><b>ZQSD</b> / <b>WASD</b>&nbsp; se déplacer<br><b>Shift</b>&nbsp; courir&nbsp; · &nbsp;<b>E</b>&nbsp; interagir / conduire<br><b>Souris</b>&nbsp; caméra&nbsp; · &nbsp;<b>Molette</b>&nbsp; zoom&nbsp; · &nbsp;<b>M</b>&nbsp; son</div>
+  <div class="hud" id="keys"><b>ZQSD</b> / <b>WASD</b>&nbsp; se déplacer<br><b>Shift</b>&nbsp; courir&nbsp; · &nbsp;<b>E</b>&nbsp; interagir / conduire<br><b>Souris</b>&nbsp; caméra (sans clic)&nbsp; · &nbsp;<b>Molette</b>&nbsp; zoom → 1ʳᵉ personne&nbsp; · &nbsp;<b>M</b>&nbsp; son</div>
   <div class="hud" id="hint">Échap pour libérer la souris</div>
   <div class="hud" id="objective">Retrouve <b>la clé de contact</b><span id="objN" style="display:none">0</span></div>
   <div class="hud" id="prompt"><b>E</b><span id="promptText"></span></div>
@@ -308,7 +308,7 @@ function buildGarage() {
     m.position.set(x, h / 2, z); m.rotation.y = ry; m.receiveShadow = true; scene.add(m); return m;
   };
   // mur nord en trois pans : derrière la porte, la nuit
-  const doorW = 4.6, doorH = 3.6;
+  const doorW = 5.6, doorH = 3.8;
   const sideW = (w - doorW) / 2;
   mkWall(sideW, -(doorW / 2 + sideW / 2), -d / 2, 0);
   mkWall(sideW, (doorW / 2 + sideW / 2), -d / 2, 0);
@@ -326,19 +326,19 @@ function buildGarage() {
 
   // --- porte sectionnelle (fermée), mur nord — assez large pour le camping-car ---
   const door = new THREE.Group(); door.position.set(0, 0, -d / 2 + 0.07); scene.add(door);
-  for (let i = 0; i < 7; i++) {
-    const p = box(4.5, 0.47, 0.055, M.metalDark, 0, 0.28 + i * 0.51, 0, door);
-    box(4.3, 0.37, 0.02, M.metal, 0, 0.28 + i * 0.51, 0.032, door);
+  for (let i = 0; i < 8; i++) {
+    const p = box(5.5, 0.44, 0.055, M.metalDark, 0, 0.24 + i * 0.475, 0, door);
+    box(5.3, 0.35, 0.02, M.metal, 0, 0.24 + i * 0.475, 0.032, door);
     p.receiveShadow = true;
   }
   box(0.7, 0.16, 0.03, M.metal, 0, 1.05, 0.06, door); // poignée
   // rails de guidage et enseigne : fixés au mur, la porte coulisse entre eux
   const doorFrame = new THREE.Group(); doorFrame.position.copy(door.position); scene.add(doorFrame);
-  box(0.1, 3.9, 0.11, M.metalDark, -2.36, 1.95, 0, doorFrame);
-  box(0.1, 3.9, 0.11, M.metalDark, 2.36, 1.95, 0, doorFrame);
-  const sign = box(1.6, 0.36, 0.04, M.teal, 0, 3.86, 0.02, doorFrame);
+  box(0.1, 4.1, 0.11, M.metalDark, -2.86, 2.05, 0, doorFrame);
+  box(0.1, 4.1, 0.11, M.metalDark, 2.86, 2.05, 0, doorFrame);
+  const sign = box(1.5, 0.3, 0.04, M.teal, 0, 3.99, 0.02, doorFrame);
   // le bouton de commande de la porte, sur le mur à droite
-  const btnBox = new THREE.Group(); btnBox.position.set(2.95, 1.25, -d / 2 + 0.06); scene.add(btnBox);
+  const btnBox = new THREE.Group(); btnBox.position.set(3.4, 1.25, -d / 2 + 0.06); scene.add(btnBox);
   box(0.15, 0.21, 0.07, M.metalDark, 0, 0, 0, btnBox);
   const doorButton = cyl(0.038, 0.042, 0.035, M.red, 0, 0.035, 0.045, btnBox, 14);
   doorButton.rotation.x = Math.PI / 2;
@@ -709,10 +709,10 @@ function buildOutside() {
     transparent: true, opacity: 0.85 })));
   // façade extérieure du garage
   const fac = toon(0x212a3c, { roughness: 0.95 });
-  const sideW2 = (ROOM.w - 4.7) / 2;
-  box(sideW2, ROOM.h, 0.2, fac, -(2.35 + sideW2 / 2), ROOM.h / 2, -7.12);
-  box(sideW2, ROOM.h, 0.2, fac, (2.35 + sideW2 / 2), ROOM.h / 2, -7.12);
-  box(4.7, ROOM.h - 3.6, 0.2, fac, 0, 3.6 + (ROOM.h - 3.6) / 2, -7.12);
+  const sideW2 = (ROOM.w - 5.7) / 2;
+  box(sideW2, ROOM.h, 0.2, fac, -(2.85 + sideW2 / 2), ROOM.h / 2, -7.12);
+  box(sideW2, ROOM.h, 0.2, fac, (2.85 + sideW2 / 2), ROOM.h / 2, -7.12);
+  box(5.7, ROOM.h - 3.8 + 0.2, 0.2, fac, 0, 3.8 + (ROOM.h - 3.8) / 2, -7.12);
   box(0.2, ROOM.h, 14.3, fac, -8.15, ROOM.h / 2, 0);
   box(0.2, ROOM.h, 14.3, fac, 8.15, ROOM.h / 2, 0);
   box(16.7, ROOM.h, 0.2, fac, 0, ROOM.h / 2, 7.14);
@@ -844,12 +844,12 @@ scene.add(dust);
 function limb(r1, r2, len, mat, parent) {
   // capsule effilée le long de -Y, pivot en haut
   const g = new THREE.Group(); parent.add(g);
-  const geo = new THREE.CylinderGeometry(r2, r1, len, 14, 1);
+  const geo = new THREE.CylinderGeometry(r2, r1, len, 18, 1);
   const m = new THREE.Mesh(geo, mat);
   m.position.y = -len / 2; m.castShadow = true; g.add(m);
-  const cap = new THREE.Mesh(new THREE.SphereGeometry(r1, 14, 10), mat);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(r1, 16, 12), mat);
   cap.position.y = -len; cap.castShadow = true; g.add(cap);
-  const cap2 = new THREE.Mesh(new THREE.SphereGeometry(r2, 14, 10), mat);
+  const cap2 = new THREE.Mesh(new THREE.SphereGeometry(r2, 16, 12), mat);
   cap2.castShadow = true; g.add(cap2);
   return g;
 }
@@ -862,29 +862,30 @@ function buildCharacter() {
   B.root = root;
 
   B.hips = new THREE.Group(); B.hips.position.y = 0.98; root.add(B.hips);
-  // bassin (le pivot des cuisses est à y = -0.05 dans le repère du bassin)
-  const pelvis = new THREE.Mesh(new THREE.SphereGeometry(0.155, 18, 14), M.suit);
-  pelvis.scale.set(1.12, 0.82, 0.86); pelvis.position.y = -0.03; pelvis.castShadow = true; B.hips.add(pelvis);
-  // ceinture
-  const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.163, 0.168, 0.05, 18), M.boots);
-  belt.scale.set(1.1, 1, 0.85); belt.position.y = 0.055; belt.castShadow = true; B.hips.add(belt);
+  // torse en DEUX profils de révolution qui se recouvrent sous la ceinture :
+  // une surface continue, fini les solides apparents
+  const lathe = (pts, parent) => {
+    const m = new THREE.Mesh(new THREE.LatheGeometry(pts.map(p => new THREE.Vector2(p[0], p[1])), 26), M.suit);
+    m.scale.set(1.15, 1, 0.9); m.castShadow = true; parent.add(m); return m;
+  };
+  lathe([[0.02, -0.27], [0.10, -0.25], [0.148, -0.17], [0.164, -0.06], [0.16, 0.05], [0.155, 0.17]], B.hips);
+  // ceinture (elle cache le raccord des deux profils)
+  const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.168, 0.173, 0.055, 22), M.boots);
+  belt.scale.set(1.1, 1, 0.85); belt.position.y = 0.06; belt.castShadow = true; B.hips.add(belt);
   const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.04, 0.02), M.brass);
-  buckle.position.set(0, 0.055, 0.15); B.hips.add(buckle);
+  buckle.position.set(0, 0.06, 0.152); B.hips.add(buckle);
 
   // colonne
   B.spine = new THREE.Group(); B.spine.position.y = 0.09; B.hips.add(B.spine);
-  const belly = new THREE.Mesh(new THREE.SphereGeometry(0.138, 18, 14), M.suit);
-  belly.scale.set(1.1, 0.94, 0.88); belly.position.y = 0.06; belly.castShadow = true; B.spine.add(belly);
   B.chest = new THREE.Group(); B.chest.position.y = 0.2; B.spine.add(B.chest);
-  const chest = new THREE.Mesh(new THREE.SphereGeometry(0.165, 18, 14), M.suit);
-  chest.scale.set(1.16, 1.0, 0.88); chest.position.y = 0.1; chest.castShadow = true; B.chest.add(chest);
+  lathe([[0.155, -0.23], [0.163, -0.1], [0.168, 0.0], [0.15, 0.1], [0.117, 0.19], [0.062, 0.25], [0.02, 0.27]], B.chest);
   // fermeture éclair + poche + écusson
   const zip = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.24, 0.01), M.suitDark);
-  zip.position.set(0, 0.1, 0.145); zip.rotation.x = -0.1; B.chest.add(zip);
+  zip.position.set(0, 0.1, 0.15); zip.rotation.x = -0.1; B.chest.add(zip);
   const pocket = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.07, 0.014), M.suitDark);
-  pocket.position.set(0.085, 0.13, 0.145); pocket.rotation.y = 0.18; B.chest.add(pocket);
+  pocket.position.set(0.085, 0.13, 0.149); pocket.rotation.y = 0.18; B.chest.add(pocket);
   const patch = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.035, 0.012), M.cream);
-  patch.position.set(-0.08, 0.16, 0.147); patch.rotation.y = -0.18; B.chest.add(patch);
+  patch.position.set(-0.08, 0.16, 0.151); patch.rotation.y = -0.18; B.chest.add(patch);
   // col
   const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.11, 0.07, 14), M.cream);
   collar.position.y = 0.24; collar.castShadow = true; B.chest.add(collar);
@@ -937,16 +938,21 @@ function buildCharacter() {
     // épaulette de la combinaison
     const pad = new THREE.Mesh(new THREE.SphereGeometry(0.075, 14, 10), M.suit);
     pad.scale.set(0.92, 0.8, 0.88); pad.castShadow = true; sh.add(pad);
-    const arm = limb(0.052, 0.047, 0.28, M.suit, sh);
-    const fore = limb(0.044, 0.038, 0.26, M.suit, arm); fore.position.y = -0.28;
+    const arm = limb(0.056, 0.048, 0.28, M.suit, sh);
+    const fore = limb(0.048, 0.038, 0.26, M.suit, arm); fore.position.y = -0.27;
     // poignet de chemise qui dépasse de la manche
     const wristCuff = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.043, 0.045, 12), M.cream);
     wristCuff.position.y = -0.235; wristCuff.castShadow = true; fore.add(wristCuff);
     const hand = new THREE.Group(); hand.position.y = -0.26; fore.add(hand);
-    const palm = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), M.skin);
-    palm.scale.set(0.85, 1.15, 0.95); palm.position.y = -0.035; palm.castShadow = true; hand.add(palm);
-    const thumb = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 8), M.skin);
-    thumb.scale.set(0.8, 1.4, 0.8); thumb.position.set(sx * -0.005, -0.03, 0.045); hand.add(thumb);
+    const palm = new THREE.Mesh(new THREE.SphereGeometry(0.05, 14, 12), M.skin);
+    palm.scale.set(0.85, 1.1, 0.95); palm.position.y = -0.03; palm.castShadow = true; hand.add(palm);
+    [-0.028, -0.0095, 0.0095, 0.028].forEach((fx, i) => {
+      const f = new THREE.Mesh(new THREE.SphereGeometry(0.0135, 10, 8), M.skin);
+      f.scale.set(0.85, 2.0 - Math.abs(i - 1.5) * 0.22, 0.85);
+      f.position.set(fx, -0.082, 0.012); f.castShadow = true; hand.add(f);
+    });
+    const thumb = new THREE.Mesh(new THREE.SphereGeometry(0.019, 10, 8), M.skin);
+    thumb.scale.set(0.8, 1.5, 0.8); thumb.position.set(sx * -0.004, -0.035, 0.046); hand.add(thumb);
     B['shoulder' + S] = sh; B['arm' + S] = arm; B['fore' + S] = fore; B['hand' + S] = hand;
   };
   mkArm(1); mkArm(-1);
@@ -955,11 +961,11 @@ function buildCharacter() {
   const mkLeg = sx => {
     const S = sx > 0 ? 'L' : 'R';
     const th = new THREE.Group(); th.position.set(sx * CHAR.hipHalf, -0.05, 0); B.hips.add(th);
-    limbMeshes(th, 0.078, 0.062, CHAR.thigh, M.suit);
+    limbMeshes(th, 0.082, 0.064, CHAR.thigh, M.suit);
     const shin = new THREE.Group(); shin.position.y = -CHAR.thigh; th.add(shin);
-    limbMeshes(shin, 0.058, 0.045, CHAR.shin - 0.02, M.suit);
+    limbMeshes(shin, 0.064, 0.046, CHAR.shin - 0.02, M.suit);
     // revers de pantalon
-    const hem = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.066, 0.06, 12), M.suitDark);
+    const hem = new THREE.Mesh(new THREE.CylinderGeometry(0.066, 0.07, 0.06, 16), M.suitDark);
     hem.position.y = -(CHAR.shin - 0.10); hem.castShadow = true; shin.add(hem);
     const foot = new THREE.Group(); foot.position.y = -CHAR.shin; shin.add(foot);
     // botte : corps + pointe + semelle
@@ -972,10 +978,10 @@ function buildCharacter() {
     B['thigh' + S] = th; B['shin' + S] = shin; B['foot' + S] = foot;
   };
   function limbMeshes(g, r1, r2, len, mat) {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(r2, r1, len, 14, 1), mat);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r2, r1, len, 18, 1), mat);
     m.position.y = -len / 2; m.castShadow = true; g.add(m);
-    const c = new THREE.Mesh(new THREE.SphereGeometry(r1, 14, 10), mat); c.castShadow = true; g.add(c);
-    const c2 = new THREE.Mesh(new THREE.SphereGeometry(r2, 14, 10), mat); c2.position.y = -len; c2.castShadow = true; g.add(c2);
+    const c = new THREE.Mesh(new THREE.SphereGeometry(r1, 16, 12), mat); c.castShadow = true; g.add(c);
+    const c2 = new THREE.Mesh(new THREE.SphereGeometry(r2, 16, 12), mat); c2.position.y = -len; c2.castShadow = true; g.add(c2);
   }
   mkLeg(1); mkLeg(-1);
 
@@ -1061,7 +1067,7 @@ tools.forEach(t => addInteract({
   action: () => startPickup(t),
 }));
 addInteract({   // le bouton de commande de la porte
-  x: 2.95, z: -ROOM.d / 2 + 0.42, r: 1.2,
+  x: 3.4, z: -ROOM.d / 2 + 0.42, r: 1.2,
   label: () => !gameState.doorUnlocked ? 'Le bouton — verrouillé'
     : (gameState.doorOpen ? 'Fermer la porte' : 'Ouvrir la porte'),
   action: () => {
@@ -1075,7 +1081,7 @@ addInteract({   // le bouton de commande de la porte
   },
 });
 addInteract({   // l'interrupteur
-  x: 3.45, z: -ROOM.d / 2 + 0.42, r: 1.0,
+  x: 3.9, z: -ROOM.d / 2 + 0.42, r: 1.0,
   label: () => gameState.lightsOn ? 'Éteindre la lumière' : 'Rallumer la lumière',
   action: () => {
     gameState.lightsOn = !gameState.lightsOn; clickSound();
@@ -1112,7 +1118,7 @@ addInteract({   // l'affiche
 // la radio vit desormais dans L'Hirondelle (voir buildVan) ; l'interrupteur reste au mur
 const radioLED = hirondelle.radioLed;
 (() => {  // interrupteur pres du bouton de porte
-  const p = new THREE.Group(); p.position.set(3.45, 1.25, -ROOM.d / 2 + 0.045); scene.add(p);
+  const p = new THREE.Group(); p.position.set(3.9, 1.25, -ROOM.d / 2 + 0.045); scene.add(p);
   box(0.07, 0.11, 0.025, M.cream, 0, 0, 0, p);
   box(0.024, 0.04, 0.02, M.brass, 0, 0.01, 0.015, p);
 })();
@@ -1426,14 +1432,14 @@ const player = {
 };
 
 // murs du garage en colliders (le passage de la porte s'ouvre avec elle)
-const doorBlock = { minX: -2.36, maxX: 2.36, minZ: -7.24, maxZ: -6.9, maxY: 3.9, active: true };
+const doorBlock = { minX: -2.86, maxX: 2.86, minZ: -7.24, maxZ: -6.9, maxY: 4.1, active: true };
 const vanCamCol = { minX: 0, maxX: 0, minZ: 0, maxZ: 0, maxY: 2.6, active: true, noBody: true };
 colliders.push(
   { minX: -8.36, maxX: -7.97, minZ: -7.28, maxZ: 7.28, maxY: 4.8 },   // ouest
   { minX: 7.97, maxX: 8.36, minZ: -7.28, maxZ: 7.28, maxY: 4.8 },     // est
   { minX: -8.36, maxX: 8.36, minZ: 6.97, maxZ: 7.32, maxY: 4.8 },     // sud
-  { minX: -8.36, maxX: -2.36, minZ: -7.32, maxZ: -6.97, maxY: 4.8 },  // nord, gauche de la porte
-  { minX: 2.36, maxX: 8.36, minZ: -7.32, maxZ: -6.97, maxY: 4.8 },    // nord, droite
+  { minX: -8.36, maxX: -2.86, minZ: -7.32, maxZ: -6.97, maxY: 4.8 },  // nord, gauche de la porte
+  { minX: 2.86, maxX: 8.36, minZ: -7.32, maxZ: -6.97, maxY: 4.8 },    // nord, droite
   doorBlock, vanCamCol,
 );
 
@@ -1526,8 +1532,11 @@ function updatePlayer(dt) {
   player.vel.z = (player.pos.z - pz) / dt;
 
   player.speed = Math.hypot(player.vel.x, player.vel.z);
-  // orientation : vers la clé pendant le ramassage, sinon vers la vitesse
-  if (anim.action && anim.action.faceYaw !== undefined) {
+  // orientation : caméra (vue subjective), clé (ramassage), sinon la vitesse
+  if (camCtl.distSmooth < 0.8 && !anim.action) {
+    player.yaw = dampAngle(player.yaw, camCtl.yaw + Math.PI, 14, dt);
+    player.yawRate = damp(player.yawRate, 0, 8, dt);
+  } else if (anim.action && anim.action.faceYaw !== undefined) {
     player.yaw = dampAngle(player.yaw, anim.action.faceYaw, 9, dt);
     player.yawRate = damp(player.yawRate, 0, 8, dt);
   } else if (player.speed > 0.15) {
@@ -1648,23 +1657,25 @@ const camCtl = {
     camCtl.locked = document.pointerLockElement === el;
     hint.style.opacity = camCtl.locked ? 0.7 : 0;
   });
+  // la souris pilote la caméra directement, sans clic ni capture
+  let lastMX = null, lastMY = null;
   addEventListener('mousemove', e => {
-    if (!camCtl.locked) return;
-    camCtl.yaw -= e.movementX * CAM.sens;
-    camCtl.pitch = clamp(camCtl.pitch + e.movementY * CAM.sens, CAM.minPitch, CAM.maxPitch);
-  });
-  // secours sans pointer lock : glisser
-  let drag = null;
-  el.addEventListener('mousedown', e => { if (!camCtl.locked) drag = { x: e.clientX, y: e.clientY }; });
-  addEventListener('mouseup', () => drag = null);
-  addEventListener('mousemove', e => {
-    if (!drag || camCtl.locked) return;
-    camCtl.yaw -= (e.clientX - drag.x) * CAM.sens * 1.4;
-    camCtl.pitch = clamp(camCtl.pitch + (e.clientY - drag.y) * CAM.sens * 1.4, CAM.minPitch, CAM.maxPitch);
-    drag = { x: e.clientX, y: e.clientY };
+    if (!entered) { lastMX = e.clientX; lastMY = e.clientY; return; }
+    if (camCtl.locked) {
+      camCtl.yaw -= e.movementX * CAM.sens;
+      camCtl.pitch = clamp(camCtl.pitch + e.movementY * CAM.sens, CAM.minPitch, CAM.maxPitch);
+      return;
+    }
+    if (lastMX !== null) {
+      camCtl.yaw -= (e.clientX - lastMX) * CAM.sens * 1.15;
+      camCtl.pitch = clamp(camCtl.pitch + (e.clientY - lastMY) * CAM.sens * 1.15, CAM.minPitch, CAM.maxPitch);
+    }
+    lastMX = e.clientX; lastMY = e.clientY;
   });
   addEventListener('wheel', e => {
-    camCtl.distTarget = clamp(camCtl.distTarget + Math.sign(e.deltaY) * 0.28, CAM.minDist, CAM.maxDist);
+    camCtl.distTarget = clamp(camCtl.distTarget + Math.sign(e.deltaY) * 0.3, 0.34, CAM.maxDist);
+    // en dessous d'un seuil, on bascule franchement en vue à la première personne
+    if (camCtl.distTarget < 1.0) camCtl.distTarget = 0.34;
   }, { passive: true });
 }
 
@@ -1706,7 +1717,9 @@ function updateCamera(dt) {
   if (_v.length() > 0.34) _v.setLength(0.34);
   const tx = player.pos.x + _v.x, tz = player.pos.z + _v.z;
   camCtl.target.x = damp(camCtl.target.x, tx, 7, dt);
-  camCtl.target.y = damp(camCtl.target.y, player.pos.y + (vanState.driving ? 2.45 : CAM.targetH), 7, dt);
+  const fp = sstep(1.35, 0.55, camCtl.distSmooth);      // 0 = 3e personne, 1 = 1re personne
+  const th = vanState.driving ? 2.45 : lerp(CAM.targetH, 1.6, fp);
+  camCtl.target.y = damp(camCtl.target.y, player.pos.y + th, 7, dt);
   camCtl.target.z = damp(camCtl.target.z, tz, 7, dt);
 
   const cp = Math.cos(camCtl.pitch), sp = Math.sin(camCtl.pitch);
@@ -1720,7 +1733,12 @@ function updateCamera(dt) {
 
   camCtl.pos.copy(camCtl.target).addScaledVector(_v2, camCtl.distSmooth);
   camera.position.copy(camCtl.pos);
-  camera.lookAt(camCtl.target);
+  // proche du personnage, le regard glisse vers l'avant (première personne)
+  const lead = Math.max(0, 1.35 - camCtl.distSmooth) * 2.2;
+  _v.copy(camCtl.target).addScaledVector(_v2, -lead);
+  camera.lookAt(_v);
+  // en vue subjective, la tête disparaît et le corps reste
+  marcel.B.head.visible = camCtl.distSmooth > 0.62;
 
   // léger élargissement du champ en courant
   const fovT = CAM.fov + anim.runBlend * 6;
@@ -1927,12 +1945,12 @@ function tick(now) {
     doorState.y += clamp(doorTgt - doorState.y, -dt / 3.2, dt / 3.2);
     doorState.y = clamp(doorState.y, 0, 1);
     const e = smooth(doorState.y);
-    anchors.door.position.y = e * 3.35;
+    anchors.door.position.y = e * 3.55;
     doorGlow.intensity = e * 14;
     doorState.dustT -= dt;
     if (doorState.dustT <= 0 && doorState.y > 0.03 && doorState.y < 0.92) {
       doorState.dustT = 0.12;
-      spawnPuff((Math.random() - .5) * 3.2, 0.12 + Math.random() * 0.35, -ROOM.d / 2 + 0.32, 0, 0.3);
+      spawnPuff((Math.random() - .5) * 4.6, 0.12 + Math.random() * 0.35, -ROOM.d / 2 + 0.32, 0, 0.3);
     }
     if (doorState.y >= 1 && !doorState.done) {
       doorState.done = true;

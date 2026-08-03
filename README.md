@@ -15,23 +15,23 @@ peinture clearcoat sur le van, chromes, vitres transparentes, sol de béton
 ciré, faisceaux de phares dans la nuit. Nuit bleue profonde contre
 tungstène ambré.
 1 unité = 1 mètre partout (atelier 16 × 14 m — on y fait demi-tour —, porte
-de 4,6 × 3,6 m, personnage 1,78 m, camping-car de 6,8 m).
+de 5,6 × 3,8 m, personnage 1,78 m, camping-car de 6,8 m).
 
 ## Ce qui est soigné
 
-- **Rig procédural** : squelette hiérarchique complet (bassin, colonne,
-  tête, bras, jambes), jambes en **IK analytique 2 os** — les pieds se
-  posent réellement au sol, sans glissade (la fréquence de foulée est
-  asservie à la vitesse).
+- **Rig procédural** : squelette hiérarchique complet, torse en profils
+  de révolution continus (plus de solides apparents), mains à doigts,
+  jambes en **IK analytique 2 os** — les pieds se posent réellement au
+  sol, sans glissade.
 - **Cycle de marche et de course** générés par phase : appui/oscillation,
   déroulé talon-pointe, phase de vol en course, contre-rotation du buste,
   balancier des bras, inclinaison dans les virages et à l'accélération.
 - **Vie au repos** : respiration, transferts d'appui, regards curieux,
   clignements des yeux.
-- **Caméra 3ᵉ personne** : orbite à la souris (pointer lock), zoom molette,
-  amortissements distincts, collision caméra (murs + obstacles) sans
-  jamais traverser le décor, avance sur le déplacement, FOV qui s'élargit
-  en courant.
+- **Caméra libre** : la souris oriente la caméra sans clic (clic = capture
+  du pointeur en option), zoom molette continu **jusqu'à la première
+  personne** (la tête se masque, le corps reste visible, Marcel suit le
+  regard), amortissements distincts, collision caméra, FOV dynamique.
 - **Contrôles** : ZQSD **et** WASD (codes physiques → AZERTY géré
   nativement), flèches, Shift pour courir, déplacement relatif à la caméra,
   accélération/friction, glissement le long des obstacles — et **contrôles
@@ -59,6 +59,6 @@ Ouvrir `index.html` dans un navigateur (ou servir le dossier avec
 | ZQSD / WASD / flèches | se déplacer |
 | Shift | courir |
 | E | interagir · prendre le volant / couper le moteur |
-| Souris | caméra (clic pour capturer, Échap pour libérer) |
-| Molette | zoom |
+| Souris | caméra, sans clic (clic = capturer, Échap = libérer) |
+| Molette | zoom, jusqu'à la 1ʳᵉ personne |
 | M | couper le son |
