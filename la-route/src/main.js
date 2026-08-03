@@ -21,6 +21,7 @@ import { plantPines } from './vegetation/pines.js';
 import { windClock } from './vegetation/wind.js';
 import { buildSky } from './world/sky.js';
 import { buildVan } from './vehicle/van.js';
+import { createDust } from './vehicle/dust.js';
 import { buildDriver } from './character/driver.js';
 
 const canvas = document.getElementById('rc');
@@ -103,6 +104,7 @@ async function start() {
   // M4 : le mécano articulé remplace la capsule, le van attend sur la route
   const driver = buildDriver(scene, shadows);
   const van = buildVan(scene, shadows, groundHeight);
+  const dust = createDust(scene);                    // M5 : le sillage
 
   // obstacles (troncs + rochers) : hachage spatial 4 m pour les collisions
   const OBS = new Map();
@@ -153,6 +155,7 @@ async function start() {
     locked: false, drive: false,
   };
   let walkDist = 4.2, wheelAcc = 0;
+  let shake = 0, prevVanSpeed = 0, prevBodyY = 0;    // secousses caméra
 
   // aide contextuelle (E) — DOM léger, mis à jour hors alloc
   const hint = document.createElement('div');
@@ -189,6 +192,9 @@ async function start() {
         driver.setSeated(true, van.body);
         walkDist = state.distTarget;
         state.distTarget = 8.4;
+        // pof d'échappement au démarrage
+        const c = Math.cos(van.st.yaw), s = Math.sin(van.st.yaw);
+        dust.puff(van.st.x - 0.6 * c - 2.5 * s, van.st.bodyY - 0.3, van.st.z + 0.6 * s - 2.5 * c);
       }
     }
   });
@@ -248,16 +254,34 @@ async function start() {
       }
       deform.update(dt, van.st.x, van.st.z);
       terrain.patchTick(van.st.x, van.st.z);
-      // caméra chase : suit le cap du van avec du retard
+      // le sillage : panaches aux roues arrière, densité liée à la vitesse
       speed = Math.abs(van.st.speed);
+      const bkx = -Math.sin(van.st.yaw), bkz = -Math.cos(van.st.yaw);
+      const kick = speed > 1.4 ? Math.min(1, speed / 9) : 0;
+      for (let i = 0; i < 2; i++) {
+        const w = van.wheels[2 + i];
+        const p = van.wheelWorld(w);
+        const ps = dust.plumes[i];
+        ps.emitter.set(p.x, w.y + 0.24, p.z);
+        ps.emitRate = 85 * kick * (offroad ? 1 : 0.6); // la chaussée poudroie aussi
+        ps.direction1.set(bkx * 0.7 - 0.5, 0.2, bkz * 0.7 - 0.5);
+        ps.direction2.set(bkx * 1.9 + 0.5, 0.9, bkz * 1.9 + 0.5);
+      }
+      // secousses : gros freinage, grosses bosses — discret et vite amorti
+      shake *= Math.exp(-5 * dt);
+      const decel = (prevVanSpeed - speed) / Math.max(dt, 1e-3);
+      const bumpV = Math.abs(van.st.bodyY - prevBodyY) / Math.max(dt, 1e-3);
+      shake = Math.max(shake, Math.min(0.05,
+        Math.max(0, decel - 5) * 0.004 + Math.max(0, bumpV - 0.9) * 0.03));
+      prevVanSpeed = speed; prevBodyY = van.st.bodyY;
+      // caméra chase : suit le cap du van avec du retard
       const wantYaw = van.st.yaw + Math.PI;
       const dy = ((wantYaw - state.camYaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
       state.camYaw += dy * Math.min(1, (1.1 + speed * 0.22) * dt);
       state.camPitch = Math.max(0.1, state.camPitch);
       focX = van.st.x; focZ = van.st.z; focY = van.st.bodyY + 1.1;
-      fvx = Math.sin(van.st.yaw) * van.st.speed;
-      fvz = Math.cos(van.st.yaw) * van.st.speed;
-      setHint(Math.abs(van.st.speed) <= 1.6 ? 'E — descendre' : '');
+      fvx = van.st.vx; fvz = van.st.vz;              // le regard suit la glisse
+      setHint(speed <= 1.6 ? 'E — descendre' : '');
     } else {
       /* ---- à pied ---- */
       const il = Math.hypot(ix, iz);
@@ -301,6 +325,7 @@ async function start() {
       deform.update(dt, state.px, state.pz);
       terrain.patchTick(state.px, state.pz);
       van.update(dt, { throttle: 0, steer: 0, offroad: false }, vanBlocked);
+      dust.plumes[0].emitRate = 0; dust.plumes[1].emitRate = 0;
       const gy = groundHeight(state.px, state.pz);
       state.py += (gy - state.py) * Math.min(1, 14 * dt);
       driver.root.position.set(state.px, state.py, state.pz);
@@ -327,6 +352,10 @@ async function start() {
       height(camera.position.x, camera.position.z) + 0.4,
       state.ty + sp2 * state.dist);
     camera.position.z = state.tz + Math.cos(state.camYaw) * cp * state.dist - Math.sin(state.camYaw) * shoulder;
+    if (shake > 0.001) {
+      camera.position.y += Math.sin(now * 0.061) * shake;
+      camera.position.x += Math.sin(now * 0.047 + 1.3) * shake * 0.6;
+    }
     TMP.set(state.tx, state.ty, state.tz);
     camera.setTarget(TMP);
     camera.fov = 0.95 + Math.min(0.18, speed * 0.022);

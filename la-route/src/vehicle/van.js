@@ -189,6 +189,7 @@ export function buildVan(scene, shadows, ground) {
   /* ---- dynamique ---- */
   const st = {
     x: 1.2, z: 10, yaw: Math.PI, speed: 0, steerA: 0,
+    vx: 0, vz: 0, odo: 0,                              // vélocité réelle, odomètre
     bodyY: 0, pitch: 0, roll: 0, fresh: { x: 0, z: 0, vx: 0, vz: 0 },
     lastAcc: 0,
   };
@@ -213,16 +214,27 @@ export function buildVan(scene, shadows, ground) {
     const maxSteer = 0.52 / (1 + Math.abs(st.speed) * 0.16);
     st.steerA += (input.steer * maxSteer - st.steerA) * Math.min(1, 8 * dt);
     st.yaw += st.steerA * (st.speed / WHEELBASE) * dt * 1.35;
-    const nx = st.x + Math.sin(st.yaw) * st.speed * dt;
-    const nz = st.z + Math.cos(st.yaw) * st.speed * dt;
-    if (blocked && blocked(nx, nz)) { st.speed *= -0.2; }
+    // adhérence finie : la vélocité réelle rejoint l'axe du van avec du
+    // retard — douce glisse dans l'épingle, plus marquée sur la terre
+    const grip = input.offroad ? 2.6 : 6.5;
+    const gk = Math.min(1, grip * dt);
+    st.vx += (Math.sin(st.yaw) * st.speed - st.vx) * gk;
+    st.vz += (Math.cos(st.yaw) * st.speed - st.vz) * gk;
+    const nx = st.x + st.vx * dt;
+    const nz = st.z + st.vz * dt;
+    if (blocked && blocked(nx, nz)) { st.speed *= -0.2; st.vx *= -0.2; st.vz *= -0.2; }
     else { st.x = nx; st.z = nz; }
+    st.odo += Math.abs(st.speed) * dt;
 
-    /* suspension : sol sondé sous chaque roue */
+    /* suspension : sol sondé sous chaque roue (+ tôle ondulée sur le gravier
+     * de la chaussée : broutement haute fréquence indexé sur l'odomètre) */
+    const washA = (!input.offroad && Math.abs(st.speed) > 3)
+      ? 0.017 * Math.min(1, Math.abs(st.speed) / 7) : 0;
     let gsum = 0;
     for (const w of wheels) {
       const p = wheelWorld(w);
-      const gy = ground(p.x, p.z);
+      const gy = ground(p.x, p.z)
+        + washA * Math.sin(st.odo * 8.6 + w.wx * 3.7 + w.wz * 1.9);
       w.y += (gy - w.y) * Math.min(1, 16 * dt);                 // détente visible
       gsum += w.y;
     }

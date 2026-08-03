@@ -75,3 +75,15 @@ Chaque écart au brief, en une ligne, avec sa raison.
 - M4 : les sillons de pneus sont continus à 60 fps (pas d'émission 0,24 m
   < diamètre de tampon 0,38 m) ; en dev SwiftShader (~2,5 fps) ils
   apparaissent pointillés — artefact d'itération, pas du produit.
+- M5 : panaches en particules CPU (ParticleSystem, sprite radial procédural,
+  fondu alpha) plutôt que compute GPU — la densité visée (2×240 particules)
+  ne le justifie pas ; les particules ne portent pas d'ombre (coût), la
+  dérive au vent vient du terme de gravité orienté vent dominant.
+- M5 : glisse = relaxation de la vélocité réelle vers l'axe du van
+  (adhérence 6,5 route / 2,6 terre) — pas de modèle de pneu ; borné par
+  construction, jamais un « verglas ».
+- M5 : tôle ondulée = bruit sinusoïdal indexé sur l'odomètre injecté dans le
+  sondage de sol des roues (chaussée uniquement, > 3 m/s) — le châssis et le
+  sapin réagissent par la chaîne de suspension existante.
+- M5 : stries de vent en espace écran reportées au M7 (chaîne de post) ;
+  secousses caméra plafonnées à 5 cm et amorties en ~0,5 s.
