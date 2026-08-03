@@ -110,15 +110,15 @@ document.body.insertAdjacentHTML('beforeend', `
   <div id="stage"></div>
   <div class="vignette"></div>
   <div class="hud" id="title"><div class="t1">L'ATELIER</div><div class="t2">Prologue&nbsp;— minuit et quart</div></div>
-  <div class="hud" id="keys"><b>ZQSD</b> / <b>WASD</b>&nbsp; se déplacer<br><b>Shift</b>&nbsp; courir&nbsp; · &nbsp;<b>E</b>&nbsp; interagir<br><b>Souris</b>&nbsp; caméra&nbsp; · &nbsp;<b>Molette</b>&nbsp; zoom<br><b>M</b>&nbsp; son</div>
+  <div class="hud" id="keys"><b>ZQSD</b> / <b>WASD</b>&nbsp; se déplacer<br><b>Shift</b>&nbsp; courir&nbsp; · &nbsp;<b>E</b>&nbsp; interagir / conduire<br><b>Souris</b>&nbsp; caméra&nbsp; · &nbsp;<b>Molette</b>&nbsp; zoom&nbsp; · &nbsp;<b>M</b>&nbsp; son</div>
   <div class="hud" id="hint">Échap pour libérer la souris</div>
-  <div class="hud" id="objective"><b id="objN">0</b> / 5 clés retrouvées</div>
+  <div class="hud" id="objective">Retrouve <b>la clé de contact</b><span id="objN" style="display:none">0</span></div>
   <div class="hud" id="prompt"><b>E</b><span id="promptText"></span></div>
   <div class="hud" id="toast"></div>
   <div id="stickZone"><div id="stickNub"></div></div>
   <div class="tbtn" id="btnE">E</div>
   <div class="tbtn" id="btnRun">courir</div>
-  <div id="enter"><div class="big">L'ATELIER</div><div class="small">— cliquer pour allumer la lumière —<br><br>cinq clés égarées&nbsp;·&nbsp;la route attend</div></div>
+  <div id="enter"><div class="big">L'ATELIER</div><div class="small">— cliquer pour allumer la lumière —<br><br>retrouve la clé&nbsp;·&nbsp;monte à bord&nbsp;·&nbsp;prends la route</div></div>
 `);
 
 /* ---------------------------------------------------------- */
@@ -131,11 +131,30 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = 1.15;
+renderer.physicallyCorrectLights = true;          // chute physique des lumières
 document.getElementById('stage').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(PAL.night);
+scene.fog = new THREE.FogExp2(0x0a1220, 0.016);
+
+// environnement de réflexion (PMREM) : nuit bleue + deux nappes tungstène,
+// c'est lui qui donne les reflets « ray-traced » aux chromes, vitres et sol ciré
+{
+  const env = new THREE.Scene();
+  env.background = new THREE.Color(0x0a1424);
+  const warm = new THREE.Mesh(new THREE.PlaneGeometry(6, 4),
+    new THREE.MeshBasicMaterial({ color: 0xffa25c }));
+  warm.position.set(0, 6, 0); warm.rotation.x = Math.PI / 2; env.add(warm);
+  const warm2 = warm.clone(); warm2.position.set(-5, 6, 4); env.add(warm2);
+  const cool = new THREE.Mesh(new THREE.PlaneGeometry(10, 3),
+    new THREE.MeshBasicMaterial({ color: 0x35507e }));
+  cool.position.set(8, 3, 0); cool.rotation.y = -Math.PI / 2; env.add(cool);
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(env, 0.06).texture;
+  pmrem.dispose();
+}
 const camera = new THREE.PerspectiveCamera(CAM.fov, innerWidth / innerHeight, 0.05, 60);
 
 addEventListener('resize', () => {
@@ -157,12 +176,7 @@ function canvasTex(size, draw, repX = 1, repY = 1) {
   t.anisotropy = 4;
   return t;
 }
-// palier de toon-shading (4 tons)
-const gradCanvas = document.createElement('canvas'); gradCanvas.width = 4; gradCanvas.height = 1;
-{ const g = gradCanvas.getContext('2d');
-  ['#26262f', '#55555f', '#a2a2ac', '#e9e9ec'].forEach((col, i) => { g.fillStyle = col; g.fillRect(i, 0, 1, 1); }); }
-const gradMap = new THREE.CanvasTexture(gradCanvas);
-gradMap.minFilter = gradMap.magFilter = THREE.NearestFilter;
+// (l'ancienne rampe toon a laissé place au PBR)
 
 const floorTex = canvasTex(1024, (g, s) => {
   g.fillStyle = '#3a4050'; g.fillRect(0, 0, s, s);
@@ -233,18 +247,23 @@ const pegTex = canvasTex(256, (g, s) => {
 /* 5. Matériaux                                                */
 /* ---------------------------------------------------------- */
 const M = {};
-const toon = (color, opts = {}) => Object.assign(new THREE.MeshToonMaterial({ color, gradientMap: gradMap }), opts);
-M.floor = toon(0xffffff, { map: floorTex });
-M.wall = toon(0xffffff, { map: wallTex });
-M.ceil = toon(0x262d45);
-M.suit = toon(PAL.suit); M.suitDark = toon(PAL.suitDark);
-M.cream = toon(PAL.cream); M.skin = toon(PAL.skin);
-M.hair = toon(PAL.hair); M.boots = toon(PAL.boots); M.sole = toon(PAL.sole);
-M.cap = toon(PAL.cap); M.brass = toon(PAL.brass);
-M.red = toon(0x8f2f2b); M.redDark = toon(0x63211e);
-M.teal = toon(0x33605a); M.metal = toon(0x5c6572);
-M.metalDark = toon(0x363d4c); M.wood = toon(0x6e5236);
-M.tire = toon(0x23262c); M.tarp = toon(0x40514a);
+// « toon » est désormais une usine PBR : les appels existants restent valides
+const toon = (color, opts = {}) => {
+  const p = Object.assign({ color, roughness: 0.85, metalness: 0.02 }, opts);
+  return new THREE.MeshStandardMaterial(p);
+};
+M.floor = toon(0xffffff, { map: floorTex, roughness: 0.34, metalness: 0.04, envMapIntensity: 0.9 });
+M.wall = toon(0xffffff, { map: wallTex, roughness: 0.96 });
+M.ceil = toon(0x262d45, { roughness: 0.95 });
+M.suit = toon(PAL.suit, { roughness: 0.92 }); M.suitDark = toon(PAL.suitDark, { roughness: 0.92 });
+M.cream = toon(PAL.cream, { roughness: 0.9 }); M.skin = toon(PAL.skin, { roughness: 0.62 });
+M.hair = toon(PAL.hair, { roughness: 0.8 }); M.boots = toon(PAL.boots, { roughness: 0.42 });
+M.sole = toon(PAL.sole, { roughness: 0.7 });
+M.cap = toon(PAL.cap, { roughness: 0.9 }); M.brass = toon(PAL.brass, { metalness: 0.85, roughness: 0.32, envMapIntensity: 1.1 });
+M.red = toon(0x8f2f2b, { roughness: 0.45, metalness: 0.15 }); M.redDark = toon(0x63211e, { roughness: 0.5 });
+M.teal = toon(0x33605a, { roughness: 0.55, metalness: 0.1 }); M.metal = toon(0x77808c, { metalness: 0.85, roughness: 0.38, envMapIntensity: 1.1 });
+M.metalDark = toon(0x363d4c, { metalness: 0.6, roughness: 0.5 }); M.wood = toon(0x6e5236, { roughness: 0.75 });
+M.tire = toon(0x1e2126, { roughness: 0.95 }); M.tarp = toon(0x40514a, { roughness: 0.9 });
 M.eye = new THREE.MeshBasicMaterial({ color: 0x241a14 });
 M.bulb = new THREE.MeshBasicMaterial({ color: 0xffc078 });
 M.window = new THREE.MeshBasicMaterial({ map: canvasTex(256, (g, s) => {
@@ -299,31 +318,7 @@ function buildGarage() {
     strip.material.map.repeat.set(doorW / 2.9, (h - doorH) / h);
     strip.position.set(0, doorH + (h - doorH) / 2, -d / 2); strip.receiveShadow = true; scene.add(strip);
   }
-  // le dehors : ciel étoilé, sapins, et la route qui attend
-  const nightTex = canvasTex(512, (g, s) => {
-    const gr = g.createLinearGradient(0, 0, 0, s);
-    gr.addColorStop(0, '#27395e'); gr.addColorStop(0.7, '#1a2a4a'); gr.addColorStop(1, '#142038');
-    g.fillStyle = gr; g.fillRect(0, 0, s, s);
-    g.fillStyle = 'rgba(255,255,255,.85)';
-    for (let i = 0; i < 42; i++) { g.beginPath(); g.arc(Math.random() * s, Math.random() * s * .55, Math.random() * 1.3 + .3, 0, 7); g.fill(); }
-    g.fillStyle = '#dfe8f8'; g.beginPath(); g.arc(s * .78, s * .17, 15, 0, 7); g.fill();
-    g.fillStyle = '#0b1226';
-    for (let x = -20; x < s + 20; x += 26 + Math.random() * 22) {
-      const hgt = s * (0.2 + Math.random() * 0.14), base = s * 0.64;
-      g.beginPath(); g.moveTo(x - 16, base); g.lineTo(x, base - hgt); g.lineTo(x + 16, base); g.closePath(); g.fill();
-    }
-    // sol brumeux éclairé par la lune, et la route qui s'enfonce
-    const gr2 = g.createLinearGradient(0, s * .64, 0, s);
-    gr2.addColorStop(0, '#3c4c74'); gr2.addColorStop(0.35, '#2a3a5e'); gr2.addColorStop(1, '#1a2740');
-    g.fillStyle = gr2; g.fillRect(0, s * .64, s, s * .36);
-    g.fillStyle = '#516290';
-    g.beginPath(); g.moveTo(s * .34, s); g.lineTo(s * .465, s * .64); g.lineTo(s * .535, s * .64); g.lineTo(s * .70, s); g.closePath(); g.fill();
-    g.fillStyle = 'rgba(232,220,200,.5)';
-    g.fillRect(s * .497, s * .70, s * .006, s * .06);
-    g.fillRect(s * .497, s * .82, s * .008, s * .08);
-  });
-  const night = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 3.6), new THREE.MeshBasicMaterial({ map: nightTex }));
-  night.position.set(0, 1.35, -d / 2 - 0.85); scene.add(night);
+  // (le dehors est réel désormais : voir buildOutside)
 
   mkWall(w, 0, d / 2, Math.PI);       // mur sud (établi)
   mkWall(d, -w / 2, 0, Math.PI / 2);  // ouest
@@ -432,85 +427,7 @@ function buildGarage() {
   box(0.55, 0.34, 0.4, M.wood, -2.2, 0.17, -d / 2 + 0.5).rotation.y = -0.25;
   addCollider(-2.2, -d / 2 + 0.5, 0.72, 0.6, 0.4);
 
-  // --- le camping-car : « L'Hirondelle », garé face à la porte ---
-  const van = new THREE.Group(); van.position.set(-2.55, 0, -0.7); scene.add(van);
-  const vanCream = toon(0xcfc0a0), vanTeal = toon(0x3a6b64), vanDark = toon(0x2c3140);
-  const glass = new THREE.MeshBasicMaterial({ color: 0x141f36 });
-  const chrome = toon(0x8a93a4);
-  box(1.95, 0.92, 4.5, vanCream, 0, 0.98, 0, van);             // caisse basse
-  box(1.95, 0.72, 4.5, vanTeal, 0, 1.8, 0, van);               // bandeau haut
-  box(2.0, 0.07, 4.54, chrome, 0, 1.42, 0, van);               // jonc chromé
-  box(1.82, 0.16, 4.32, vanTeal, 0, 2.24, 0, van);             // toit
-  box(1.55, 0.12, 3.9, vanTeal, 0, 2.36, 0, van);
-  // galerie, jerrican, roue de secours
-  [-0.72, 0.72].forEach(x => box(0.05, 0.09, 3.6, M.metalDark, x, 2.47, 0.1, van));
-  [-1.4, 0, 1.4].forEach(z => box(1.5, 0.05, 0.06, M.metalDark, 0, 2.49, z, van));
-  cyl(0.16, 0.16, 0.42, M.teal, -0.35, 2.62, -0.9, van, 12);
-  const spare = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.11, 10, 20), M.tire);
-  spare.position.set(0.25, 2.62, 1.3); spare.rotation.x = Math.PI / 2; spare.castShadow = true; van.add(spare);
-  // avant : pare-brise, calandre, phares, pare-chocs
-  const wind = box(1.6, 0.72, 0.05, glass, 0, 1.82, -2.26, van); wind.rotation.x = -0.1;
-  box(1.7, 0.1, 0.06, vanCream, 0, 1.44, -2.27, van);
-  const grille = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.42), toon(0xffffff, { map: canvasTex(128, (g, s) => {
-    g.fillStyle = '#b7a888'; g.fillRect(0, 0, s, s);
-    g.fillStyle = '#6d6250';
-    for (let y = 10; y < s; y += 22) g.fillRect(8, y, s - 16, 9);
-  }) }));
-  grille.position.set(0, 0.98, -2.265); grille.rotation.y = Math.PI; van.add(grille);
-  const vanLenses = [];
-  [-0.68, 0.68].forEach(x => {
-    cyl(0.1, 0.1, 0.05, chrome, x, 1.28, -2.26, van, 14).rotation.x = Math.PI / 2;
-    const lens = new THREE.Mesh(new THREE.CircleGeometry(0.075, 14), new THREE.MeshBasicMaterial({ color: 0x6b5c40 }));
-    lens.position.set(x, 1.28, -2.29); lens.rotation.y = Math.PI; van.add(lens);
-    vanLenses.push(lens.material);
-  });
-  box(2.05, 0.16, 0.2, chrome, 0, 0.52, -2.32, van);
-  box(2.05, 0.16, 0.2, chrome, 0, 0.52, 2.32, van);
-  const plateTex = canvasTex(128, (g, s) => {
-    g.fillStyle = '#1a1a20'; g.fillRect(0, 0, s, s);
-    g.fillStyle = '#e8dcc8'; g.font = 'bold 40px Courier New'; g.textAlign = 'center';
-    g.fillText('GM·73·AT', s / 2, s / 2 + 14);
-  });
-  [[-2.34, Math.PI], [2.34, 0]].forEach(([z, ry]) => {
-    const pl = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.12), new THREE.MeshBasicMaterial({ map: plateTex }));
-    pl.position.set(0, 0.62, z); pl.rotation.y = ry; van.add(pl);
-  });
-  // flancs : vitres, rainures de portes, poignées
-  [-1, 1].forEach(sx => {
-    [-0.7, 0.25, 1.35].forEach(z => box(0.02, 0.5, 0.78, glass, sx * 0.985, 1.82, z, van));
-    box(0.02, 0.55, 0.62, glass, sx * 0.985, 1.78, -1.75, van);
-    box(0.015, 1.5, 0.02, vanDark, sx * 0.982, 1.15, -1.35, van);
-    box(0.015, 1.5, 0.02, vanDark, sx * 0.982, 1.15, -2.08, van);
-    box(0.03, 0.05, 0.16, M.brass, sx * 0.99, 1.06, -1.5, van);
-  });
-  box(0.015, 1.6, 0.02, vanDark, 0.982, 1.2, 0.9, van);        // porte coulissante
-  box(0.015, 1.6, 0.02, vanDark, 0.982, 1.2, -0.15, van);
-  box(0.03, 0.05, 0.18, M.brass, 0.99, 1.12, 0.72, van);
-  // le nom, peint à la main sur les flancs
-  const nameTex = canvasTex(256, (g, s) => {
-    g.fillStyle = '#e8dcc8'; g.font = 'italic 42px Georgia'; g.textAlign = 'center';
-    g.fillText("L'Hirondelle", s / 2, s / 2 + 10);
-    g.strokeStyle = '#e8dcc8'; g.lineWidth = 2;
-    g.beginPath(); g.moveTo(s * .22, s * .61); g.quadraticCurveTo(s / 2, s * .70, s * .78, s * .61); g.stroke();
-  });
-  [-1, 1].forEach(sx => {
-    const nm = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.95),
-      toon(0xffffff, { map: nameTex, transparent: true }));
-    nm.position.set(sx * 0.988, 1.0, 0.35); nm.rotation.y = sx * Math.PI / 2; van.add(nm);
-  });
-  // roues et rétroviseurs
-  [[-0.83, -1.45], [0.83, -1.45], [-0.83, 1.45], [0.83, 1.45]].forEach(([x, z]) => {
-    const t = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.24, 18), M.tire);
-    t.position.set(x, 0.34, z); t.rotation.z = Math.PI / 2; t.castShadow = t.receiveShadow = true; van.add(t);
-    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.26, 12), vanCream);
-    hub.position.copy(t.position); hub.rotation.z = Math.PI / 2; van.add(hub);
-  });
-  [-1, 1].forEach(sx => {
-    cyl(0.015, 0.015, 0.16, M.metalDark, sx * 1.06, 1.7, -2.1, van, 6).rotation.z = Math.PI / 2;
-    box(0.02, 0.14, 0.1, chrome, sx * 1.14, 1.7, -2.1, van);
-  });
-  outlineTree(van);
-  addCollider(-2.55, -0.7, 2.35, 4.9, 2.5);
+  // (le camping-car est construit à part : voir buildVan)
 
   // --- affiches, tableau électrique, fenêtre haute ---
   const poster = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.62), toon(0xffffff, { map: posterTex }));
@@ -547,40 +464,299 @@ function buildGarage() {
     lampPos: lampA.pos, lamp2Pos: lampB.pos,
     benchLampPos: new THREE.Vector3(-0.3, 2.13, d / 2 - 0.58),
     door, bulb: lampA.bulb, bulb2: lampB.bulb,
-    vanLenses, doorLamp: doorLampMesh.material,
+    doorLamp: doorLampMesh.material,
   };
 }
 const anchors = buildGarage();
 
 /* ---------------------------------------------------------- */
+/* 6bis. L'Hirondelle — coque praticable et conduite           */
+/* ---------------------------------------------------------- */
+/* Repère local : nez vers -z. Plancher intérieur à y = 0.42.
+   Porte latérale ouverte côté droit (+x), z ∈ [0.25, 1.35].
+   Toutes les collisions intérieures se font dans CE repère :
+   si le van bouge, l'intérieur suit — sans couture.            */
+const VAN = {
+  floorY: 0.42, innerX: 0.86, innerZ: 2.30,
+  doorZ0: 0.25, doorZ1: 1.35,
+  seat: { x: -0.45, z: -1.52 },                 // siège conducteur (local)
+  cols: [                                        // AABB locaux {x0,x1,z0,z1}
+    { x0: -1.02, x1: -0.86, z0: -2.46, z1: 2.46 },              // paroi gauche
+    { x0: 0.86, x1: 1.02, z0: -2.46, z1: 0.25 },                // paroi droite avant
+    { x0: 0.86, x1: 1.02, z0: 1.35, z1: 2.46 },                 // paroi droite arrière
+    { x0: -1.02, x1: 1.02, z0: -2.46, z1: -2.30 },              // face avant
+    { x0: -1.02, x1: 1.02, z0: 2.30, z1: 2.46 },                // face arrière
+    { x0: -0.86, x1: 0.86, z0: 1.42, z1: 2.30 },                // lit
+    { x0: -0.86, x1: -0.42, z0: -0.27, z1: 1.37 },              // kitchenette
+    { x0: -0.86, x1: 0.86, z0: -2.30, z1: -1.95 },              // tableau de bord
+    { x0: -0.70, x1: -0.20, z0: -1.80, z1: -1.30 },             // siège gauche
+    { x0: 0.20, x1: 0.70, z0: -1.80, z1: -1.30 },               // siège droit
+  ],
+};
+const vanState = { x: -2.7, z: -0.4, yaw: 0, speed: 0, driving: false, driveHint: false };
+
+function buildVan() {
+  const van = new THREE.Group(); scene.add(van);
+  const cream = new THREE.MeshPhysicalMaterial({ color: 0xc9b995, roughness: 0.45, metalness: 0.08,
+    clearcoat: 0.9, clearcoatRoughness: 0.22, envMapIntensity: 0.55 });
+  const teal = new THREE.MeshPhysicalMaterial({ color: 0x2c5b53, roughness: 0.42, metalness: 0.1,
+    clearcoat: 0.9, clearcoatRoughness: 0.2, envMapIntensity: 0.55 });
+  const chrome = toon(0xb8c2cc, { metalness: 1.0, roughness: 0.16, envMapIntensity: 1.3 });
+  const glass = new THREE.MeshPhysicalMaterial({ color: 0x7590b8, roughness: 0.06, metalness: 0,
+    transparent: true, opacity: 0.18, envMapIntensity: 0.9, side: THREE.DoubleSide });
+  const inner = toon(0xcbbfa2, { roughness: 0.9 });
+  const woodFloor = toon(0x8a6f4d, { roughness: 0.6 });
+  const cloth = toon(0x51706a, { roughness: 1.0, metalness: 0 });
+
+  // plancher, bas de caisse
+  box(1.86, 0.08, 4.66, woodFloor, 0, 0.38, 0, van);
+  box(2.0, 0.22, 4.74, cream, 0, 0.31, 0, van);
+  // parois basses (0.42 → 1.44) — la porte latérale droite est ouverte
+  box(0.12, 1.02, 4.88, cream, -0.93, 0.93, 0, van);                       // gauche
+  box(0.12, 1.02, 2.69, cream, 0.93, 0.93, (-2.44 + 0.25) / 2, van);       // droite, avant de la porte
+  box(0.12, 1.02, 1.09, cream, 0.93, 0.93, (1.35 + 2.44) / 2, van);        // droite, arrière
+  // bande haute (1.44 → 2.30) : piliers sarcelle + vitres
+  const upSeg = (sx, z0, z1) => box(0.12, 0.86, z1 - z0, teal, sx * 0.93, 1.87, (z0 + z1) / 2, van);
+  const pane = (sx, z0, z1) => box(0.03, 0.78, z1 - z0 - 0.06, glass, sx * 0.93, 1.87, (z0 + z1) / 2, van);
+  [[-1], [1]].forEach(([sx]) => {
+    upSeg(sx, -2.44, -2.1); upSeg(sx, -1.3, -0.95); upSeg(sx, 0.05, sx > 0 ? 0.25 : 0.4);
+    pane(sx, -2.1, -1.3); pane(sx, -0.95, 0.05);
+  });
+  upSeg(-1, 1.5, 2.44); pane(-1, 0.4, 1.5);      // grande vitre gauche
+  upSeg(1, 1.35, 2.44);                           // droite : la porte est l'ouverture
+  // avant : tablier, pare-brise incliné, calandre, phares, pare-chocs
+  box(1.86, 0.95, 0.14, cream, 0, 0.945, -2.37, van);
+  const ws = box(1.7, 0.95, 0.04, glass, 0, 1.85, -2.34, van); ws.rotation.x = -0.09;
+  const grille = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 0.4), toon(0xffffff, { map: canvasTex(128, (g, s) => {
+    g.fillStyle = '#b7a888'; g.fillRect(0, 0, s, s);
+    g.fillStyle = '#6d6250';
+    for (let y = 10; y < s; y += 22) g.fillRect(8, y, s - 16, 9);
+  }), metalness: 0.6, roughness: 0.4 }));
+  grille.position.set(0, 0.92, -2.445); grille.rotation.y = Math.PI; van.add(grille);
+  const lenses = [];
+  [-0.66, 0.66].forEach(x => {
+    cyl(0.11, 0.11, 0.06, chrome, x, 1.3, -2.42, van, 16).rotation.x = Math.PI / 2;
+    const lens = new THREE.Mesh(new THREE.CircleGeometry(0.082, 16),
+      new THREE.MeshStandardMaterial({ color: 0x6b5c40, emissive: 0x241c10, roughness: 0.2 }));
+    lens.position.set(x, 1.3, -2.455); lens.rotation.y = Math.PI; van.add(lens);
+    lenses.push(lens.material);
+  });
+  box(2.1, 0.17, 0.22, chrome, 0, 0.42, -2.5, van);
+  box(2.1, 0.17, 0.22, chrome, 0, 0.42, 2.5, van);
+  // arrière : panneau plein + vitre + plaque
+  box(1.86, 1.23, 0.14, cream, 0, 1.035, 2.37, van);
+  box(1.4, 0.55, 0.04, glass, 0, 1.95, 2.37, van);
+  box(1.86, 0.2, 0.14, teal, 0, 2.22, 2.37, van);
+  const plateTex2 = canvasTex(128, (g, s) => {
+    g.fillStyle = '#1a1a20'; g.fillRect(0, 0, s, s);
+    g.fillStyle = '#e8dcc8'; g.font = 'bold 40px Courier New'; g.textAlign = 'center';
+    g.fillText('GM·73·AT', s / 2, s / 2 + 14);
+  });
+  [[-2.51, Math.PI], [2.51, 0]].forEach(([z, ry]) => {
+    const pl = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.12), new THREE.MeshBasicMaterial({ map: plateTex2 }));
+    pl.position.set(0, 0.62, z); pl.rotation.y = ry; van.add(pl);
+  });
+  // toit + galerie + jerrican + roue de secours
+  box(2.06, 0.14, 4.88, teal, 0, 2.37, 0, van);
+  box(1.7, 0.1, 4.5, teal, 0, 2.47, 0, van);
+  [-0.72, 0.72].forEach(x => box(0.05, 0.09, 3.6, M.metalDark, x, 2.57, 0.2, van));
+  [-1.3, 0.1, 1.5].forEach(z => box(1.5, 0.05, 0.06, M.metalDark, 0, 2.59, z, van));
+  cyl(0.16, 0.16, 0.42, M.teal, -0.35, 2.72, -0.8, van, 12);
+  const spare = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.11, 10, 20), M.tire);
+  spare.position.set(0.25, 2.72, 1.4); spare.rotation.x = Math.PI / 2; spare.castShadow = true; van.add(spare);
+  // le nom, peint à la main
+  const nameTex = canvasTex(256, (g, s) => {
+    g.fillStyle = '#e8dcc8'; g.font = 'italic 42px Georgia'; g.textAlign = 'center';
+    g.fillText("L'Hirondelle", s / 2, s / 2 + 10);
+    g.strokeStyle = '#e8dcc8'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(s * .22, s * .61); g.quadraticCurveTo(s / 2, s * .70, s * .78, s * .61); g.stroke();
+  });
+  [-1, 1].forEach(sx => {
+    const nm = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.95),
+      toon(0xffffff, { map: nameTex, transparent: true, roughness: 0.6 }));
+    nm.position.set(sx * 1.0, 0.95, sx > 0 ? 1.9 : 0.6); nm.rotation.y = sx * Math.PI / 2; van.add(nm);
+  });
+  // roues
+  [[-0.86, -1.5], [0.86, -1.5], [-0.86, 1.5], [0.86, 1.5]].forEach(([x, z]) => {
+    const t = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.26, 20), M.tire);
+    t.position.set(x, 0.38, z); t.rotation.z = Math.PI / 2; t.castShadow = t.receiveShadow = true; van.add(t);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.28, 14), cream);
+    hub.position.copy(t.position); hub.rotation.z = Math.PI / 2; van.add(hub);
+  });
+  // rétroviseurs
+  [-1, 1].forEach(sx => {
+    cyl(0.015, 0.015, 0.16, M.metalDark, sx * 1.1, 1.8, -2.2, van, 6).rotation.z = Math.PI / 2;
+    box(0.02, 0.15, 0.1, chrome, sx * 1.18, 1.8, -2.2, van);
+  });
+  // marchepied sous la porte latérale
+  box(0.42, 0.06, 0.85, M.metalDark, 1.14, 0.2, 0.8, van);
+  // --- intérieur ---
+  box(1.7, 0.35, 0.85, M.wood, 0, 0.60, 1.85, van);            // lit
+  box(1.72, 0.14, 0.88, cloth, 0, 0.85, 1.85, van);            // matelas
+  box(0.5, 0.12, 0.32, M.cream, -0.5, 0.95, 1.7, van);         // oreiller
+  box(0.4, 0.9, 1.6, inner, -0.64, 0.87, 0.55, van);           // kitchenette
+  box(0.42, 0.04, 1.62, M.wood, -0.64, 1.34, 0.55, van);
+  cyl(0.11, 0.11, 0.03, M.metal, -0.64, 1.37, 0.15, van, 16);  // évier
+  cyl(0.012, 0.012, 0.14, chrome, -0.72, 1.44, 0.15, van, 8);
+  box(0.26, 0.02, 0.3, M.metalDark, -0.64, 1.36, 0.85, van);   // plaque de cuisson
+  box(1.72, 0.3, 0.32, inner, 0, 1.2, -2.1, van);              // tableau de bord
+  [[-0.45], [0.45]].forEach(([x]) => {                         // sièges
+    box(0.5, 0.4, 0.5, cloth, x, 0.63, -1.52, van);
+    const back = box(0.5, 0.55, 0.12, cloth, x, 1.12, -1.28, van); back.rotation.x = 0.12;
+  });
+  const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.025, 10, 22), M.metalDark);
+  wheel.position.set(-0.45, 1.22, -1.92); wheel.rotation.x = 1.05; wheel.castShadow = true; van.add(wheel);
+  cyl(0.02, 0.02, 0.3, M.metalDark, -0.45, 1.1, -1.98, van, 8).rotation.x = -0.5;
+  // plafonnier chaleureux (avec ombres : la lumière ne doit pas fuir à travers la coque)
+  const cabinLight = new THREE.PointLight(0xffb877, 1.5, 5, 2);
+  cabinLight.position.set(0, 2.1, 0.5);
+  cabinLight.castShadow = true;
+  cabinLight.shadow.mapSize.set(512, 512);
+  cabinLight.shadow.bias = -0.005;
+  van.add(cabinLight);
+
+  // faisceaux des phares (allumés en conduite)
+  const beams = [];
+  [-0.66, 0.66].forEach(x => {
+    const b = new THREE.SpotLight(0xffe2b0, 0, 18, 0.52, 0.45, 2);
+    b.position.set(x, 1.3, -2.4);
+    b.target.position.set(x * 0.7, 0.2, -12);
+    van.add(b, b.target); beams.push(b);
+  });
+
+  van.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  return { group: van, lenses, cabinLight, beams };
+}
+const hirondelle = buildVan();
+
+/* ---------------------------------------------------------- */
+/* 6ter. Dehors : la clairière, la route, la forêt             */
+/* ---------------------------------------------------------- */
+function buildOutside() {
+  const g = new THREE.Group(); scene.add(g);
+  // sol forestier
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(90, 50), toon(0x141c2b, { roughness: 1 }));
+  ground.rotation.x = -Math.PI / 2; ground.position.set(0, -0.02, -16); ground.receiveShadow = true; g.add(ground);
+  // la route de terre, dans l'axe de la porte
+  const roadTex = canvasTex(256, (gg, s) => {
+    gg.fillStyle = '#2b3247'; gg.fillRect(0, 0, s, s);
+    for (let i = 0; i < 900; i++) {
+      gg.fillStyle = Math.random() < .5 ? 'rgba(255,255,255,.035)' : 'rgba(5,8,14,.06)';
+      gg.fillRect(Math.random() * s, Math.random() * s, 2, 2);
+    }
+    gg.strokeStyle = 'rgba(10,14,24,.5)'; gg.lineWidth = 5;
+    [s * .3, s * .7].forEach(x => { gg.beginPath(); gg.moveTo(x, 0); gg.lineTo(x + (Math.random() - .5) * 14, s); gg.stroke(); });
+  }, 1, 8);
+  const road = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 27), toon(0xffffff, { map: roadTex, roughness: 0.8 }));
+  road.rotation.x = -Math.PI / 2; road.position.set(0, 0, -18); road.receiveShadow = true; g.add(road);
+  // sapins (déterministes), qui laissent la route et le seuil libres
+  const trunkMat = toon(0x2a2019, { roughness: 1 }), pineMat = toon(0x122018, { roughness: 1 });
+  const pine = (x, z, s) => {
+    const t = new THREE.Group(); t.position.set(x, 0, z); t.scale.setScalar(s); g.add(t);
+    cyl(0.12, 0.16, 1.0, trunkMat, 0, 0.5, 0, t, 8);
+    [[1.5, 1.5], [1.15, 2.5], [0.8, 3.4]].forEach(([r, y]) => {
+      const co = new THREE.Mesh(new THREE.ConeGeometry(r, 1.9, 9), pineMat);
+      co.position.y = y; co.castShadow = true; t.add(co);
+    });
+    colliders.push({ minX: x - 0.3 * s, maxX: x + 0.3 * s, minZ: z - 0.3 * s, maxZ: z + 0.3 * s, maxY: 3 });
+  };
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 44; i++) {
+    const x = (rnd() - 0.5) * 42, z = -6.5 - rnd() * 22;
+    if (Math.abs(x) < 3.1) continue;
+    if (z > -8.5 && Math.abs(x) < 5.5) continue;
+    pine(x, z, 0.8 + rnd() * 0.9);
+  }
+  // crête lointaine, lune, étoiles (hors brouillard)
+  const ridgeTex = canvasTex(512, (gg, s) => {
+    gg.fillStyle = '#0d1526'; gg.fillRect(0, 0, s, s);
+    gg.fillStyle = '#080e1c';
+    gg.beginPath(); gg.moveTo(0, s);
+    for (let x = 0; x <= s; x += 32) gg.lineTo(x, s * 0.55 + Math.sin(x * 0.05) * 26 + (x % 96) * 0.14);
+    gg.lineTo(s, s); gg.closePath(); gg.fill();
+  });
+  const ridge = new THREE.Mesh(new THREE.PlaneGeometry(90, 13),
+    new THREE.MeshBasicMaterial({ map: ridgeTex, fog: false }));
+  ridge.position.set(0, 5.2, -34); g.add(ridge);
+  const moonDisc = new THREE.Mesh(new THREE.CircleGeometry(1.9, 26),
+    new THREE.MeshBasicMaterial({ color: 0xe6eefc, fog: false }));
+  moonDisc.position.set(13, 14.5, -32); moonDisc.lookAt(0, 1.5, 0); g.add(moonDisc);
+  const starGeo = new THREE.BufferGeometry();
+  const sp = new Float32Array(240 * 3);
+  for (let i = 0; i < 240; i++) {
+    const az = rnd() * Math.PI * 2, el = 0.12 + rnd() * 1.2, R = 42;
+    sp[i * 3] = Math.cos(el) * Math.sin(az) * R;
+    sp[i * 3 + 1] = 3 + Math.sin(el) * R * 0.5;
+    sp[i * 3 + 2] = -Math.abs(Math.cos(el) * Math.cos(az) * R) - 4;
+  }
+  starGeo.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+  g.add(new THREE.Points(starGeo, new THREE.PointsMaterial({
+    color: 0xcfd8ee, size: 1.6, sizeAttenuation: false, fog: false,
+    transparent: true, opacity: 0.85 })));
+  // façade extérieure du garage
+  const fac = toon(0x212a3c, { roughness: 0.95 });
+  const sideW2 = (12 - 3.5) / 2;
+  box(sideW2, 3.6, 0.2, fac, -(1.75 + sideW2 / 2), 1.8, -4.62);
+  box(sideW2, 3.6, 0.2, fac, (1.75 + sideW2 / 2), 1.8, -4.62);
+  box(3.5, 0.6, 0.2, fac, 0, 3.32, -4.62);
+  box(0.2, 3.6, 9.7, fac, -6.15, 1.8, 0);
+  box(0.2, 3.6, 9.7, fac, 6.15, 1.8, 0);
+  box(12.7, 3.6, 0.2, fac, 0, 1.8, 4.64);
+  box(12.9, 0.28, 10.1, fac, 0, 3.76, 0);
+  // lampe de seuil au-dessus de la porte, dehors
+  const porch = new THREE.PointLight(0xffa25c, 6, 8, 2);
+  porch.position.set(0, 3.35, -5.1); scene.add(porch);
+  const porchBulb = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), M.bulb.clone());
+  porchBulb.position.set(0, 3.3, -4.78); scene.add(porchBulb);
+}
+buildOutside();
+
+// transformations monde ↔ local du van
+function vanToLocal(wx, wz, out) {
+  const dx = wx - vanState.x, dz = wz - vanState.z;
+  const c = Math.cos(vanState.yaw), sn = Math.sin(vanState.yaw);
+  out.x = c * dx - sn * dz; out.z = sn * dx + c * dz; return out;
+}
+function vanToWorld(lx, lz, out) {
+  const c = Math.cos(vanState.yaw), sn = Math.sin(vanState.yaw);
+  out.x = vanState.x + c * lx + sn * lz; out.z = vanState.z - sn * lx + c * lz; return out;
+}
+function syncVan() {
+  hirondelle.group.position.set(vanState.x, 0, vanState.z);
+  hirondelle.group.rotation.y = vanState.yaw;
+}
+syncVan();
+
+/* ---------------------------------------------------------- */
 /* 7. Lumières                                                 */
 /* ---------------------------------------------------------- */
-const hemi = new THREE.HemisphereLight(0x223052, 0x100c09, 0.22);
+const hemi = new THREE.HemisphereLight(0x223052, 0x100c09, 0.3);
 scene.add(hemi);
 // ampoule centrale sous abat-jour — cône chaud vers le sol
-const keyLight = new THREE.SpotLight(0xff9440, 2.0, 13, 1.0, 0.6, 1.3);
+const keyLight = new THREE.SpotLight(0xff9440, 60, 16, 1.02, 0.62, 2);
 keyLight.position.copy(anchors.lampPos);
 keyLight.target.position.set(0.15, 0, -0.2);
 keyLight.castShadow = true;
-keyLight.shadow.mapSize.set(1024, 1024);
+keyLight.shadow.mapSize.set(2048, 2048);
 keyLight.shadow.bias = -0.004;
 keyLight.shadow.camera.near = 0.1; keyLight.shadow.camera.far = 12;
 scene.add(keyLight, keyLight.target);
 // second luminaire au-dessus de l'établi (cône chaud, sans ombre portée)
-const keyLight2 = new THREE.SpotLight(0xff9440, 1.7, 12, 1.0, 0.6, 1.3);
+const keyLight2 = new THREE.SpotLight(0xff9440, 48, 14, 1.0, 0.62, 2);
 keyLight2.position.copy(anchors.lamp2Pos);
 keyLight2.target.position.set(-1.2, 0, 2.6);
 scene.add(keyLight2, keyLight2.target);
 // halo chaud résiduel (sans ombre)
-const keyFill = new THREE.PointLight(0xff9440, 0.4, 11, 1.8);
+const keyFill = new THREE.PointLight(0xff9440, 8, 12, 2);
 keyFill.position.set(0, ROOM.h - 1.2, 0.6);
 scene.add(keyFill);
 // lampe d'établi
-const benchLight = new THREE.PointLight(0xffc27d, 0.7, 4.5, 1.8);
+const benchLight = new THREE.PointLight(0xffc27d, 7, 6, 2);
 benchLight.position.copy(anchors.benchLampPos);
 scene.add(benchLight);
 // lune par le bandeau vitré — contre-jour froid
-const moon = new THREE.DirectionalLight(PAL.moon, 0.38);
+const moon = new THREE.DirectionalLight(PAL.moon, 0.5);
 moon.position.set(ROOM.w / 2 + 3, 4.6, -1.2);
 moon.target.position.set(-0.5, 0.5, 0.4);
 scene.add(moon, moon.target);
@@ -630,23 +806,8 @@ function limb(r1, r2, len, mat, parent) {
   cap2.castShadow = true; g.add(cap2);
   return g;
 }
-function outline(mesh, k) {
-  const o = new THREE.Mesh(mesh.geometry, M.outline);
-  o.scale.copy(mesh.scale).multiplyScalar(k);
-  o.position.copy(mesh.position); o.rotation.copy(mesh.rotation);
-  mesh.parent.add(o);
-  return o;
-}
-function outlineTree(root) {
-  const list = [];
-  root.traverse(o => { if (o.isMesh && o.material !== M.eye && o.material !== M.outline) list.push(o); });
-  list.forEach(m => {
-    if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
-    const r = m.geometry.boundingSphere.radius * Math.max(m.scale.x, m.scale.y, m.scale.z);
-    if (r < 0.045) return;                      // pas de contour sur les micro-détails
-    outline(m, r > 0.14 ? 1.05 : 1.08);
-  });
-}
+// rendu réaliste : plus de contours encrés
+function outlineTree() {}
 
 function buildCharacter() {
   const root = new THREE.Group(); scene.add(root);
@@ -779,7 +940,7 @@ const marcel = buildCharacter();
 /* ---------------------------------------------------------- */
 /* 8bis. Objets, interactions, boucle de jeu                   */
 /* ---------------------------------------------------------- */
-const gameState = { tools: 0, toolsTotal: 5, doorUnlocked: false, doorOpen: false, lightsOn: true };
+const gameState = { tools: 0, toolsTotal: 1, doorUnlocked: false, doorOpen: false, lightsOn: true };
 const doorState = { y: 0, shake: 0, dustT: 0, done: false };
 let vanBlink = 0, toastTimer = 0, entered = false;
 
@@ -798,7 +959,7 @@ bulbHalo.position.copy(anchors.lampPos); bulbHalo.position.y -= 0.02;
 const bulbHalo2 = softSprite(0xffb066, 0.9, 0.3);
 bulbHalo2.position.copy(anchors.lamp2Pos); bulbHalo2.position.y -= 0.02;
 // lueur froide au pied de la porte (montera quand elle s'ouvre)
-const doorGlow = new THREE.PointLight(0x7fa8ff, 0, 7, 1.8);
+const doorGlow = new THREE.PointLight(0x7fa8ff, 0, 10, 2);
 doorGlow.position.set(0, 0.8, -ROOM.d / 2 + 0.6); scene.add(doorGlow);
 
 // bouffées de poussière (pas de course, porte)
@@ -817,11 +978,7 @@ function spawnPuff(x, y, z, vx, vz) {
 
 // --- les cinq clés égarées ---
 const toolSpots = [
-  { x: -5.5, y: 0.015, z: 2.35 },     // au pied des pneus
-  { x: -1.0, y: 0.947, z: 4.12 },     // sur l'établi
-  { x: 5.52, y: 1.012, z: 0.7 },      // sur la servante
-  { x: -2.2, y: 0.355, z: -3.98 },    // sur la caisse
-  { x: -2.55, y: 0.62, z: -3.04 },    // sur le pare-chocs de L'Hirondelle
+  { x: -1.0, y: 0.947, z: 4.12 },     // la clé de contact, oubliée sur l'établi
 ];
 const tools = toolSpots.map((p, i) => {
   const g = new THREE.Group();
@@ -839,11 +996,7 @@ const tools = toolSpots.map((p, i) => {
   return { g, mat, glint, taken: false, i };
 });
 const TOOL_LINES = [
-  'Une. Elle traînait là depuis des semaines.',
-  'Deux. Le compte remonte.',
-  'Trois. La moitié du chemin.',
-  'Quatre. Plus qu’une.',
-  'Cinq. Le bouton de la porte n’attend plus que toi.',
+  'La clé de contact. Le bouton de la porte n’attend plus que toi.',
 ];
 
 // --- registre des interactions ---
@@ -867,7 +1020,7 @@ addInteract({   // le bouton de commande de la porte
   action: () => {
     if (!gameState.doorUnlocked) {
       doorState.shake = 0.5; thumpSound();
-      toast('Le bouton refuse. Où sont passées mes clés ?');
+      toast('Le bouton refuse. Où est passée ma clé ?');
     } else {
       gameState.doorOpen = !gameState.doorOpen;
       clickSound(); rumbleSound();
@@ -887,13 +1040,20 @@ addInteract({   // la radio
   label: () => audio.musicOn ? 'Éteindre la radio' : 'Allumer la radio',
   action: () => { audio.toggleMusic(); toast(audio.musicOn ? 'Un peu de musique.' : 'Silence, alors.'); },
 });
-addInteract({   // le camping-car
-  x: -1.55, z: -0.35, r: 1.5,
-  label: () => 'L’Hirondelle',
+addInteract({   // devant la porte latérale du van
+  pos: () => vanToWorld(1.25, 0.8, _w), r: 1.3,
+  label: () => 'L’Hirondelle — monter à bord',
+  enabled: () => !player.onVan && !vanState.driving,
   action: () => {
     vanBlink = 1.4; clickSound();
-    toast('Encore quelques réparations, et ce sera la route.');
+    toast('La porte est ouverte. Monte, fais comme chez toi.');
   },
+});
+addInteract({   // le volant
+  pos: () => vanToWorld(VAN.seat.x + 0.4, VAN.seat.z + 0.35, _w), r: 0.95,
+  label: () => 'Prendre le volant',
+  enabled: () => player.onVan && !vanState.driving,
+  action: () => enterDrive(),
 });
 addInteract({   // l'affiche
   x: ROOM.w / 2 - 0.15, z: 1.6, r: 1.25,
@@ -931,19 +1091,21 @@ function updateObjective() {
   document.getElementById('objN').textContent = gameState.tools;
   if (gameState.tools >= gameState.toolsTotal) {
     gameState.doorUnlocked = true;
-    document.getElementById('objective').innerHTML = 'Clés retrouvées — <b>le bouton, près de la porte</b>';
+    document.getElementById('objective').innerHTML = 'Clé en poche — <b>le bouton, puis en route</b>';
   }
 }
 
 function updateInteract() {
-  let best = null, bd = 1e9;
+  let best = null, bd = 1e9, bx = 0, bz = 0;
   for (const o of interactables) {
     if (o.enabled && !o.enabled()) continue;
-    const d = Math.hypot(o.x - player.pos.x, o.z - player.pos.z);
-    if (d < o.r && d < bd) { bd = d; best = o; }
+    let px = o.x, pz = o.z;
+    if (o.pos) { const p = o.pos(); px = p.x; pz = p.z; }
+    const d = Math.hypot(px - player.pos.x, pz - player.pos.z);
+    if (d < o.r && d < bd) { bd = d; best = o; bx = px; bz = pz; }
   }
   interact.nearest = best;
-  if (best) interact.relYaw = wrapPi(Math.atan2(best.x - player.pos.x, best.z - player.pos.z) - player.yaw);
+  if (best) interact.relYaw = wrapPi(Math.atan2(bx - player.pos.x, bz - player.pos.z) - player.yaw);
   const show = best && !anim.action;
   promptEl.style.opacity = show ? 1 : 0;
   btnE.style.opacity = show ? 1 : 0.35;
@@ -996,7 +1158,10 @@ if (touch.on) {
     }
   };
   addEventListener('touchend', release); addEventListener('touchcancel', release);
-  btnE.addEventListener('touchstart', e => { e.preventDefault(); tryInteract(); }, { passive: false });
+  btnE.addEventListener('touchstart', e => {
+    e.preventDefault();
+    if (vanState.driving) exitDrive(); else tryInteract();
+  }, { passive: false });
   btnRun.addEventListener('touchstart', e => {
     e.preventDefault(); touch.run = !touch.run;
     btnRun.style.borderColor = touch.run ? '#ffb066' : 'rgba(232,220,200,.3)';
@@ -1060,8 +1225,29 @@ function solveLeg(S, sx, target, footPitch) {
   B['foot' + S].quaternion.copy(_q).multiply(_q2);
 }
 
+function seatedPose(t, dt) {
+  const B = marcel.B;
+  B.hips.position.set(0, 0.52, 0.06);
+  B.hips.rotation.set(-0.06, 0, 0);
+  B.spine.rotation.set(0.06 + Math.sin(t * 1.4) * 0.012, 0, 0);
+  B.chest.rotation.set(0.05, 0, 0);
+  solveLeg('L', 1, _v3.set(0.16, 0.11, 0.44), 0);
+  solveLeg('R', -1, _v3.set(-0.16, 0.11, 0.44), 0);
+  B.shoulderL.rotation.set(-0.95, 0, 0.12);
+  B.shoulderR.rotation.set(-0.95, 0, -0.12);
+  B.foreL.rotation.x = -0.55; B.foreR.rotation.x = -0.55;
+  B.handL.rotation.x = -0.2; B.handR.rotation.x = -0.2;
+  B.neck.rotation.set(0, 0, 0); B.head.rotation.set(0.02, 0, 0);
+  anim.blinkT -= dt;
+  if (anim.blinkT <= 0) { anim.blinkT = 1.8 + Math.random() * 3.4; anim.blink = 1; }
+  anim.blink = Math.max(0, anim.blink - dt * 9);
+  const es = 1 - Math.min(1, anim.blink * 1.6) * 0.88;
+  marcel.eyeL.scale.y = 1.35 * es; marcel.eyeR.scale.y = 1.35 * es;
+}
+
 function animate(dt, t, speed, yawRate, accelFwd) {
   const B = marcel.B;
+  if (vanState.driving) { seatedPose(t, dt); return; }
   const fg = window.__atelier && window.__atelier.forceGait;   // pose figée (outillage)
   if (fg) { speed = fg.speed; yawRate = 0; accelFwd = 0; }
   const m = anim.moveBlend = fg ? sstep(0.08, 0.6, speed)
@@ -1177,7 +1363,7 @@ addEventListener('keydown', e => {
   if (e.repeat) return;
   keys[e.code] = true;
   if (e.code === 'KeyM') audio.toggle();
-  if (e.code === 'KeyE') tryInteract();
+  if (e.code === 'KeyE') { if (vanState.driving) exitDrive(); else tryInteract(); }
 });
 addEventListener('keyup', e => keys[e.code] = false);
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
@@ -1200,41 +1386,74 @@ const player = {
   yaw: Math.PI,            // face à la porte du garage
   yawRate: 0,
   speed: 0,
+  groundY: 0, onVan: false,
 };
+
+// murs du garage en colliders (le passage de la porte s'ouvre avec elle)
+const doorBlock = { minX: -1.79, maxX: 1.79, minZ: -4.74, maxZ: -4.4, maxY: 3.3, active: true };
+const vanCamCol = { minX: 0, maxX: 0, minZ: 0, maxZ: 0, maxY: 2.6, active: true, noBody: true };
+colliders.push(
+  { minX: -6.34, maxX: -5.97, minZ: -4.78, maxZ: 4.78, maxY: 4.2 },   // ouest
+  { minX: 5.97, maxX: 6.34, minZ: -4.78, maxZ: 4.78, maxY: 4.2 },     // est
+  { minX: -6.34, maxX: 6.34, minZ: 4.47, maxZ: 4.82, maxY: 4.2 },     // sud
+  { minX: -6.34, maxX: -1.79, minZ: -4.82, maxZ: -4.47, maxY: 4.2 },  // nord, gauche de la porte
+  { minX: 1.79, maxX: 6.34, minZ: -4.82, maxZ: -4.47, maxY: 4.2 },    // nord, droite
+  doorBlock, vanCamCol,
+);
+
+const WORLD = { xMin: -22, xMax: 22, zMin: -30, zMax: 8 };
+const _l = { x: 0, z: 0 }, _w = { x: 0, z: 0 };
+
+function resolveCircle(pos, r, minX, maxX, minZ, maxZ) {
+  const nx = clamp(pos.x, minX, maxX), nz = clamp(pos.z, minZ, maxZ);
+  const dx = pos.x - nx, dz = pos.z - nz;
+  const d2 = dx * dx + dz * dz;
+  if (d2 >= r * r) return;
+  if (d2 > 1e-8) {
+    const d = Math.sqrt(d2), push = (r - d) / d;
+    pos.x += dx * push; pos.z += dz * push;
+  } else {
+    // au cœur de la boîte : expulser par la face la plus proche valide
+    const outs = [
+      { p: maxX + r - pos.x, ax: 'x', v: maxX + r }, { p: pos.x - (minX - r), ax: 'x', v: minX - r },
+      { p: maxZ + r - pos.z, ax: 'z', v: maxZ + r }, { p: pos.z - (minZ - r), ax: 'z', v: minZ - r },
+    ].sort((A, B2) => A.p - B2.p);
+    const ok = outs.find(o => o.ax === 'x'
+      ? (o.v >= WORLD.xMin && o.v <= WORLD.xMax) : (o.v >= WORLD.zMin && o.v <= WORLD.zMax)) || outs[0];
+    if (ok.ax === 'x') pos.x = ok.v; else pos.z = ok.v;
+  }
+}
 
 function collide(pos) {
   const r = CHAR.radius;
-  // murs
-  pos.x = clamp(pos.x, -ROOM.w / 2 + r + 0.05, ROOM.w / 2 - r - 0.05);
-  pos.z = clamp(pos.z, -ROOM.d / 2 + r + 0.12, ROOM.d / 2 - r - 0.05);
-  // obstacles (AABB, glissement le long du plus petit recouvrement)
+  pos.x = clamp(pos.x, WORLD.xMin, WORLD.xMax);
+  pos.z = clamp(pos.z, WORLD.zMin, WORLD.zMax);
+  // obstacles et murs du monde
   for (const c of colliders) {
-    const nx = clamp(pos.x, c.minX, c.maxX), nz = clamp(pos.z, c.minZ, c.maxZ);
-    const dx = pos.x - nx, dz = pos.z - nz;
-    const d2 = dx * dx + dz * dz;
-    if (d2 < r * r) {
-      if (d2 > 1e-8) {
-        const d = Math.sqrt(d2), push = (r - d) / d;
-        pos.x += dx * push; pos.z += dz * push;
-      } else {
-        // au cœur de la boîte : expulser par la face la plus proche qui reste DANS la pièce
-        const xMin = -ROOM.w / 2 + r + 0.05, xMax = ROOM.w / 2 - r - 0.05;
-        const zMin = -ROOM.d / 2 + r + 0.12, zMax = ROOM.d / 2 - r - 0.05;
-        const outs = [
-          { p: c.maxX + r - pos.x, ax: 'x', v: c.maxX + r }, { p: pos.x - (c.minX - r), ax: 'x', v: c.minX - r },
-          { p: c.maxZ + r - pos.z, ax: 'z', v: c.maxZ + r }, { p: pos.z - (c.minZ - r), ax: 'z', v: c.minZ - r },
-        ].sort((A, B2) => A.p - B2.p);
-        const ok = outs.find(o => o.ax === 'x' ? (o.v >= xMin && o.v <= xMax) : (o.v >= zMin && o.v <= zMax)) || outs[0];
-        if (ok.ax === 'x') pos.x = ok.v; else pos.z = ok.v;
-      }
-    }
+    if (c.active === false || c.noBody) continue;
+    resolveCircle(pos, r, c.minX, c.maxX, c.minZ, c.maxZ);
   }
-  // re-borner aux murs : une expulsion d'obstacle ne doit jamais traverser la pièce
-  pos.x = clamp(pos.x, -ROOM.w / 2 + r + 0.05, ROOM.w / 2 - r - 0.05);
-  pos.z = clamp(pos.z, -ROOM.d / 2 + r + 0.12, ROOM.d / 2 - r - 0.05);
+  // coque et mobilier du van, dans son repère local (l'intérieur voyage avec lui)
+  vanToLocal(pos.x, pos.z, _l);
+  if (Math.abs(_l.x) < 1.5 && Math.abs(_l.z) < 3.0) {
+    for (const c of VAN.cols) resolveCircle(_l, r, c.x0, c.x1, c.z0, c.z1);
+    vanToWorld(_l.x, _l.z, _w);
+    pos.x = _w.x; pos.z = _w.z;
+  }
 }
 
 function updatePlayer(dt) {
+  if (vanState.driving) {
+    // au volant : Marcel est porté par L'Hirondelle
+    vanToWorld(VAN.seat.x, VAN.seat.z, _w);
+    player.pos.set(_w.x, VAN.floorY, _w.z);
+    player.vel.set(0, 0, 0); player.speed = 0; player.yawRate = 0;
+    player.yaw = vanState.yaw + Math.PI;
+    player.groundY = VAN.floorY; player.onVan = true;
+    marcel.root.position.copy(player.pos);
+    marcel.root.rotation.y = player.yaw;
+    return 0;
+  }
   let axis = keyAxis(), mag = 1;
   if (touch.on && touch.stickId !== null && (touch.ax || touch.az)) {
     mag = Math.min(1, Math.hypot(touch.ax, touch.az));
@@ -1287,9 +1506,76 @@ function updatePlayer(dt) {
   const fwdX = Math.sin(player.yaw), fwdZ = Math.cos(player.yaw);
   const accelFwd = ((player.vel.x - prevVel.x) * fwdX + (player.vel.z - prevVel.z) * fwdZ) / Math.max(dt, 1e-4);
 
+  // hauteur du sol : plancher du van, marchepied, ou bitume
+  vanToLocal(player.pos.x, player.pos.z, _l);
+  player.onVan = Math.abs(_l.x) < VAN.innerX && Math.abs(_l.z) < VAN.innerZ;
+  const onStep = !player.onVan && _l.x > 0.86 && _l.x < 1.48 && _l.z > 0.3 && _l.z < 1.3;
+  player.groundY = damp(player.groundY, player.onVan ? VAN.floorY : (onStep ? 0.2 : 0), 11, dt);
+  player.pos.y = player.groundY;
+
   marcel.root.position.copy(player.pos);
   marcel.root.rotation.y = player.yaw;
   return accelFwd;
+}
+
+/* --- conduite de L'Hirondelle --- */
+const vanCorners = [[-1.06, -2.56], [1.06, -2.56], [-1.06, 2.56], [1.06, 2.56],
+  [-1.06, 0], [1.06, 0], [0, -2.56], [0, 2.56]];
+let camPrevDist = CAM.dist0;
+function updateVan(dt) {
+  if (vanState.driving) {
+    let axis = keyAxis();
+    if (touch.on && touch.stickId !== null && (touch.ax || touch.az)) {
+      const m = Math.hypot(touch.ax, touch.az);
+      if (m > 0.05) axis = { x: touch.ax / m, z: touch.az / m };
+    }
+    const throttle = axis.z, steer = axis.x;
+    vanState.speed += throttle * 3.4 * dt;
+    vanState.speed = clamp(vanState.speed, -2.2, 6.0);
+    if (!throttle) vanState.speed *= Math.max(0, 1 - 2.2 * dt);
+    if (Math.abs(vanState.speed) > 0.03) {
+      vanState.yaw -= steer * dt * 1.15 * clamp(Math.abs(vanState.speed) / 2.0, 0, 1) * Math.sign(vanState.speed);
+      const nx = vanState.x - Math.sin(vanState.yaw) * vanState.speed * dt;
+      const nz = vanState.z - Math.cos(vanState.yaw) * vanState.speed * dt;
+      const c = Math.cos(vanState.yaw), sn = Math.sin(vanState.yaw);
+      let blocked = false;
+      for (const [cx, cz] of vanCorners) {
+        const wx = nx + c * cx + sn * cz, wz = nz - sn * cx + c * cz;
+        if (wx < WORLD.xMin + 1 || wx > WORLD.xMax - 1 || wz < WORLD.zMin + 1 || wz > WORLD.zMax - 1) { blocked = true; break; }
+        for (const cc of colliders) {
+          if (cc.active === false || cc.noBody) continue;
+          if (wx > cc.minX - 0.05 && wx < cc.maxX + 0.05 && wz > cc.minZ - 0.05 && wz < cc.maxZ + 0.05) { blocked = true; break; }
+        }
+        if (blocked) break;
+      }
+      if (blocked) {
+        if (Math.abs(vanState.speed) > 0.6) thumpSound();
+        vanState.speed *= -0.15;
+      } else { vanState.x = nx; vanState.z = nz; }
+    }
+  } else {
+    vanState.speed *= Math.max(0, 1 - 5 * dt);
+  }
+  syncVan();
+}
+function enterDrive() {
+  vanState.driving = true;
+  camPrevDist = camCtl.distTarget;
+  camCtl.distTarget = 7.5;
+  engineStart();
+  if (!vanState.driveHint) {
+    vanState.driveHint = true;
+    toast('Z/S — rouler · Q/D — tourner · E — couper le moteur', 6.5);
+  }
+}
+function exitDrive() {
+  vanState.driving = false;
+  vanState.speed = 0;
+  engineStop();
+  camCtl.distTarget = camPrevDist;
+  vanToWorld(0.35, -1.4, _w);            // debout dans le couloir de la cabine
+  player.pos.set(_w.x, VAN.floorY, _w.z);
+  player.yaw = vanState.yaw + Math.PI;
 }
 
 /* ---------------------------------------------------------- */
@@ -1337,23 +1623,22 @@ const camCtl = {
   }, { passive: true });
 }
 
-// distance max le long d'un rayon avant de toucher murs / obstacles
+// distance max le long d'un rayon avant de toucher sol / obstacles
 function cameraRayLimit(origin, dir, want) {
   let tMax = want;
-  // rester dans la pièce
-  const walls = [
-    { n: 1, o: -ROOM.w / 2 + CAM.margin, c: 'x' }, { n: -1, o: ROOM.w / 2 - CAM.margin, c: 'x' },
-    { n: 1, o: -ROOM.d / 2 + CAM.margin, c: 'z' }, { n: -1, o: ROOM.d / 2 - CAM.margin, c: 'z' },
-    { n: 1, o: 0.14, c: 'y' }, { n: -1, o: ROOM.h - CAM.margin, c: 'y' },
-  ];
-  for (const wl of walls) {
-    const p = origin[wl.c], v = dir[wl.c];
-    if (Math.abs(v) < 1e-6) continue;
-    const t = (wl.o - p) / v;
-    if (t > 0 && ((wl.n === 1 && v < 0) || (wl.n === -1 && v > 0))) tMax = Math.min(tMax, t);
+  // ne jamais passer sous le sol
+  if (dir.y < -1e-6) {
+    const t = (0.14 - origin.y) / dir.y;
+    if (t > 0) tMax = Math.min(tMax, t);
+  }
+  // ni à travers le plafond du garage quand on est dedans
+  if (dir.y > 1e-6 && origin.y < 3.4 && Math.abs(origin.x) < 6 && Math.abs(origin.z) < 4.5) {
+    const t = (3.42 - origin.y) / dir.y;
+    if (t > 0) tMax = Math.min(tMax, t);
   }
   // obstacles (gonflés) — méthode des « slabs »
   for (const c of colliders) {
+    if (c.active === false) continue;
     const g = 0.14;
     const mn = [c.minX - g, -1, c.minZ - g], mx = [c.maxX + g, c.maxY + g, c.maxZ + g];
     const o = [origin.x, origin.y, origin.z], v = [dir.x, dir.y, dir.z];
@@ -1376,7 +1661,7 @@ function updateCamera(dt) {
   if (_v.length() > 0.34) _v.setLength(0.34);
   const tx = player.pos.x + _v.x, tz = player.pos.z + _v.z;
   camCtl.target.x = damp(camCtl.target.x, tx, 7, dt);
-  camCtl.target.y = damp(camCtl.target.y, player.pos.y + CAM.targetH, 7, dt);
+  camCtl.target.y = damp(camCtl.target.y, player.pos.y + (vanState.driving ? 2.3 : CAM.targetH), 7, dt);
   camCtl.target.z = damp(camCtl.target.z, tz, 7, dt);
 
   const cp = Math.cos(camCtl.pitch), sp = Math.sin(camCtl.pitch);
@@ -1452,12 +1737,7 @@ const audio = {
       this.master.gain.value = this.muted ? 0 : 0.5;   // respecter un M pressé avant le clic
       this.master.connect(this.ctx.destination);
       if (this.ctx.state === 'suspended') this.ctx.resume();
-      // ronronnement électrique très bas
-      const hum = this.ctx.createOscillator(); hum.type = 'sine'; hum.frequency.value = 100;
-      const hum2 = this.ctx.createOscillator(); hum2.type = 'sine'; hum2.frequency.value = 199;
-      const hg = this.ctx.createGain(); hg.gain.value = 0.012;
-      hum.connect(hg); hum2.connect(hg); hg.connect(this.master);
-      hum.start(); hum2.start();
+      // (pas de nappe continue : l'atelier est silencieux, seuls les gestes sonnent)
     } catch (e) { /* pas de son */ }
   },
   toggle() {
@@ -1502,6 +1782,27 @@ function rumbleSound() {
     g.gain.linearRampToValueAtTime(0.0001, t + 2.6);
     o.connect(g); g.connect(audio.master); o.start(t); o.stop(t + 2.7);
   });
+}
+let engineNodes = null;
+function engineStart() {
+  if (!audio.ctx || engineNodes) return;
+  const c = audio.ctx;
+  const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 52;
+  const o2 = c.createOscillator(); o2.type = 'square'; o2.frequency.value = 26;
+  const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 240;
+  const g = c.createGain(); g.gain.value = 0.0001;
+  o.connect(f); o2.connect(f); f.connect(g); g.connect(audio.master);
+  o.start(); o2.start();
+  g.gain.linearRampToValueAtTime(0.05, c.currentTime + 0.5);
+  engineNodes = { o, o2, g };
+}
+function engineStop() {
+  if (!engineNodes) return;
+  const { o, o2, g } = engineNodes, c = audio.ctx;
+  g.gain.setValueAtTime(g.gain.value, c.currentTime);
+  g.gain.linearRampToValueAtTime(0.0001, c.currentTime + 0.5);
+  o.stop(c.currentTime + 0.6); o2.stop(c.currentTime + 0.6);
+  engineNodes = null;
 }
 function stepSound(vol) {
   if (!audio.ctx || audio.muted) return;
@@ -1551,6 +1852,7 @@ function tick(now) {
   }
   updateInteract();
 
+  updateVan(dt);
   const accelFwd = updatePlayer(dt);
   animate(dt, elapsed, player.speed, player.yawRate, accelFwd);
   updateCamera(dt);
@@ -1581,7 +1883,7 @@ function tick(now) {
     doorState.y = clamp(doorState.y, 0, 1);
     const e = smooth(doorState.y);
     anchors.door.position.y = e * 2.65;
-    doorGlow.intensity = e * 1.5;
+    doorGlow.intensity = e * 14;
     doorState.dustT -= dt;
     if (doorState.dustT <= 0 && doorState.y > 0.03 && doorState.y < 0.92) {
       doorState.dustT = 0.12;
@@ -1589,16 +1891,30 @@ function tick(now) {
     }
     if (doorState.y >= 1 && !doorState.done) {
       doorState.done = true;
-      anchors.vanLenses.forEach(l => l.color.setHex(0xffedc0));   // L'Hirondelle veille
-      toast('À suivre — LA ROUTE.', 7);
+      toast('La nuit t’attend. Prends le volant.', 7);
     }
   }
-  // appel de phares de L'Hirondelle
-  if (vanBlink > 0) {
-    vanBlink -= dt;
-    const on = Math.sin(vanBlink * 13) > 0;
-    anchors.vanLenses.forEach(l => l.color.setHex(on ? 0xffedc0 : 0x6b5c40));
-    if (vanBlink <= 0 && !doorState.done) anchors.vanLenses.forEach(l => l.color.setHex(0x6b5c40));
+  doorBlock.active = doorState.y < 0.9;
+  // phares de L'Hirondelle : appel, ou pleins feux en conduite
+  const lensOn = vanState.driving || (vanBlink > 0 && Math.sin(vanBlink * 13) > 0);
+  hirondelle.lenses.forEach(l => {
+    l.color.setHex(lensOn ? 0xffedc0 : 0x6b5c40);
+    l.emissive.setHex(lensOn ? 0xffc36a : 0x241c10);
+  });
+  hirondelle.beams.forEach(b => b.intensity = damp(b.intensity, lensOn ? 260 : 0, 8, dt));
+  if (vanBlink > 0) vanBlink -= dt;
+  // collider caméra du van (approximation englobante, inactif quand on est à bord)
+  {
+    const cA = Math.abs(Math.cos(vanState.yaw)), sA = Math.abs(Math.sin(vanState.yaw));
+    const hx = cA * 1.05 + sA * 2.55, hz = sA * 1.05 + cA * 2.55;
+    vanCamCol.minX = vanState.x - hx; vanCamCol.maxX = vanState.x + hx;
+    vanCamCol.minZ = vanState.z - hz; vanCamCol.maxZ = vanState.z + hz;
+    vanCamCol.active = !player.onVan && !vanState.driving;
+  }
+  // régime moteur
+  if (engineNodes) {
+    engineNodes.o.frequency.value = 50 + Math.abs(vanState.speed) * 13;
+    engineNodes.o2.frequency.value = 25 + Math.abs(vanState.speed) * 6.5;
   }
   // LED du bouton de porte
   anchors.doorLamp.color.setHex(gameState.doorUnlocked ? 0x59d68a : 0x552222);
@@ -1618,15 +1934,15 @@ function tick(now) {
   pa.needsUpdate = true;
   // lumières : état de l'interrupteur + scintillement à peine perceptible
   const flick = Math.sin(elapsed * 13) * 0.014 + noise1(elapsed * 3.1) * 0.012;
-  keyLight.intensity = damp(keyLight.intensity, gameState.lightsOn ? 2.1 + flick : 0, 5, dt);
-  keyLight2.intensity = damp(keyLight2.intensity, gameState.lightsOn ? 1.7 + flick : 0, 5, dt);
-  keyFill.intensity = damp(keyFill.intensity, gameState.lightsOn ? 0.4 : 0.02, 5, dt);
-  hemi.intensity = damp(hemi.intensity, gameState.lightsOn ? 0.22 : 0.1, 5, dt);
-  moon.intensity = damp(moon.intensity, gameState.lightsOn ? 0.38 : 0.6, 5, dt);
+  keyLight.intensity = damp(keyLight.intensity, gameState.lightsOn ? 60 + flick * 16 : 0, 5, dt);
+  keyLight2.intensity = damp(keyLight2.intensity, gameState.lightsOn ? 48 + flick * 14 : 0, 5, dt);
+  keyFill.intensity = damp(keyFill.intensity, gameState.lightsOn ? 8 : 0.4, 5, dt);
+  hemi.intensity = damp(hemi.intensity, gameState.lightsOn ? 0.3 : 0.13, 5, dt);
+  moon.intensity = damp(moon.intensity, gameState.lightsOn ? 0.5 : 0.85, 5, dt);
   const bulbCol = gameState.lightsOn ? 0xffc078 : 0x2b2b36;
   anchors.bulb.material.color.setHex(bulbCol);
   anchors.bulb2.material.color.setHex(bulbCol);
-  const haloOp = 0.3 * Math.max(0, keyLight.intensity / 2.1);
+  const haloOp = 0.3 * Math.max(0, keyLight.intensity / 60);
   bulbHalo.material.opacity = haloOp; bulbHalo2.material.opacity = haloOp;
 
   renderer.render(scene, camera);
@@ -1635,7 +1951,7 @@ requestAnimationFrame(tick);
 
 // petites poignées pour l'outillage (captures, tests)
 window.__atelier = {
-  player, camCtl, anim, marcel, renderer, gameState, tools, interact, tryInteract, toolSpots,
+  player, camCtl, anim, marcel, renderer, gameState, tools, interact, tryInteract, toolSpots, vanState, hirondelle, scene,
   setCam(yaw, pitch, dist) { camCtl.yaw = yaw; camCtl.pitch = pitch; camCtl.distTarget = dist; camCtl.distSmooth = dist; camCtl.dist = dist; },
   warp(x, z, yaw) { player.pos.set(x, 0, z); if (yaw !== undefined) player.yaw = yaw; },
   press(code, v) { keys[code] = v; },

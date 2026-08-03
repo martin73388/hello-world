@@ -3,14 +3,17 @@
 Un jeu construit pas à pas. **Prologue : le garage.**
 
 Marcel, mécanicien de nuit, dans son grand atelier à minuit et quart —
-avec **L'Hirondelle**, son camping-car, garé face à la porte. Cinq clés se
-sont égarées dans l'atelier : retrouve-les, puis appuie sur **le bouton du
-mur** pour ouvrir la porte du garage sur la nuit.
+avec **L'Hirondelle**, son camping-car. Retrouve **la clé de contact**
+égarée, appuie sur **le bouton du mur** pour ouvrir la porte, monte à bord
+**sans coupure** (la porte latérale est ouverte), prends le volant et
+conduis dans la forêt de nuit, phares allumés.
 
 ## Direction artistique
 
-**Toon-shading à paliers + contours encrés.** Nuit bleue profonde, lumière
-tungstène ambrée sous abat-jour émaillé, clair de lune par le bandeau vitré.
+**Rendu réaliste (PBR).** Lumières physiques, réflexions d'environnement,
+peinture clearcoat sur le van, chromes, vitres transparentes, sol de béton
+ciré, faisceaux de phares dans la nuit. Nuit bleue profonde contre
+tungstène ambré.
 1 unité = 1 mètre partout (atelier 12 × 9 m, plafond 3,6 m, personnage 1,78 m,
 camping-car 4,5 m).
 
@@ -33,9 +36,15 @@ camping-car 4,5 m).
   nativement), flèches, Shift pour courir, déplacement relatif à la caméra,
   accélération/friction, glissement le long des obstacles — et **contrôles
   tactiles** (stick virtuel, boutons E/courir) sur mobile.
-- **Boucle de jeu** : 5 clés à retrouver (ramassage animé en IK), bouton
-  mural qui commande la porte sectionnelle, interrupteur (clair de lune),
-  radio lo-fi générative, L'Hirondelle qui fait un appel de phares.
+- **Boucle de jeu** : la clé de contact à retrouver (ramassage animé en
+  IK), bouton mural qui commande la porte sectionnelle, interrupteur
+  (clair de lune), radio lo-fi générative.
+- **L'Hirondelle, praticable façon Star Citizen** : coque creuse avec
+  intérieur réel (lit, kitchenette, cabine), on monte à bord par la porte
+  latérale sans écran de chargement, les collisions intérieures vivent
+  dans le repère local du van — et au volant (E), on conduit vraiment :
+  Z/S/Q/D, moteur audible, phares, sortie du garage vers la route
+  forestière et la clairière.
 
 ## Lancer
 
@@ -47,7 +56,7 @@ Ouvrir `index.html` dans un navigateur (ou servir le dossier avec
 | --- | --- |
 | ZQSD / WASD / flèches | se déplacer |
 | Shift | courir |
-| E | interagir (clés, bouton de porte, interrupteur, radio, van) |
+| E | interagir · prendre le volant / couper le moteur |
 | Souris | caméra (clic pour capturer, Échap pour libérer) |
 | Molette | zoom |
 | M | couper le son |
