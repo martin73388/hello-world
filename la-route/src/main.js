@@ -14,6 +14,7 @@ import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight.js';
 import { CascadedShadowGenerator } from '@babylonjs/core/Lights/Shadows/cascadedShadowGenerator.js';
 import '@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent.js';
 import { createOverlay } from './ui/overlay.js';
+import { createPost } from './post.js';
 import { buildTerrain } from './terrain/terrain.js';
 import { createDeform } from './terrain/deform.js';
 import { height, groundHeight, roadQuery, ROAD_HALF } from './terrain/road.js';
@@ -23,6 +24,10 @@ import { buildSky } from './world/sky.js';
 import { buildVan } from './vehicle/van.js';
 import { createDust } from './vehicle/dust.js';
 import { buildDriver } from './character/driver.js';
+import { createRain } from './world/rain.js';
+import { createCampfire } from './world/campfire.js';
+import { createDaycycle } from './world/daycycle.js';
+import { createHorn } from './world/horn.js';
 
 const canvas = document.getElementById('rc');
 const boot = document.getElementById('boot');
@@ -93,7 +98,7 @@ async function start() {
   shadows.setDarkness(0.32);
 
   // Le monde du M2 : terrain sculpté par la route, forêt, ciel
-  buildSky(scene);
+  const sky = buildSky(scene);
   // M3 : buffer d'état de déformation (2048² ≈ 4 cm/texel sur 80 m ; réduit
   // sur le chemin dev WebGL logiciel)
   const deform = createDeform(engine, { res: DEV_GL ? 768 : 2048 });
@@ -105,6 +110,11 @@ async function start() {
   const driver = buildDriver(scene, shadows);
   const van = buildVan(scene, shadows, groundHeight);
   const dust = createDust(scene);                    // M5 : le sillage
+  // M6 : les cinq interactions — toutes lisent/écrivent l'état du monde
+  const rain = createRain(scene, deform);
+  const fire = createCampfire(scene, deform, groundHeight);
+  const day = createDaycycle(scene, { sun, amb, sky });
+  const horn = createHorn(scene, pines.trunks, groundHeight);
 
   // obstacles (troncs + rochers) : hachage spatial 4 m pour les collisions
   const OBS = new Map();
@@ -141,9 +151,40 @@ async function start() {
     return false;
   };
 
+  // occlusion caméra : la caméra ne traverse ni troncs, ni van, ni murs.
+  // camRects : AABB dynamiques {x0,x1,z0,z1,y1,active} (van, garage M7)
+  const camRects = [];
+  const vanRect = { x0: 0, x1: 0, z0: 0, z1: 0, y1: 0, active: true };
+  camRects.push(vanRect);
+  const camClamp = (tx, ty, tz, dx, dyy, dz, want) => {
+    const steps = Math.ceil(want / 0.55);
+    for (let i = 1; i <= steps; i++) {
+      const t = (i / steps) * want;
+      const x = tx + dx * t, y = ty + dyy * t, z = tz + dz * t;
+      let hit = false;
+      const cell = OBS.get(okey(Math.round(x / 4), Math.round(z / 4)));
+      if (cell) {
+        for (const o of cell) {
+          const rr = o.r + 0.22;
+          const ddx = x - o.x, ddz = z - o.z;
+          if (ddx * ddx + ddz * ddz < rr * rr) { hit = true; break; }
+        }
+      }
+      if (!hit) {
+        for (const r of camRects) {
+          if (r.active === false) continue;
+          if (x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1 && y < r.y1) { hit = true; break; }
+        }
+      }
+      if (hit) return Math.max(0.85, t - 0.35);
+    }
+    return want;
+  };
+
   const camera = new FreeCamera('cam', new Vector3(0, 2.2, -4), scene);
   camera.minZ = 0.05; camera.maxZ = 800;
   camera.fov = 0.95;
+  const post = createPost(scene, camera);            // M7 : chaîne de post
 
   /* ---- état & scratch (aucune allocation dans la boucle) ---- */
   // camYaw 0 : caméra au nord du joueur, regard vers le SUD — la route
@@ -152,7 +193,7 @@ async function start() {
     px: 0, pz: 20, py: groundHeight(0, 20), vx: 0, vz: 0, yaw: Math.PI,
     camYaw: 0, camPitch: 0.22, dist: 4.2, distTarget: 4.2,
     tx: 0, ty: groundHeight(0, 20) + 1.55, tz: 20,
-    locked: false, drive: false,
+    locked: false, drive: false, distOcc: 4.2,
   };
   let walkDist = 4.2, wheelAcc = 0;
   let shake = 0, prevVanSpeed = 0, prevBodyY = 0;    // secousses caméra
@@ -174,6 +215,21 @@ async function start() {
     const c = Math.cos(van.st.yaw), s = Math.sin(van.st.yaw);
     return { x: van.st.x - 1.35 * c + 1.6 * s, z: van.st.z + 1.35 * s + 1.6 * c };
   };
+  // touches 1-5 : la grammaire commune — tout s'installe et se retire en fondu
+  addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+    if (e.code === 'Digit1') van.setLights(!van.lightsOn());
+    else if (e.code === 'Digit2') rain.toggle();
+    else if (e.code === 'Digit3' && !state.drive) {
+      // le feu s'installe là où le mécano regarde, jamais sur la chaussée
+      const fx = state.px + Math.sin(state.yaw) * 2.0;
+      const fz = state.pz + Math.cos(state.yaw) * 2.0;
+      if (roadQuery(fx, fz).dist > ROAD_HALF + 0.4) fire.toggleAt(fx, fz);
+    } else if (e.code === 'Digit4') day.toggle();
+    else if (e.code === 'Digit5') {
+      horn.blast(state.drive ? van.st.x : state.px, state.drive ? van.st.z : state.pz);
+    }
+  });
   addEventListener('keydown', (e) => {
     if (e.code !== 'KeyE') return;
     if (state.drive) {
@@ -216,11 +272,43 @@ async function start() {
     state.distTarget = Math.min(9, Math.max(1.6, state.distTarget + Math.sign(e.deltaY) * 0.5));
   }, { passive: true });
 
-  const overlay = createOverlay(engine, scene, { sun, fog: scene });
+  // 6 lumières simultanées par matériau (défaut 4) : soleil + hémisphérique
+  // + phares/feu/garage — sinon les lumières d'interaction sont ignorées
+  for (const m of scene.materials) m.maxSimultaneousLights = 6;
+
+  const overlay = createOverlay(engine, scene, { sun, fog: scene, post });
 
   const WALK = 2.2, RUN = 6.5, ACCEL = 26, DAMP = 10;
   let last = performance.now();
   let stepAcc = 0, footSide = 1;                     // cadence des empreintes
+
+  /* Warm-up (M8) : sous l'écran de chargement, on force la compilation de
+   * chaque pipeline — un tour de particules, phares et feu allumés (au loin,
+   * hors du buffer de déformation), un regard vers le garage — pour que le
+   * premier usage réel ne produise aucun à-coup. */
+  let warmFrames = 0, bootGone = false;
+  const warmup = () => {
+    warmFrames++;
+    if (warmFrames === 2) {
+      for (const ps of scene.particleSystems) ps.manualEmitCount = 2;
+      van.setLights(true);
+      fire.toggleAt(600, 600);                       // hors monde, hors buffer
+      rain.toggle();
+    }
+    if (warmFrames === 4) { state.camYaw = Math.PI; } // compile la vue garage
+    if (warmFrames === 7) {
+      state.camYaw = 0;
+      van.setLights(false);
+      fire.toggleAt(600, 600);                       // extinction
+      rain.toggle();
+      // retour au mode automatique : manualEmitCount ≥ 0 désactive emitRate
+      for (const ps of scene.particleSystems) ps.manualEmitCount = -1;
+    }
+    if (warmFrames >= 10) {
+      bootGone = true;
+      boot.classList.add('gone');
+    }
+  };
 
   engine.runRenderLoop(() => {
     const now = performance.now();
@@ -239,7 +327,7 @@ async function start() {
     if (state.drive) {
       /* ---- conduite ---- */
       const offroad = roadQuery(van.st.x, van.st.z).dist > ROAD_HALF + 0.5;
-      van.update(dt, { throttle: iz, steer: ix, offroad }, vanBlocked);
+      van.update(dt, { throttle: iz, steer: ix, offroad, mist: rain.ease() }, vanBlocked);
       // les pneus creusent hors chaussée — sillons continus (pas de 0,24 m)
       wheelAcc += Math.abs(van.st.speed) * dt;
       if (wheelAcc > 0.24 && Math.abs(van.st.speed) > 0.4) {
@@ -324,7 +412,7 @@ async function start() {
       }
       deform.update(dt, state.px, state.pz);
       terrain.patchTick(state.px, state.pz);
-      van.update(dt, { throttle: 0, steer: 0, offroad: false }, vanBlocked);
+      van.update(dt, { throttle: 0, steer: 0, offroad: false, mist: rain.ease() }, vanBlocked);
       dust.plumes[0].emitRate = 0; dust.plumes[1].emitRate = 0;
       const gy = groundHeight(state.px, state.pz);
       state.py += (gy - state.py) * Math.min(1, 14 * dt);
@@ -338,6 +426,22 @@ async function start() {
       setHint(Math.hypot(state.px - d.x, state.pz - d.z) < 2.3 ? 'E — monter à bord' : '');
     }
 
+    // interactions : la cellule de pluie et les lucioles suivent le focus
+    const focAx = state.drive ? van.st.x : state.px;
+    const focAz = state.drive ? van.st.z : state.pz;
+    rain.update(dt, focAx, focAz);
+    fire.update(dt);
+    day.update(dt, focAx, focAz);
+    horn.update(dt, focAx, focAz);
+    post.update(dt);
+    const rd = rain.ease();
+    if (rd > 0.001) {
+      // l'averse mange la lumière — appliqué APRÈS day.update (valeurs absolues)
+      sun.intensity *= 1 - 0.45 * rd;
+      amb.intensity *= 1 - 0.2 * rd;
+      scene.fogDensity += 0.005 * rd;
+    }
+
     // caméra épaule : cible amortie, distance aisée, FOV qui s'élargit à la vitesse
     const lead = Math.min(0.5, speed * 0.08);
     const k = 1 - Math.exp(-7 * dt);
@@ -347,11 +451,27 @@ async function start() {
     state.dist += (state.distTarget - state.dist) * (1 - Math.exp(-8 * dt));
     const cp = Math.cos(state.camPitch), sp2 = Math.sin(state.camPitch);
     const shoulder = 0.4;
-    camera.position.x = state.tx + Math.sin(state.camYaw) * cp * state.dist + Math.cos(state.camYaw) * shoulder;
+    // occlusion : rectangle du van tenu à jour (ignoré quand on conduit)
+    {
+      const ac = Math.abs(Math.cos(van.st.yaw)), as = Math.abs(Math.sin(van.st.yaw));
+      const hx = ac * 1.05 + as * 2.7, hz = as * 1.05 + ac * 2.7;
+      vanRect.x0 = van.st.x - hx; vanRect.x1 = van.st.x + hx;
+      vanRect.z0 = van.st.z - hz; vanRect.z1 = van.st.z + hz;
+      vanRect.y1 = van.st.bodyY + 1.7;
+      vanRect.active = !state.drive;
+    }
+    const odx = (Math.sin(state.camYaw) * cp * state.dist + Math.cos(state.camYaw) * shoulder) / state.dist;
+    const ody = sp2;
+    const odz = (Math.cos(state.camYaw) * cp * state.dist - Math.sin(state.camYaw) * shoulder) / state.dist;
+    const allowed = camClamp(state.tx, state.ty, state.tz, odx, ody, odz, state.dist);
+    // rapproche vite quand un obstacle surgit, réélargit en douceur
+    state.distOcc += (allowed - state.distOcc) * Math.min(1, (allowed < state.distOcc ? 22 : 4.5) * dt);
+    const dEff = Math.min(state.dist, state.distOcc);
+    camera.position.x = state.tx + odx * dEff;
     camera.position.y = Math.max(
       height(camera.position.x, camera.position.z) + 0.4,
-      state.ty + sp2 * state.dist);
-    camera.position.z = state.tz + Math.cos(state.camYaw) * cp * state.dist - Math.sin(state.camYaw) * shoulder;
+      state.ty + ody * dEff);
+    camera.position.z = state.tz + odz * dEff;
     if (shake > 0.001) {
       camera.position.y += Math.sin(now * 0.061) * shake;
       camera.position.x += Math.sin(now * 0.047 + 1.3) * shake * 0.6;
@@ -361,14 +481,12 @@ async function start() {
     camera.fov = 0.95 + Math.min(0.18, speed * 0.022);
 
     overlay.tick(now);
+    if (!bootGone && scene.isReady()) warmup();
     scene.render();
   });
 
   addEventListener('resize', () => engine.resize());
 
-  // premier rendu prêt : on lève l'écran de chargement
-  scene.executeWhenReady(() => boot.classList.add('gone'));
-
   // poignées de développement (cadrage des captures d'itération)
-  window.__laroute = { state, scene, engine, deform, van, driver };
+  window.__laroute = { state, scene, engine, deform, van, driver, rain, fire, day, horn };
 }

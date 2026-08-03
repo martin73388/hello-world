@@ -9,7 +9,7 @@ import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
 import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
-import { height, roadQuery } from '../terrain/road.js';
+import { height, roadQuery, GARAGE } from '../terrain/road.js';
 import { WindPlugin } from './wind.js';
 
 export function plantPines(scene, shadows) {
@@ -49,6 +49,7 @@ export function plantPines(scene, shadows) {
     const rq = roadQuery(x, z);
     if (rq.dist < 8.0) continue;                       // la route respire — et les
     // couronnes (jusqu'à ~3 m de rayon) ne surplombent jamais la chaussée
+    if (Math.abs(x - GARAGE.x) < GARAGE.hw + 5 && z > GARAGE.z0 - 8 && z < GARAGE.z1 + 5) continue;
     const s = 0.75 + rnd() * 1.15;
     const y = height(x, z) - 0.08;
     Quaternion.RotationYawPitchRollToRef(rnd() * Math.PI * 2, (rnd() - 0.5) * 0.06, (rnd() - 0.5) * 0.06, q);

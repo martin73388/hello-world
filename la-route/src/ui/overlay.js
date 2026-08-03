@@ -30,6 +30,26 @@ export function createOverlay(engine, scene, refs) {
     refs.fog.fogDensity = (+e.target.value) / 1000;
   });
 
+  // M7 : cases A/B des passes de post (si la chaîne est branchée)
+  if (refs.post) {
+    const row = document.createElement('div');
+    row.style.cssText = 'margin-top:8px;padding-top:8px;'
+      + 'border-top:1px solid rgba(232,220,200,.2);'
+      + 'display:flex;flex-wrap:wrap;gap:2px 12px';
+    for (const name of ['fxaa', 'bloom', 'grain', 'sharpen', 'vignette', 'tonemapping']) {
+      const lab = document.createElement('label');
+      lab.style.cssText = 'display:flex;align-items:center;gap:5px;cursor:pointer';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = refs.post.has(name);              // tout est actif par défaut
+      cb.addEventListener('change', () => refs.post.set(name, cb.checked));
+      lab.appendChild(cb);
+      lab.appendChild(document.createTextNode(name));
+      row.appendChild(lab);
+    }
+    root.appendChild(row);
+  }
+
   addEventListener('keydown', (e) => {
     if (e.code === 'F1' || e.code === 'Backquote') {
       e.preventDefault();

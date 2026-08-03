@@ -12,6 +12,8 @@ import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js';
 import { Color3 } from '@babylonjs/core/Maths/math.color.js';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
+import { SpotLight } from '@babylonjs/core/Lights/spotLight.js';
 
 const WHEEL_R = 0.37, TRACK = 0.85, WHEELBASE = 3.2, CLEAR = 0.42;
 
@@ -152,6 +154,35 @@ export function buildVan(scene, shadows, ground) {
   const wheelT = MeshBuilder.CreateTorus('vWheelT', { diameter: 0.4, thickness: 0.045, tessellation: 18 }, scene);
   wheelT.position.set(-0.52, 1.78, 2.12); wheelT.rotation.x = Math.PI / 2 - 0.5;
   wheelT.material = dark; wheelT.parent = body; meshes.push(wheelT);
+  /* ---- phares : vraies SpotLights + cônes de brume (interaction 1) ---- */
+  const beams = [];
+  const coneMat = new StandardMaterial('vBeamM', scene);
+  coneMat.emissiveColor = new Color3(0.9, 0.8, 0.55);
+  coneMat.diffuseColor = new Color3(0, 0, 0);
+  coneMat.alpha = 0;
+  coneMat.backFaceCulling = false;
+  coneMat.disableLighting = true;
+  coneMat.alphaMode = 1;                              // additif : le faisceau s'ajoute
+  for (const lx of [-0.62, 0.62]) {
+    const spot = new SpotLight('vSpot' + lx, new Vector3(lx, 1.42, 2.7),
+      new Vector3(lx * 0.04, -0.17, 1), 1.0, 8, scene);
+    spot.diffuse = new Color3(1, 0.85, 0.6);
+    spot.specular = new Color3(0.6, 0.55, 0.4);
+    spot.range = 32;
+    spot.intensity = 0;
+    spot.setEnabled(false);
+    spot.parent = body;
+    const cone = MeshBuilder.CreateCylinder('vBeam' + lx,
+      { diameterTop: 3.2, diameterBottom: 0.2, height: 9, tessellation: 14, cap: 0 }, scene);
+    cone.rotation.x = Math.PI / 2 - 0.05;                       // +y local → +z avant
+    cone.position.set(lx, 1.1, 2.6 + 4.4);
+    cone.material = coneMat;
+    cone.parent = body;
+    cone.isPickable = false;
+    beams.push(spot);
+  }
+  let litFrac = 0, litOn = false;
+
   /* ---- sapin désodorisant à ressort ---- */
   const fresh = new TransformNode('vFresh', scene);
   fresh.parent = body; fresh.position.set(0.28, 2.36, 2.5);
@@ -268,10 +299,24 @@ export function buildVan(scene, shadows, ground) {
     f.x += f.vx * dt; f.z += f.vz * dt;
     fresh.rotation.x = Math.max(-0.9, Math.min(0.9, f.x));
     fresh.rotation.z = Math.max(-0.9, Math.min(0.9, f.z));
+
+    /* phares : montée/descente en fondu, cônes gonflés par la brume/pluie.
+     * Les spots éteints sont DÉSACTIVÉS : ils ne comptent plus dans le
+     * quota de lumières simultanées des matériaux. */
+    litFrac += ((litOn ? 1 : 0) - litFrac) * Math.min(1, 2.6 * dt);
+    const beamsOn = litFrac > 0.01;
+    for (const s of beams) {
+      if (s.isEnabled() !== beamsOn) s.setEnabled(beamsOn);
+      s.intensity = litFrac * 55;
+    }
+    coneMat.alpha = litFrac * (0.045 + (input.mist || 0) * 0.075);
+    lampOn.emissiveColor.set(0.35 + 0.65 * litFrac * 1.4, 0.3 + 0.55 * litFrac * 1.3, 0.2 + 0.4 * litFrac);
   }
+
+  function setLights(on) { litOn = on; }
 
   // amorce : la suspension se pose avant la première frame visible
   for (let i = 0; i < 30; i++) update(0.1, { throttle: 0, steer: 0, offroad: false }, null);
 
-  return { root, body, st, wheels, wheelWorld, update };
+  return { root, body, st, wheels, wheelWorld, update, setLights, lightsOn: () => litOn };
 }

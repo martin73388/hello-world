@@ -24,18 +24,24 @@ uniform vec2 centerW;
 uniform float sizeW;
 uniform vec4 splats[16];
 uniform int splatCount;
+uniform vec4 wsplats[8];
+uniform int wsplatCount;
+uniform vec4 ssplats[4];
+uniform int ssplatCount;
 
 void main(void) {
   vec2 uv = vUV + shiftUV;
-  vec2 d = vec2(0.0);
+  vec4 d = vec4(0.0);
   if (uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
-    vec2 c = texture2D(prevTex, uv).rg;
-    vec2 b = (texture2D(prevTex, uv + vec2(texel, 0.0)).rg
-            + texture2D(prevTex, uv - vec2(texel, 0.0)).rg
-            + texture2D(prevTex, uv + vec2(0.0, texel)).rg
-            + texture2D(prevTex, uv - vec2(0.0, texel)).rg) * 0.25;
+    vec4 c = texture2D(prevTex, uv);
+    vec4 b = (texture2D(prevTex, uv + vec2(texel, 0.0))
+            + texture2D(prevTex, uv - vec2(texel, 0.0))
+            + texture2D(prevTex, uv + vec2(0.0, texel))
+            + texture2D(prevTex, uv - vec2(0.0, texel))) * 0.25;
     d = mix(c, b, clamp(0.18 * dtU, 0.0, 1.0));                 // la boue se relâche
-    d *= vec2(exp(-dtU * 0.008), exp(-dtU * 0.013));            // guérison lente
+    // guérison : ornières lentes, bermes un peu plus vite ; l'eau sèche en
+    // ~1 min ; la brûlure reste (quasi) pour la session
+    d *= vec4(exp(-dtU * 0.008), exp(-dtU * 0.013), exp(-dtU * 0.016), exp(-dtU * 0.0012));
   }
   vec2 wp = centerW + (vUV - 0.5) * sizeW;
   for (int i = 0; i < 16; i++) {
@@ -47,8 +53,20 @@ void main(void) {
     float rt = clamp(1.0 - abs(r - s.z * 1.3) / (s.z * 0.7), 0.0, 1.0);
     d.y += s.w * 0.55 * rt * rt;                                // berme au bord
   }
-  d = min(d, vec2(0.22, 0.12));                                 // saturation du sol
-  gl_FragColor = vec4(d, 0.0, 1.0);
+  for (int i = 0; i < 8; i++) {                                 // pluie : humidité
+    if (i >= wsplatCount) { break; }
+    vec4 s = wsplats[i];
+    float t = clamp(1.0 - distance(wp, s.xy) / s.z, 0.0, 1.0);
+    d.z += s.w * t * t;
+  }
+  for (int i = 0; i < 4; i++) {                                 // feu : brûlure
+    if (i >= ssplatCount) { break; }
+    vec4 s = ssplats[i];
+    float t = clamp(1.0 - distance(wp, s.xy) / s.z, 0.0, 1.0);
+    d.w += s.w * t * t * (3.0 - 2.0 * t);
+  }
+  d = min(d, vec4(0.22, 0.12, 1.0, 1.0));                       // saturation du sol
+  gl_FragColor = d;
 }
 `;
 
@@ -77,7 +95,8 @@ export function createDeform(engine, opts = {}) {
 
   const wrapper = new EffectWrapper({
     engine, name: 'dfUpdate', fragmentShader: FRAG,
-    uniformNames: ['shiftUV', 'dtU', 'texel', 'centerW', 'sizeW', 'splats', 'splatCount'],
+    uniformNames: ['shiftUV', 'dtU', 'texel', 'centerW', 'sizeW',
+      'splats', 'splatCount', 'wsplats', 'wsplatCount', 'ssplats', 'ssplatCount'],
     samplerNames: ['prevTex'],
   });
   const renderer = new EffectRenderer(engine);
@@ -90,9 +109,15 @@ export function createDeform(engine, opts = {}) {
     patchX: 0, patchZ: 20, patchHalf: 16,
   };
   const queue = [];                       // x, z, rayon, profondeur — à plat
+  const wetQueue = [];                    // pluie : x, z, rayon, quantité
+  const scorchQueue = [];                 // feu : x, z, rayon, quantité
   const splatArr = new Array(64).fill(0); // 16 vec4, réutilisé
+  const wetArr = new Array(32).fill(0);
+  const scorchArr = new Array(16).fill(0);
 
   function addSplat(x, z, r, d) { queue.push(x, z, r, d); }
+  function addWet(x, z, r, a) { wetQueue.push(x, z, r, a); }
+  function addScorch(x, z, r, a) { scorchQueue.push(x, z, r, a); }
 
   function update(dt, px, pz) {
     if (!wrapper.effect.isReady()) return;
@@ -107,6 +132,12 @@ export function createDeform(engine, opts = {}) {
     const n = Math.min(16, queue.length >> 2);
     for (let i = 0; i < n * 4; i++) splatArr[i] = queue[i];
     queue.splice(0, n * 4);
+    const wn = Math.min(8, wetQueue.length >> 2);
+    for (let i = 0; i < wn * 4; i++) wetArr[i] = wetQueue[i];
+    wetQueue.splice(0, wn * 4);
+    const sn = Math.min(4, scorchQueue.length >> 2);
+    for (let i = 0; i < sn * 4; i++) scorchArr[i] = scorchQueue[i];
+    scorchQueue.splice(0, sn * 4);
 
     const back = 1 - front;
     const cdt = dt, csx = sx / SIZE, csz = sz / SIZE, ccx = state.cx, ccz = state.cz;
@@ -120,6 +151,10 @@ export function createDeform(engine, opts = {}) {
       e.setFloat('sizeW', SIZE);
       e.setArray4('splats', splatArr);
       e.setInt('splatCount', n);
+      e.setArray4('wsplats', wetArr);
+      e.setInt('wsplatCount', wn);
+      e.setArray4('ssplats', scorchArr);
+      e.setInt('ssplatCount', sn);
     });
     renderer.render(wrapper, rts[back]);
     renderer.restoreStates();
@@ -128,5 +163,5 @@ export function createDeform(engine, opts = {}) {
     state.frontTex = thin[front];
   }
 
-  return { state, update, addSplat };
+  return { state, update, addSplat, addWet, addScorch };
 }

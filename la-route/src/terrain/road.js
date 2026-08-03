@@ -110,14 +110,30 @@ function sstep(a, b, v) {
   return t * t * (3 - 2 * t);
 }
 
+/** l'esplanade du garage (M7) : rectangle aplani au départ de la route,
+ * au niveau du premier échantillon du tracé — le seuil affleure la chaussée */
+export const GARAGE = { x: 0, z0: 31.5, z1: 42, hw: 5.0, y: samples[0].y };
+function padDist(x, z) {
+  const dx = Math.max(Math.abs(x - GARAGE.x) - GARAGE.hw, 0);
+  const dz = Math.max(GARAGE.z0 - 2.5 - z, z - GARAGE.z1, 0);
+  return Math.sqrt(dx * dx + dz * dz);
+}
+
 /** hauteur finale du terrain : sol sculpté par la route (déblai/remblai + bombé) */
 export function height(x, z) {
   const h = baseHeight(x, z);
   const r = roadQuery(x, z);
-  if (r.dist >= SHOULDER) return h;
-  const roadH = r.y;
-  const t = sstep(ROAD_HALF, SHOULDER, r.dist);   // 0 sur la chaussée → 1 au-delà du talus
-  return roadH * (1 - t) + h * t;
+  let out = h;
+  if (r.dist < SHOULDER) {
+    const t = sstep(ROAD_HALF, SHOULDER, r.dist); // 0 sur la chaussée → 1 au-delà du talus
+    out = r.y * (1 - t) + h * t;
+  }
+  const pd = padDist(x, z);
+  if (pd < 3) {
+    const t = sstep(0, 3, pd);
+    out = GARAGE.y * (1 - t) + out * t;
+  }
+  return out;
 }
 
 /** hauteur de MARCHE/ROULAGE : terrain + épaisseur du ruban de route (bombé
