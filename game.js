@@ -59,6 +59,7 @@ css.textContent = `
   html,body{margin:0;height:100%;overflow:hidden;background:#0c1220;overscroll-behavior:none}
   #stage{position:fixed;inset:0;touch-action:none}
   #stage canvas{display:block;width:100%;height:100%;touch-action:none}
+  body.softlock #stage canvas{cursor:none}
   .vignette{position:fixed;inset:0;pointer-events:none;z-index:5;
     background:radial-gradient(ellipse at 50% 42%, transparent 52%, rgba(5,8,16,.55) 100%)}
   .hud{position:fixed;z-index:10;color:#e8dcc8;user-select:none;pointer-events:none;
@@ -1404,6 +1405,7 @@ const keys = {};
 addEventListener('keydown', e => {
   if (e.repeat) return;
   keys[e.code] = true;
+  if (e.code === 'Escape' && camCtl.soft) { camCtl.soft = false; document.body.classList.remove('softlock'); }
   if (e.code === 'KeyM') audio.toggle();
   if (e.code === 'KeyE') { if (vanState.driving) exitDrive(); else tryInteract(); }
 });
@@ -1639,33 +1641,41 @@ const camCtl = {
   yaw: Math.PI + 0.4, pitch: 0.24,
   dist: CAM.dist0, distTarget: CAM.dist0, distSmooth: CAM.dist0,
   target: new THREE.Vector3(), pos: new THREE.Vector3(),
-  locked: false, fov: CAM.fov,
+  locked: false, soft: false, fov: CAM.fov,
 };
 {
   const el = renderer.domElement;
   const enter = document.getElementById('enter');
   const hint = document.getElementById('hint');
-  // sur un tap tactile émulé en clic, ne pas capturer le pointeur
+  // capture réelle si possible ; sinon (iframe restreinte) capture logicielle
+  const updateHint = () => {
+    hint.textContent = (camCtl.locked || camCtl.soft)
+      ? 'Échap pour libérer la souris' : 'Clique pour piloter la caméra';
+    hint.style.opacity = entered ? 0.7 : 0;
+    document.body.classList.toggle('softlock', camCtl.soft && !camCtl.locked);
+  };
   const tryLock = () => {
     if (performance.now() - (touch.lastT || 0) < 700) return;
-    if (el.requestPointerLock) el.requestPointerLock();
+    try { if (el.requestPointerLock) el.requestPointerLock(); } catch (err) { /* refusé */ }
+    setTimeout(() => { if (!camCtl.locked) { camCtl.soft = true; updateHint(); } }, 250);
   };
   enter.addEventListener('click', () => {
     entered = true; audio.start(); tryLock(); enter.classList.add('hidden');
-    if (!camCtl.locked) { hint.textContent = 'Clique pour piloter la caméra'; hint.style.opacity = 0.7; }
+    updateHint();
   });
   enter.addEventListener('touchstart', () => { touch.lastT = performance.now(); }, { passive: true });
   el.addEventListener('click', () => { if (!camCtl.locked) tryLock(); });
   document.addEventListener('pointerlockchange', () => {
     camCtl.locked = document.pointerLockElement === el;
-    hint.textContent = camCtl.locked ? 'Échap pour libérer la souris' : 'Clique pour piloter la caméra';
-    hint.style.opacity = 0.7;
+    if (camCtl.locked) camCtl.soft = false;
+    updateHint();
   });
-  // clic dans la fenêtre = capture de la souris ; la caméra ne bouge que capturée
+  document.addEventListener('pointerlockerror', () => { camCtl.soft = true; updateHint(); });
+  // la caméra suit la souris quand elle est capturée (réellement ou logiciellement)
   addEventListener('mousemove', e => {
-    if (!camCtl.locked) return;
-    camCtl.yaw -= e.movementX * CAM.sens;
-    camCtl.pitch = clamp(camCtl.pitch + e.movementY * CAM.sens, CAM.minPitch, CAM.maxPitch);
+    if (!(camCtl.locked || (camCtl.soft && entered))) return;
+    camCtl.yaw -= (e.movementX || 0) * CAM.sens;
+    camCtl.pitch = clamp(camCtl.pitch + (e.movementY || 0) * CAM.sens, CAM.minPitch, CAM.maxPitch);
   });
   addEventListener('wheel', e => {
     camCtl.distTarget = clamp(camCtl.distTarget + Math.sign(e.deltaY) * 0.3, 0.34, CAM.maxDist);

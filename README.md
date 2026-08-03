@@ -62,3 +62,21 @@ Ouvrir `index.html` dans un navigateur (ou servir le dossier avec
 | Clic | capturer la souris (la caméra suit) · Échap pour libérer |
 | Molette | zoom, jusqu'à la 1ʳᵉ personne |
 | M | couper le son |
+
+
+## LA ROUTE — tech demo (chantier ouvert)
+
+Le dossier `la-route/` contient le début de la tech demo décrite dans
+`LA-ROUTE-BRIEF.md` : Vite + Babylon.js, **WebGPU uniquement** (pas de
+repli), boucle de rendu, caméra épaule + ZQSD sur plan provisoire, overlay
+de performance (**F1**) avec graphe de frame-time et 1 % low.
+
+```bash
+cd la-route
+npm install
+npm run dev     # Chrome récent avec WebGPU requis (RTX conseillé)
+```
+
+Milestone 1 (fondation) : fait. Prochaine porte bloquante — milestone 2 :
+forêt, route sculptée et atmosphère, à ne franchir que quand une capture
+statique est déjà belle.
