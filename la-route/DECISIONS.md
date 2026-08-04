@@ -116,6 +116,34 @@ Chaque écart au brief, en une ligne, avec sa raison.
   compile chaque pipeline sous l'écran de chargement à la place.
 - M8 : la mesure 90 fps / 1 % low se fait sur la machine du joueur
   (M4/WebGPU, overlay F1) — le SwiftShader de CI ne mesure rien d'utile.
+## Revue adversariale M6-M8 (correctifs appliqués)
+
+- Descente du van : la position de sortie était posée aveuglément à côté de
+  la caisse — le joueur pouvait être expulsé À TRAVERS un mur ou la porte
+  close. Elle est maintenant balayée depuis le centre du van et s'arrête à
+  la dernière position libre.
+- Le jerrican debout culminait à 3,70 m pour une ouverture de porte de
+  3,50 m : il traversait le linteau à chaque franchissement. Couché sur la
+  galerie, le van culmine à 3,44 m.
+- doorBlocked passé de 0,75 à 0,92 : à 0,75 le bas du premier panneau était
+  encore à 2,48 m, sous le toit du van (3,08 m) — le van cisaillait la porte.
+- Warm-up : la pré-compile de la pluie passait par rain.toggle(), ce qui
+  armait la traîne d'égouttement — bruine fantôme de 10 s et sol mouillé
+  pendant la révélation. Remplacée par manualEmitCount seul. Les phares se
+  coupent net (snapLightsOff) et la porte est reposée fermée.
+- Le feu ne peut plus s'allumer dans le garage (foyer enterré sous la dalle)
+  ni se rallumer pendant son agonie ; le bouton de porte ne s'actionne plus
+  à travers la façade, et ne referme jamais la porte sur le van au seuil.
+- Le mécano ne traverse plus le van (rect ajouté aux obstacles de marche) ;
+  la caméra ne s'échappe plus par le toit (AABB occlusif par le dessus).
+- specularBase n'existe que sous SPECULARTERM : le hook BEFORE_FOG est
+  désormais gardé par les deux defines.
+- thinInstanceSetBuffer par frame (feuilles) → thinInstanceBufferUpdated :
+  le buffer GPU n'est plus détruit/recréé 60 fois par seconde.
+- Zéro-alloc : roadQuery, wheelWorld, doorWorld et resolveRects rendent des
+  scratchs ; les splices de files vides sont évités.
+- Les 2 spots du garage sont désactivés au-delà de 22 m — ils évinçaient la
+  lumière du feu de camp du quota de 6.
 - Captures : M3-M5 et M7 sont en 1440p ; le bivouac M6 est en 720p — les
   compositions nocturnes en 1440p sous SwiftShader coûtent >5 min par
   cadrage et se disputent le feu avec le warm-up. Les captures de

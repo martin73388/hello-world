@@ -130,14 +130,20 @@ export function createDeform(engine, opts = {}) {
       state.cx += sx; state.cz += sz;
     }
     const n = Math.min(16, queue.length >> 2);
-    for (let i = 0; i < n * 4; i++) splatArr[i] = queue[i];
-    queue.splice(0, n * 4);
+    if (n) {
+      for (let i = 0; i < n * 4; i++) splatArr[i] = queue[i];
+      queue.splice(0, n * 4);
+    }
     const wn = Math.min(8, wetQueue.length >> 2);
-    for (let i = 0; i < wn * 4; i++) wetArr[i] = wetQueue[i];
-    wetQueue.splice(0, wn * 4);
+    if (wn) {
+      for (let i = 0; i < wn * 4; i++) wetArr[i] = wetQueue[i];
+      wetQueue.splice(0, wn * 4);
+    }
     const sn = Math.min(4, scorchQueue.length >> 2);
-    for (let i = 0; i < sn * 4; i++) scorchArr[i] = scorchQueue[i];
-    scorchQueue.splice(0, sn * 4);
+    if (sn) {
+      for (let i = 0; i < sn * 4; i++) scorchArr[i] = scorchQueue[i];
+      scorchQueue.splice(0, sn * 4);
+    }
 
     const back = 1 - front;
     const cdt = dt, csx = sx / SIZE, csz = sz / SIZE, ccx = state.cx, ccz = state.cz;

@@ -427,6 +427,7 @@ export function buildGarage(scene, shadows) {
   box('gCaisse', 0.18, 0.14, 0.12, 4.1, 1.815, 39.0, dark);
 
   /* ---- lumière : 2 suspensions tungstène + le jour qui entre ---- */
+  const spots = [];
   for (const lz of [37.0, 40.0]) {
     cyl('gCordon' + lz, 0.02, 0.58, 0, 3.61, lz, dark);
     const shade = MeshBuilder.CreateCylinder('gAbat' + lz,
@@ -444,6 +445,7 @@ export function buildGarage(scene, shadows) {
     spot.range = 12;
     spot.intensity = 13;
     spot.parent = root;
+    spots.push(spot);
   }
   const glow = new PointLight('doorGlow', new Vector3(0, 1.5, Z0 + 1.1), scene);
   glow.diffuse = new Color3(1, 0.72, 0.45);
@@ -461,8 +463,14 @@ export function buildGarage(scene, shadows) {
 
   /* ---- animation de la porte (aucune allocation par frame) ---- */
   let target = 0, p = 0, ef = 0, lastEf = -1;
+  let spotsOn = true;
   function toggleDoor() { target = target > 0.5 ? 0 : 1; }
-  function update(dt) {
+  /** les suspensions ne comptent dans le quota de lumières que de près */
+  function update(dt, fx, fz) {
+    if (fx !== undefined) {
+      const near = Math.abs(fx) < 22 && fz > Z0 - 22 && fz < Z1 + 22;
+      if (near !== spotsOn) { spotsOn = near; for (const s of spots) s.setEnabled(near); }
+    }
     if (p !== target) {
       p = target > p ? Math.min(target, p + dt / DUR) : Math.max(target, p - dt / DUR);
     }
@@ -515,7 +523,7 @@ export function buildGarage(scene, shadows) {
     toggleDoor,
     buttonWorld: { x: BTN_X, z: BTN_Z },
     colliders,
-    doorBlocked: () => ef < 0.75,
+    doorBlocked: () => ef < 0.92,   // le van passe quand les panneaux ont dégagé sa hauteur
     isInterior,
     update,
   };

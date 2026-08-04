@@ -167,19 +167,27 @@ async function start() {
   // occlusion caméra : la caméra ne traverse ni troncs, ni van, ni murs.
   // camRects : AABB dynamiques {x0,x1,z0,z1,y1,active} (van, garage M7)
   const camRects = [];
+  const walkRects = [...garage.colliders];           // murs + van : obstacles à pied
   const vanRect = { x0: 0, x1: 0, z0: 0, z1: 0, y1: 0, active: true };
   camRects.push(vanRect);
+  walkRects.push(vanRect);                           // le mécano ne traverse pas le van
   for (const c of garage.colliders) {
     const r = { x0: c.x0, x1: c.x1, z0: c.z0, z1: c.z1, y1: GARAGE.y + 3.9, active: true };
     if (c.door) { r.doorRect = true; }
     camRects.push(r);
   }
+  // le TOIT du garage : occlusif par le dessus (yAbove) — la caméra ne
+  // s'échappe plus par le plafond quand on lève le regard à l'intérieur
+  camRects.push({
+    x0: -GARAGE.hw, x1: GARAGE.hw, z0: GARAGE.z0, z1: GARAGE.z1,
+    y1: -1e9, yAbove: GARAGE.y + 3.55, active: true,
+  });
 
   // résolution cercle-AABB : le mécano ne traverse ni murs ni établi
   const rectOut = { x: 0, z: 0 };                    // scratch, zéro alloc
   const resolveRects = (px, pz, r) => {
     let x = px, z = pz;
-    for (const c of garage.colliders) {
+    for (const c of walkRects) {
       if (c.door && !garage.doorBlocked()) continue;
       const nx = Math.max(c.x0, Math.min(c.x1, x));
       const nz = Math.max(c.z0, Math.min(c.z1, z));
@@ -218,7 +226,8 @@ async function start() {
       if (!hit) {
         for (const r of camRects) {
           if (r.active === false) continue;
-          if (x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1 && y < r.y1) { hit = true; break; }
+          if (x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1
+            && (r.yAbove !== undefined ? y > r.yAbove : y < r.y1)) { hit = true; break; }
         }
       }
       if (hit) return Math.max(0.85, t - 0.35);
@@ -269,10 +278,14 @@ async function start() {
     if (e.code === 'Digit1') van.setLights(!van.lightsOn());
     else if (e.code === 'Digit2') rain.toggle();
     else if (e.code === 'Digit3' && !state.drive) {
-      // le feu s'installe là où le mécano regarde, jamais sur la chaussée
+      // le feu s'installe là où le mécano regarde — jamais sur la chaussée,
+      // jamais dans le garage (extinction possible partout : on rappuie)
       const fx = state.px + Math.sin(state.yaw) * 2.0;
       const fz = state.pz + Math.cos(state.yaw) * 2.0;
-      if (roadQuery(fx, fz).dist > ROAD_HALF + 0.4) fire.toggleAt(fx, fz);
+      if (fire.burning()
+        || (roadQuery(fx, fz).dist > ROAD_HALF + 0.4 && !garage.isInterior(fx, fz))) {
+        fire.toggleAt(fx, fz);
+      }
     } else if (e.code === 'Digit4') day.toggle();
     else if (e.code === 'Digit5') {
       horn.blast(state.drive ? van.st.x : state.px, state.drive ? van.st.z : state.pz);
@@ -284,16 +297,36 @@ async function start() {
       if (Math.abs(van.st.speed) > 1.6) return;        // pas en marche
       state.drive = false;
       driver.setSeated(false);
+      // balayage du centre du van vers la portière : on descend à la
+      // DERNIÈRE position libre — jamais téléporté à travers un mur
       const d = doorWorld();
-      state.px = d.x; state.pz = d.z; state.vx = 0; state.vz = 0;
-      state.py = groundAll(d.x, d.z);
+      let ex = van.st.x, ez = van.st.z;
+      for (let i = 1; i <= 10; i++) {
+        const t = i / 10;
+        const x = van.st.x + (d.x - van.st.x) * t;
+        const z = van.st.z + (d.z - van.st.z) * t;
+        if (pushOut(x, z, 0.32)) break;
+        let hit = false;
+        for (const c of garage.colliders) {
+          if (c.door && !garage.doorBlocked()) continue;
+          if (x > c.x0 - 0.32 && x < c.x1 + 0.32 && z > c.z0 - 0.32 && z < c.z1 + 0.32) { hit = true; break; }
+        }
+        if (hit) break;
+        ex = x; ez = z;
+      }
+      state.px = ex; state.pz = ez; state.vx = 0; state.vz = 0;
+      state.py = groundAll(ex, ez);
       state.yaw = van.st.yaw;
       state.distTarget = walkDist;
     } else {
       // priorité au bouton de la porte du garage, puis à la portière du van
       const b = garage.buttonWorld;
-      if (Math.hypot(state.px - b.x, state.pz - b.z) < 2.0) {
-        garage.toggleDoor();
+      if (Math.hypot(state.px - b.x, state.pz - b.z) < 2.0
+        && garage.isInterior(state.px, state.pz)) {  // pas à travers la façade
+        // ne jamais refermer la porte sur le van en travers du seuil
+        const vanInDoorway = Math.abs(van.st.x) < 3.4
+          && van.st.z > GARAGE.z0 - 3.6 && van.st.z < GARAGE.z0 + 4.2;
+        if (!(garage.doorFrac() > 0.5 && vanInDoorway)) garage.toggleDoor();
         return;
       }
       const d = doorWorld();
@@ -344,21 +377,24 @@ async function start() {
   const warmup = () => {
     warmFrames++;
     if (warmFrames === 2) {
+      // un tour d'émission manuelle compile TOUS les systèmes de particules
+      // (pluie comprise — sans toggle : pas de traîne d'égouttement fantôme)
       for (const ps of scene.particleSystems) ps.manualEmitCount = 2;
       van.setLights(true);
       fire.toggleAt(600, 600);                       // hors monde, hors buffer
-      rain.toggle();
+      garage.toggleDoor();                           // variante « lueur de seuil »
     }
     if (warmFrames === 4) { state.camYaw = Math.PI; } // compile la vue garage
     if (warmFrames === 7) {
       state.camYaw = 0;
-      van.setLights(false);
+      van.snapLightsOff();                           // coupure sèche, zéro résidu
       fire.toggleAt(600, 600);                       // extinction
-      rain.toggle();
+      garage.toggleDoor();
       // retour au mode automatique : manualEmitCount ≥ 0 désactive emitRate
       for (const ps of scene.particleSystems) ps.manualEmitCount = -1;
     }
     if (warmFrames >= 10) {
+      garage.update(20);                             // porte refermée net sous le boot
       bootGone = true;
       boot.classList.add('gone');
     }
@@ -495,14 +531,15 @@ async function start() {
     // interactions : la cellule de pluie et les lucioles suivent le focus
     const focAx = state.drive ? van.st.x : state.px;
     const focAz = state.drive ? van.st.z : state.pz;
-    garage.update(dt);
+    garage.update(dt, focAx, focAz);
     for (const r of camRects) { if (r.doorRect) r.active = garage.doorBlocked(); }
     // la révélation : dans le garage porte fermée l'œil est adapté au sombre ;
     // la porte s'ouvre, le jour inonde, l'exposition redescend en ~1,2 s
     const inside = garage.isInterior(focAx, focAz);
     post.setExposure(1 + 0.3 * (inside ? 1 - garage.doorFrac() : 0));
-    // à l'intérieur, la cellule de pluie reste dehors, devant la façade
-    rain.update(dt, focAx, inside ? GARAGE.z0 - 14 : focAz);
+    // dedans, la cellule de pluie reste franchement dehors : son demi-côté
+    // fait 17 m, il faut plus que ça pour qu'aucune goutte ne traverse le toit
+    rain.update(dt, focAx, inside ? GARAGE.z0 - 26 : focAz);
     fire.update(dt);
     day.update(dt, focAx, focAz);
     horn.update(dt, focAx, focAz);

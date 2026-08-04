@@ -170,6 +170,7 @@ export function createCampfire(scene, deform, groundHeight) {
 
   function toggleAt(x, z) {
     if (lit) { lit = false; return; }                 // l'agonie commence, rien d'autre
+    if (fireI > 0.1) return;                          // laisser mourir avant de rallumer
     fx = x; fz = z;
     const gy = groundHeight(x, z);
     root.position.set(x, gy, z);

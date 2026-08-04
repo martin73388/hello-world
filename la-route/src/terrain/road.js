@@ -102,8 +102,12 @@ export function roadQuery(x, z) {
     const d = Math.sqrt(dx * dx + dz * dz);
     if (d <= dist) { dist = d; y = a.y + (b.y - a.y) * t; }
   }
-  return { dist, y };
+  rqOut.dist = dist; rqOut.y = y;
+  return rqOut;
 }
+// scratch réutilisé — roadQuery est appelé plusieurs fois par frame ;
+// consommer le résultat avant l'appel suivant
+const rqOut = { dist: 0, y: 0 };
 
 function sstep(a, b, v) {
   const t = Math.min(1, Math.max(0, (v - a) / (b - a)));

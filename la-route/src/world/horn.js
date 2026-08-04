@@ -295,9 +295,9 @@ export function createHorn(scene, trunks, groundHeight) {
         writeMatrix(i);
       }
     }
-    // ré-envoi du buffer entier (staticBuffer=false) : les slots inactifs
-    // restent des matrices d'échelle 0
-    leafMesh.thinInstanceSetBuffer('matrix', buf, 16, false);
+    // le buffer a été fourni UNE fois à l'init (staticBuffer=false, même
+    // référence) : on notifie seulement la mutation — pas de re-création GPU
+    leafMesh.thinInstanceBufferUpdated('matrix');
 
     /* ---- chute ambiante : la forêt vit sans klaxon ---- */
     ambT += dt;

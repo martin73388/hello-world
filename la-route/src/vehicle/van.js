@@ -139,10 +139,12 @@ export function buildVan(scene, shadows, ground) {
   box('vRailR', 0.06, 0.06, 4.0, 0.75, 2.72, 0, chrome);
   box('vCross1', 1.56, 0.05, 0.06, 0, 2.72, 1.1, chrome);
   box('vCross2', 1.56, 0.05, 0.06, 0, 2.72, -1.1, chrome);
-  const jc = box('vJerry', 0.42, 0.46, 0.2, 0.3, 2.98, -1.1, new StandardMaterial('vJerryM', scene));
+  // jerrican COUCHÉ sur la galerie : debout, son sommet (3,63 m au sol)
+  // ne passait pas l'ouverture de la porte du garage (3,5 m)
+  const jc = box('vJerry', 0.42, 0.2, 0.46, 0.3, 2.85, -1.1, new StandardMaterial('vJerryM', scene));
   jc.material.diffuseColor = new Color3(0.18, 0.26, 0.16);
   jc.material.specularColor = new Color3(0.08, 0.08, 0.08);
-  box('vStrap', 0.44, 0.03, 0.24, 0.3, 3.02, -1.1, dark);
+  box('vStrap', 0.44, 0.03, 0.5, 0.3, 2.96, -1.1, dark);
   /* ---- intérieur visible ---- */
   box('vDash', 1.8, 0.15, 0.5, 0, 1.72, 2.28, inn);
   box('vSeatL', 0.55, 0.14, 0.55, -0.52, 1.32, 1.7, inn);
@@ -318,9 +320,16 @@ export function buildVan(scene, shadows, ground) {
   }
 
   function setLights(on) { litOn = on; }
+  /** coupure sèche (warm-up) : pas de fondu résiduel à la levée du boot */
+  function snapLightsOff() {
+    litOn = false; litFrac = 0;
+    for (const s of beams) { s.intensity = 0; s.setEnabled(false); }
+    coneMat.alpha = 0;
+    lampOn.emissiveColor.set(0.35, 0.3, 0.2);
+  }
 
   // amorce : la suspension se pose avant la première frame visible
   for (let i = 0; i < 30; i++) update(0.1, { throttle: 0, steer: 0, offroad: false }, null);
 
-  return { root, body, st, wheels, wheelWorld, update, setLights, lightsOn: () => litOn };
+  return { root, body, st, wheels, wheelWorld, update, setLights, snapLightsOff, lightsOn: () => litOn };
 }

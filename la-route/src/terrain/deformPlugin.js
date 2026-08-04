@@ -109,7 +109,7 @@ float dfWetG = 0.0;   // brillance humide, posée avant l'éclairage, lue après
         // ici specularBase (somme spéculaire des lumières) et color existent :
         // le reflet du soleil s'allume sur la terre mouillée et les flaques
         CUSTOM_FRAGMENT_BEFORE_FOG: `
-#ifdef DEFORM
+#if defined(DEFORM) && defined(SPECULARTERM)
         if (dfWetG > 0.0) {
           color.rgb += specularBase * vec3(0.5, 0.55, 0.62) * dfWetG;
         }
