@@ -38,6 +38,7 @@ import { buildDriver } from './character/driver.js';
 import { createCampfire } from './world/campfire.js';
 import { createWeather } from './world/weather.js';
 import { createHorn } from './world/horn.js';
+import { createWildlife } from './world/wildlife.js';
 
 const canvas = document.getElementById('rc');
 const boot = document.getElementById('boot');
@@ -160,6 +161,8 @@ async function start() {
   const horn = createHorn(scene, pines.trunks, groundHeight);
   // rais de lumière rasante entre les troncs (aube et couchant seulement)
   const shafts = buildShafts(scene, pines.trunks, groundHeight);
+  // la vie de fond : chevreuils, vols d'oiseaux, moucherons, pollen, chauves-souris
+  const wild = createWildlife(scene, { groundHeight, trunks: pines.trunks, shadows });
   // le gué : ruisseau qui coupe la route, réflexion et nénuphars
   const water = buildWater(scene);
 
@@ -336,7 +339,10 @@ async function start() {
       }
     } else if (e.code === 'Digit4') weather.skipTo((weather.timeOfDay() + 0.28) % 1);
     else if (e.code === 'Digit5') {
-      horn.blast(state.drive ? van.st.x : state.px, state.drive ? van.st.z : state.pz);
+      const hx = state.drive ? van.st.x : state.px;
+      const hz = state.drive ? van.st.z : state.pz;
+      horn.blast(hx, hz);
+      wild.scatter(hx, hz);                          // le klaxon vide la clairière
     }
   });
   addEventListener('keydown', (e) => {
@@ -548,6 +554,7 @@ async function start() {
       focX = van.st.x; focZ = van.st.z; focY = van.st.bodyY + 1.1;
       fvx = van.st.vx; fvz = van.st.vz;              // le regard suit la glisse
       setHint(speed <= 1.6 ? 'E — descendre' : '');
+      if (speed > 7) wild.scatter(van.st.x, van.st.z);   // un van lancé fait fuir
     } else if (aboard) {
       /* ---- à pied DANS le van : tout se joue en repère local ----
        * On déplace le mécano dans les coordonnées de la caisse, on résout
@@ -688,6 +695,7 @@ async function start() {
       state.camYaw, 1 - weather.cloudiness() * 0.8);
     fire.update(dt);
     horn.update(dt, focAx, focAz);
+    wild.update(dt, focAx, focAz, weather.nightFactor());
     post.update(dt);
     // les phares s'allument tout seuls à la tombée du jour et sous l'averse,
     // mais SEULEMENT quand quelqu'un conduit : un van garé et vide reste
@@ -753,6 +761,6 @@ async function start() {
 
   // poignées de développement (cadrage des captures d'itération)
   window.__laroute = { state, scene, engine, deform, van, driver, weather, fire, horn,
-    garage, post, retro, grass, clouds, shafts, water, flora, cabin, ridges,
+    garage, post, retro, grass, clouds, shafts, water, flora, cabin, ridges, wild,
     isAboard: () => aboard, localPos: lp };
 }
