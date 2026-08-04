@@ -101,7 +101,7 @@ function floorTexture(scene) {
 function roadTexture(scene) {
   const tex = new DynamicTexture('roadTex', 512, scene, true);
   const g = tex.getContext();
-  g.fillStyle = '#57493a'; g.fillRect(0, 0, 512, 512);
+  g.fillStyle = '#6d5c46'; g.fillRect(0, 0, 512, 512);   // gravier clair, pas boue
   let seed = 29;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   for (let i = 0; i < 2600; i++) {

@@ -40,9 +40,13 @@ uniform float hzD; uniform float hzTop; uniform vec3 hzCol;
       CUSTOM_FRAGMENT_BEFORE_FRAGCOLOR: `
 #ifdef HAZE
         float hzDist = length(vEyePosition.xyz - vPositionW);
-        // densité qui décroît avec l'altitude : la nappe est au sol
-        float hzH = clamp(1.0 - vPositionW.y / hzTop, 0.0, 1.0);
-        float hzF = 1.0 - exp(-hzDist * hzD * (0.25 + 1.55 * hzH * hzH));
+        // Hauteur RELATIVE à l'œil, pas absolue : le monde descend jusqu'à
+        // −40 m le long de la route, une altitude absolue aurait plongé tout
+        // le décor dans la nappe dès le premier plan.
+        float hzH = clamp(1.0 - (vPositionW.y - vEyePosition.y + 6.0) / hzTop, 0.0, 1.0);
+        // et rien avant 18 m : le premier plan garde ses couleurs franches
+        float hzNear = smoothstep(18.0, 55.0, hzDist);
+        float hzF = (1.0 - exp(-hzDist * hzD * (0.25 + 1.55 * hzH * hzH))) * hzNear;
         color.rgb = mix(color.rgb, hzCol, clamp(hzF, 0.0, 0.93));
 #endif
 `,

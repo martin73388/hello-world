@@ -63,7 +63,9 @@ void main(void) {
 export function createRetro(scene, camera) {
   const pp = new PostProcess('retro', 'retro',
     ['rtLevels', 'rtDither', 'rtSat', 'rtLift'], null, 1.0, camera);
-  const cfg = { levels: 30, dither: 0.9, sat: 1.3, lift: [0.055, 0.075, 0.115] };
+  // lift discret : à 0,115 de bleu, les surfaces sombres (la chaussée) viraient
+  // franchement au bleu-gris — les ombres doivent être bleutées, pas le sol
+  const cfg = { levels: 30, dither: 0.9, sat: 1.3, lift: [0.028, 0.036, 0.056] };
   pp.onApply = (effect) => {
     effect.setFloat('rtLevels', cfg.levels);
     effect.setFloat('rtDither', cfg.dither);
