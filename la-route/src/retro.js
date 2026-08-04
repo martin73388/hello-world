@@ -15,6 +15,7 @@ varying vec2 vUV;
 uniform sampler2D textureSampler;
 uniform float rtLevels;    // paliers par canal
 uniform float rtDither;    // force du tramage
+uniform float rtSat;       // saturation (1 = neutre)
 
 // Bayer 4×4 déplié : pas de tableau indexé dynamiquement (WebGPU/WGSL friendly)
 float bayer(vec2 p) {
@@ -42,6 +43,11 @@ float bayer(vec2 p) {
 
 void main(void) {
   vec3 c = texture2D(textureSampler, vUV).rgb;
+  // saturation AVANT quantification : la palette réduite garde ainsi des
+  // teintes franches au lieu de virer au gris — c'est ce qui sépare le
+  // « 32 bits coloré » du « 32 bits délavé »
+  float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  c = clamp(mix(vec3(lum), c, rtSat), 0.0, 1.0);
   // gl_FragCoord plutôt que vUV × résolution : entier exact, pas de bandes
   // dues à la précision quand les UV sont multipliés par 2560
   float d = bayer(gl_FragCoord.xy) * rtDither / rtLevels;
@@ -50,12 +56,13 @@ void main(void) {
 `;
 
 export function createRetro(scene, camera) {
-  const pp = new PostProcess('retro', 'retro', ['rtLevels', 'rtDither'],
+  const pp = new PostProcess('retro', 'retro', ['rtLevels', 'rtDither', 'rtSat'],
     null, 1.0, camera);
-  const cfg = { levels: 26, dither: 0.9 };
+  const cfg = { levels: 30, dither: 0.9, sat: 1.45 };
   pp.onApply = (effect) => {
     effect.setFloat('rtLevels', cfg.levels);
     effect.setFloat('rtDither', cfg.dither);
+    effect.setFloat('rtSat', cfg.sat);
   };
   let on = true;
   return {

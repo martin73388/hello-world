@@ -25,6 +25,7 @@ import { plantFlora } from './vegetation/flora.js';
 import { createRetro } from './retro.js';
 import { windClock, sunShared } from './vegetation/wind.js';
 import { buildSky } from './world/sky.js';
+import { buildClouds } from './world/clouds.js';
 import { buildVan } from './vehicle/van.js';
 import { createDust } from './vehicle/dust.js';
 import { buildDriver } from './character/driver.js';
@@ -105,6 +106,7 @@ async function start() {
 
   // Le monde du M2 : terrain sculpté par la route, forêt, ciel
   const sky = buildSky(scene);
+  const clouds = buildClouds(scene);                 // deux nappes de cumulus
   // M3 : buffer d'état de déformation (2048² ≈ 4 cm/texel sur 80 m ; réduit
   // sur le chemin dev WebGL logiciel)
   const deform = createDeform(engine, { res: DEV_GL ? 768 : 2048 });
@@ -244,7 +246,9 @@ async function start() {
   };
 
   const camera = new FreeCamera('cam', new Vector3(0, 2.2, -4), scene);
-  camera.minZ = 0.05; camera.maxZ = 800;
+  // minZ à 0,05 ruinait la précision du depth au loin (le ciel à 750 et les
+  // nuages à 450 tombaient dans le même palier) : 0,2 suffit en 3e personne
+  camera.minZ = 0.2; camera.maxZ = 900;
   camera.fov = 0.95;
   const post = createPost(scene, camera);            // M7 : chaîne de post
   const retro = createRetro(scene, camera);          // patine PS1, en dernier
@@ -557,6 +561,7 @@ async function start() {
     // Dedans, la cellule de pluie reste franchement dehors — son demi-côté
     // fait 17 m, il en faut plus pour qu'aucune goutte ne traverse le toit.
     weather.update(dt, focAx, inside ? GARAGE.z0 - 26 : focAz);
+    clouds.update(dt, weather.sunHeight(), weather.cloudiness(), focAx, focAz, state.camYaw);
     fire.update(dt);
     horn.update(dt, focAx, focAz);
     post.update(dt);

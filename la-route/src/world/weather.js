@@ -87,9 +87,9 @@ const HEX = {
   nuit: ['#050914', '#0a1026', '#111c3c', '#1a2650', '#0e1730', '#070c1a', '#04060e'],
   aube: ['#0a1130', '#16224c', '#33356a', '#6b4668', '#3a2c48', '#141527', '#070a14'],
   lever: ['#1d3060', '#3a5490', '#8d6b96', '#eda06a', '#c06848', '#4a3450', '#151122'],
-  matin: ['#2a5290', '#4c7cb6', '#88aace', '#dcc59c', '#9c8e7a', '#3f4759', '#1a2130'],
-  jour: ['#2c63b6', '#5088ce', '#88b2dc', '#c6d8e6', '#95a6b4', '#4b5967', '#232c39'],
-  aprem: ['#3060a8', '#5782be', '#9cb4ce', '#dcd2b0', '#aa997e', '#4f5259', '#242831'],
+  matin: ['#1f56a8', '#4180cc', '#84b2dc', '#e6cfa2', '#a89880', '#4a5464', '#1e2736'],
+  jour: ['#0b4fd4', '#2b7ae4', '#6cadec', '#b6dcf4', '#a4c2d4', '#5b7080', '#2c3a48'],
+  aprem: ['#2360c4', '#4a88d2', '#a2bcd8', '#e8dcb6', '#b8a684', '#5c6068', '#2a2f3a'],
   crep: ['#264c92', '#4a6ea8', '#a08ea0', '#e8a25c', '#b87a4a', '#4a5a74', '#1c3050'],
   couchant: ['#152a5e', '#2d4076', '#7d5072', '#d66a3a', '#8b4028', '#33344f', '#101828'],
   bleue: ['#0c1738', '#182354', '#3a3668', '#6a415a', '#43314b', '#1a1d35', '#080c18'],
@@ -583,5 +583,7 @@ export function createWeather(scene, refs) {
     rainEase: () => cur.rain,
     nightFactor: () => nf,
     sunUp: () => sy > 0,
+    sunHeight: () => sy,                     // hauteur du soleil, pour les nuages
+    cloudiness: () => cur.cloud,
   };
 }

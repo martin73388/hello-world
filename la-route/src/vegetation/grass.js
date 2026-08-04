@@ -158,7 +158,10 @@ function tuftGeometry(scene, name, h, w, cards) {
 
 /** carte de brins : silhouettes effilées peintes dans l'alpha, pointes claires */
 function bladeTexture(scene, name, blades, base, tip, seed) {
-  const tex = new DynamicTexture(name, { width: 64, height: 64 }, scene, true);
+  // PAS de mipmaps : le moyennage de l'alpha ferait passer des cartes
+  // entières au test de découpe (blocs verts flottants). Le scintillement
+  // à distance est assumé — il est même dans l'esprit 32 bits.
+  const tex = new DynamicTexture(name, { width: 64, height: 64 }, scene, false);
   const g = tex.getContext();
   g.clearRect(0, 0, 64, 64);
   let s = seed;
@@ -167,7 +170,7 @@ function bladeTexture(scene, name, blades, base, tip, seed) {
     const x0 = 4 + rnd() * 56;                                  // pied du brin
     const bend = (rnd() - 0.5) * 26;                            // courbure
     const top = 6 + rnd() * 22;                                 // hauteur (y bas = pointe)
-    const wid = 1.6 + rnd() * 2.2;
+    const wid = 0.9 + rnd() * 1.5;      // brins fins : vus de près, larges ils font des planches
     // dégradé pied → pointe : le vert s'éclaircit et jaunit en montant
     const grad = g.createLinearGradient(0, 64, 0, top);
     grad.addColorStop(0, base);
@@ -187,7 +190,10 @@ function bladeTexture(scene, name, blades, base, tip, seed) {
 
 /** brins fleuris : tiges vertes surmontées de corolles claires */
 function flowerTexture(scene, name, seed) {
-  const tex = new DynamicTexture(name, { width: 64, height: 64 }, scene, true);
+  // PAS de mipmaps : le moyennage de l'alpha ferait passer des cartes
+  // entières au test de découpe (blocs verts flottants). Le scintillement
+  // à distance est assumé — il est même dans l'esprit 32 bits.
+  const tex = new DynamicTexture(name, { width: 64, height: 64 }, scene, false);
   const g = tex.getContext();
   g.clearRect(0, 0, 64, 64);
   let s = seed;
@@ -251,12 +257,12 @@ export function plantGrass(scene, deformState, opts = {}) {
   const grass = tuftGeometry(scene, 'grassTuft', 0.34, 0.24, 3);
   mk('grass', grass, new Color3(1, 1, 1), 1.0,
     bladeTexture(scene, 'bladeTex', 26, '#38571a', '#a8bd66', 13));
-  const tall = tuftGeometry(scene, 'tallTuft', 0.92, 0.34, 4);
+  const tall = tuftGeometry(scene, 'tallTuft', 0.86, 0.3, 4);
   mk('tall', tall, new Color3(1, 1, 1), 1.25,
-    bladeTexture(scene, 'tallTex', 16, '#42611d', '#c6cf72', 29));
-  const reed = tuftGeometry(scene, 'reedTuft', 1.35, 0.22, 3);
+    bladeTexture(scene, 'tallTex', 34, '#42611d', '#c6cf72', 29));
+  const reed = tuftGeometry(scene, 'reedTuft', 1.05, 0.2, 3);
   mk('reed', reed, new Color3(1, 1, 1), 1.5,
-    bladeTexture(scene, 'reedTex', 9, '#4a5c22', '#d8cf84', 53));
+    bladeTexture(scene, 'reedTex', 22, '#4a5c22', '#d8cf84', 53));
   const flower = tuftGeometry(scene, 'flowerTuft', 0.42, 0.26, 3);
   mk('flower', flower, new Color3(1, 1, 1), 1.1,
     flowerTexture(scene, 'flowerTex', 91));
