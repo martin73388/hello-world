@@ -21,6 +21,7 @@ import { height, groundHeight, roadQuery, ROAD_HALF, GARAGE } from './terrain/ro
 import { buildGarage } from './world/garage.js';
 import { plantPines } from './vegetation/pines.js';
 import { plantGrass } from './vegetation/grass.js';
+import { plantFlora } from './vegetation/flora.js';
 import { createRetro } from './retro.js';
 import { windClock } from './vegetation/wind.js';
 import { buildSky } from './world/sky.js';
@@ -109,9 +110,11 @@ async function start() {
   const deform = createDeform(engine, { res: DEV_GL ? 768 : 2048 });
   const terrain = buildTerrain(scene, shadows, deform.state);
   const pines = plantPines(scene, shadows);
+  // bouleaux en bosquets, souches, troncs couchés, rochers moussus, panneau
+  const flora = plantFlora(scene, shadows);
   // le tapis : herbe, fougères, buissons — se couchent dans les ornières
   const grass = plantGrass(scene, deform.state);
-  console.log('pins plantés :', pines.count);
+  console.log('pins :', pines.count, '| flore :', flora.count);
 
   // M4 : le mécano articulé remplace la capsule, le van attend sur la route
   const garage = buildGarage(scene, shadows);        // M7 : la thèse de la démo
@@ -132,7 +135,7 @@ async function start() {
   // obstacles (troncs + rochers) : hachage spatial 4 m pour les collisions
   const OBS = new Map();
   const okey = (cx, cz) => cx * 8192 + cz;
-  for (const o of [...pines.trunks, ...terrain.rocks]) {
+  for (const o of [...pines.trunks, ...terrain.rocks, ...flora.obstacles]) {
     const span = Math.ceil((o.r + 1.4) / 4);
     const cx = Math.round(o.x / 4), cz = Math.round(o.z / 4);
     for (let a = -span; a <= span; a++) {

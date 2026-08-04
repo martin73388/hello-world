@@ -216,13 +216,16 @@ export function plantFlora(scene, shadows) {
   bTrunk.position.y = 2.8;
   bTrunk.bakeCurrentTransformIntoVertices();          // origine au pied, comme les pins
   setup(bTrunk, barkM, true);
-  // trois masses arrondies décalées : un houppier, pas une boule
-  const f1 = MeshBuilder.CreateSphere('flB1', { diameter: 2.5, segments: 5 }, scene);
-  f1.position.set(0.12, 3.75, 0.06); f1.scaling.set(1, 0.85, 1);
-  const f2 = MeshBuilder.CreateSphere('flB2', { diameter: 1.95, segments: 5 }, scene);
-  f2.position.set(-0.5, 4.6, 0.28); f2.scaling.set(1, 0.9, 1);
-  const f3 = MeshBuilder.CreateSphere('flB3', { diameter: 1.4, segments: 4 }, scene);
-  f3.position.set(0.45, 5.0, -0.3);
+  // Trois masses décalées : un houppier, pas une boule. Icosaèdres (20 faces,
+  // ombrage à facettes) et non sphères UV — une CreateSphere à 5 segments
+  // coûtait 536 triangles par arbre, soit 225 k pour le bosquet entier, pour
+  // un galbe que la DA ne veut pas. Ici 60 triangles, le budget d'un pin.
+  const f1 = MeshBuilder.CreateIcoSphere('flB1', { radius: 1.35, subdivisions: 1 }, scene);
+  f1.position.set(0.12, 3.7, 0.06); f1.scaling.set(1, 0.85, 1);
+  const f2 = MeshBuilder.CreateIcoSphere('flB2', { radius: 1.05, subdivisions: 1 }, scene);
+  f2.position.set(-0.55, 4.55, 0.28); f2.scaling.set(1, 0.9, 1);
+  const f3 = MeshBuilder.CreateIcoSphere('flB3', { radius: 0.78, subdivisions: 1 }, scene);
+  f3.position.set(0.45, 4.95, -0.32);
   const bLeaf = Mesh.MergeMeshes([f1, f2, f3], true, true);
   bLeaf.name = 'flBirchLeaf';
   setup(bLeaf, leafM, true);
@@ -272,8 +275,10 @@ export function plantFlora(scene, shadows) {
   stump.bakeCurrentTransformIntoVertices();
   setup(stump, woodM, true);
   // la mousse au pied : un tore écrasé, collerette qui noie le raccord au sol
+  // tessellation 6 : un bourrelet à facettes, pas un tore lisse — et 72
+  // triangles au lieu de 162 pour un objet qui ne fait que noyer un raccord
   const stumpMoss = MeshBuilder.CreateTorus('flStumpMoss',
-    { diameter: 0.86, thickness: 0.3, tessellation: 8 }, scene);
+    { diameter: 0.86, thickness: 0.3, tessellation: 6 }, scene);
   stumpMoss.scaling.set(1, 0.4, 1);
   stumpMoss.position.y = 0.06;
   stumpMoss.bakeCurrentTransformIntoVertices();
@@ -321,23 +326,68 @@ export function plantFlora(scene, shadows) {
   setup(logMoss, mossM, false);
 
   const N_LOG = 14;
-  const logs = [];                                    // {x, y, z, yaw, sy, sz}
-  // LA PASSERELLE : on cherche le meilleur creux — deux berges de même niveau,
-  // un milieu nettement plus bas. Le tronc s'y pose de niveau, comme un pont.
-  {
-    let bx = 0, bz = 0, byaw = 0, by = 0, best = -1e9;
-    for (let i = 0; i < 1400; i++) {
-      const x = (rnd() - 0.5) * 280 - 8, z = 28 - rnd() * 280;
-      if (!freeAt(x, z, MIN_ROAD + 2)) continue;
-      const yaw = rnd() * Math.PI;
-      const dx = Math.sin(yaw) * 3.1, dz = Math.cos(yaw) * 3.1;
-      if (!freeAt(x + dx, z + dz, MIN_ROAD) || !freeAt(x - dx, z - dz, MIN_ROAD)) continue;
-      const ha = height(x + dx, z + dz), hb = height(x - dx, z - dz), hc = height(x, z);
-      if (Math.abs(ha - hb) > 0.5) continue;          // berges de niveau, sinon ça glisse
-      const span = Math.min(ha, hb) - hc;
-      if (span > best) { best = span; bx = x; bz = z; byaw = yaw; by = Math.min(ha, hb); }
+  const logs = [];
+  /* Pose un fût sur le terrain : il PORTE sur ses deux bouts (l'axe est au
+   * niveau du sol + son rayon, moins l'enfoncement) et épouse la pente entre
+   * les deux. Sans ce calcul le tronc s'enterre jusqu'à l'axe sur la moindre
+   * bosse. Repère local : le fût est couché sur +z, un pitch positif fait
+   * PLONGER ce bout-là — d'où sin(pitch) = (hb - ha) / (2·demi-portée). */
+  const layLog = (x, z, yaw, sx, sy, sz, sink, roll) => {
+    const ux = Math.sin(yaw), uz = Math.cos(yaw), hl = 2.0 * sz;
+    const ha = height(x + ux * hl, z + uz * hl);
+    const hb = height(x - ux * hl, z - uz * hl);
+    const pitch = Math.asin(Math.max(-0.34, Math.min(0.34, (hb - ha) / (2 * hl))));
+    const axis = (ha + hb) / 2 + 0.25 * sx - sink;    // le ventre affleure le sol
+    return {
+      x, z, yaw, pitch, roll, sx, sy, sz, hl,
+      y: axis - 0.24 * sy * Math.cos(pitch),          // l'origine du gabarit
+      axis,
+    };
+  };
+  /** hauteur de l'axe du fût à la fraction u de sa demi-portée */
+  const logAxisY = (l, u) => l.axis - Math.sin(l.pitch) * u * l.hl;
+  /** garde maxi sous le ventre : ce qui fait lire « passerelle » et pas « bûche » */
+  const logClearance = (l) => {
+    let best = -1e9;
+    for (let u = -0.6; u <= 0.601; u += 0.15) {
+      const g = logAxisY(l, u) - 0.25 * l.sx
+        - height(l.x + Math.sin(l.yaw) * u * l.hl, l.z + Math.cos(l.yaw) * u * l.hl);
+      if (g > best) best = g;
     }
-    logs.push({ x: bx, y: by - 0.1, z: bz, yaw: byaw, roll: 0.05, sx: 1.2, sy: 1.2, sz: 1.55 });
+    return best;
+  };
+  // LA PASSERELLE : le terrain n'a pas de ravin à l'échelle d'un tronc (l'octave
+  // fine culmine à ±25 cm) — on cherche donc le meilleur vallon ET on cale un
+  // rocher sous le fût au tiers : c'est la pile qui fait tenir la lecture.
+  let pile = null;
+  {
+    let best = -1e9, keep = null;
+    for (let i = 0; i < 2600; i++) {
+      const x = (rnd() - 0.5) * 280 - 8, z = 28 - rnd() * 280;
+      const d = roadQuery(x, z).dist;
+      if (d < MIN_ROAD + 2 || d > 20) continue;       // trouvable : à portée de la route
+      for (let k = 0; k < 8; k++) {
+        const yaw = (k / 8) * Math.PI;
+        const l = layLog(x, z, yaw, 1.25, 1.25, 1.85, 0.02, 0.04);
+        if (!freeAt(l.x + Math.sin(yaw) * l.hl, l.z + Math.cos(yaw) * l.hl, MIN_ROAD)) continue;
+        if (!freeAt(l.x - Math.sin(yaw) * l.hl, l.z - Math.cos(yaw) * l.hl, MIN_ROAD)) continue;
+        const c = logClearance(l);
+        if (c > best) { best = c; keep = l; }
+      }
+    }
+    if (keep) {
+      logs.push(keep);
+      // la pile : au tiers, sommet calé sur le ventre. Plancher à 0,3 — sous ce
+      // gabarit ce n'est plus une pile mais un caillou, et le fût mord dedans,
+      // ce qui vaut mieux que de flotter. Elle n'est PAS un obstacle : 20 cm de
+      // granit s'enjambent, et le passage sous le fût doit rester ouvert
+      const u = -0.45;
+      const px = keep.x + Math.sin(keep.yaw) * u * keep.hl;
+      const pz = keep.z + Math.cos(keep.yaw) * u * keep.hl;
+      const belly = logAxisY(keep, u) - 0.25 * keep.sx;
+      const psy = Math.max(0.3, (belly - height(px, pz)) / 0.65);
+      pile = { x: px, z: pz, sx: 1.05, sy: psy, sz: 0.85 };
+    }
   }
   guard = 0;
   while (logs.length < N_LOG && guard++ < 3000) {
@@ -345,27 +395,23 @@ export function plantFlora(scene, shadows) {
     if (!freeAt(x, z, MIN_ROAD)) continue;
     const yaw = rnd() * Math.PI * 2;
     const sv = 0.75 + rnd() * 0.55;
-    const dx = Math.sin(yaw) * 2.0 * sv, dz = Math.cos(yaw) * 2.0 * sv;
-    if (!freeAt(x + dx, z + dz, MIN_ROAD) || !freeAt(x - dx, z - dz, MIN_ROAD)) continue;
-    const ha = height(x + dx, z + dz), hb = height(x - dx, z - dz);
-    if (Math.abs(ha - hb) > 0.45) continue;           // un tronc ne tient pas en travers d'un talus
-    logs.push({
-      x, y: Math.min(ha, hb) - 0.09, z, yaw,
-      roll: (rnd() - 0.5) * 0.3, sx: sv, sy: sv, sz: sv * (0.85 + rnd() * 0.5),
-    });
+    const l = layLog(x, z, yaw, sv, sv, sv * (0.85 + rnd() * 0.5), 0.08, (rnd() - 0.5) * 0.3);
+    if (!freeAt(x + Math.sin(yaw) * l.hl, z + Math.cos(yaw) * l.hl, MIN_ROAD)) continue;
+    if (!freeAt(x - Math.sin(yaw) * l.hl, z - Math.cos(yaw) * l.hl, MIN_ROAD)) continue;
+    if (Math.abs(l.pitch) > 0.28) continue;           // un fût ne reste pas sur un talus
+    logs.push(l);
   }
   const logMats = [];
   for (const l of logs) {
-    Quaternion.RotationYawPitchRollToRef(l.yaw, 0, l.roll, q);
+    Quaternion.RotationYawPitchRollToRef(l.yaw, l.pitch, l.roll, q);
     sc.set(l.sx, l.sy, l.sz);
     tr.set(l.x, l.y, l.z);
     logMats.push(Matrix.Compose(sc, q, tr));
-    // obstacle SEULEMENT là où le fût touche le sol : la passerelle enjambe le
-    // creux, on ne bloque pas le passage sous elle
-    const dx = Math.sin(l.yaw), dz = Math.cos(l.yaw);
-    for (const t of [-1.5, 0, 1.5]) {
-      const ox = l.x + dx * t * l.sz, oz = l.z + dz * t * l.sz;
-      if (l.y + 0.24 * l.sy - height(ox, oz) < 0.5) obstacles.push({ x: ox, z: oz, r: 0.34 * l.sx });
+    // obstacle SEULEMENT là où le fût touche le sol : la passerelle enjambe son
+    // vallon, on ne referme pas le passage dessous
+    for (const u of [-0.75, 0, 0.75]) {
+      const ox = l.x + Math.sin(l.yaw) * u * l.hl, oz = l.z + Math.cos(l.yaw) * u * l.hl;
+      if (logAxisY(l, u) - height(ox, oz) < 0.5) obstacles.push({ x: ox, z: oz, r: 0.34 * l.sx });
     }
   }
   const logBuf = upload(logMats);
@@ -398,6 +444,14 @@ export function plantFlora(scene, shadows) {
     rockMats.push(Matrix.Compose(sc, q, tr));
     obstacles.push({ x, z, r: sx * 0.82 });
   }
+  // la pile de la passerelle : un rocher de plus, sans inclinaison (son sommet
+  // doit tomber pile sous le ventre du fût) et sans obstacle
+  if (pile) {
+    Quaternion.RotationYawPitchRollToRef(rnd() * Math.PI * 2, 0, 0, q);
+    sc.set(pile.sx, pile.sy, pile.sz);
+    tr.set(pile.x, height(pile.x, pile.z) - pile.sy * 0.35, pile.z);
+    rockMats.push(Matrix.Compose(sc, q, tr));
+  }
   const rockBuf = upload(rockMats);
   rock.thinInstanceSetBuffer('matrix', rockBuf, 16, true);
   rockMoss.thinInstanceSetBuffer('matrix', rockBuf, 16, true);
@@ -411,8 +465,9 @@ export function plantFlora(scene, shadows) {
   // deux chapeaux : rouge à points, brun. PAS de clone() — un mesh cloné
   // PARTAGE sa géométrie, et le second buffer de thin instances écraserait
   // les matrices du premier (les attributs world0..3 vivent dans la géométrie)
+  // 20 faces : à 13 cm de large, une sphère UV en coûtait 256 pour rien
   const dome = (name) => {
-    const m = MeshBuilder.CreateSphere(name, { diameter: 0.15, segments: 6 }, scene);
+    const m = MeshBuilder.CreateIcoSphere(name, { radius: 0.078, subdivisions: 1 }, scene);
     m.scaling.set(1, 0.62, 1);                        // galette, pas bille
     m.position.y = 0.12;
     m.bakeCurrentTransformIntoVertices();
@@ -435,11 +490,11 @@ export function plantFlora(scene, shadows) {
     for (let k = 0; k < n && stemMats.length < N_SHROOM; k++) {
       let x, y, z;
       if (onLog) {
-        const t = (rnd() - 0.5) * 2.8 * host.sz;      // le long du dos
+        const u = (rnd() - 0.5) * 1.4;                // le long du dos
         const o = (rnd() - 0.5) * 0.16;               // à peine de part et d'autre
-        x = host.x + Math.sin(host.yaw) * t + Math.cos(host.yaw) * o;
-        z = host.z + Math.cos(host.yaw) * t - Math.sin(host.yaw) * o;
-        y = host.y + 0.44 * host.sy;                  // sur la crête, sous la mousse
+        x = host.x + Math.sin(host.yaw) * u * host.hl + Math.cos(host.yaw) * o;
+        z = host.z + Math.cos(host.yaw) * u * host.hl - Math.sin(host.yaw) * o;
+        y = logAxisY(host, u) + 0.2 * host.sx;        // le pied mordu dans la crête
       } else {
         const a = rnd() * Math.PI * 2, r = host.r + 0.15 + rnd() * 0.7;
         x = host.x + Math.cos(a) * r; z = host.z + Math.sin(a) * r;
