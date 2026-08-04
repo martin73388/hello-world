@@ -86,7 +86,7 @@ uniform float grTransl; uniform vec3 grSun; uniform vec3 grAmb;
         // réelle capte toujours un peu de ciel. Le plancher SUIT l'ambiante
         // du moment (le même que le décor) — constant, il faisait luire
         // l'herbe en plein milieu de la nuit.
-        color.rgb += baseColor.rgb * grAmb * 1.05;
+        color.rgb += baseColor.rgb * vDiffuseColor.rgb * grAmb * 1.05;
 #endif
 `,
       };
@@ -196,6 +196,56 @@ function bladeTexture(scene, name, blades, base, tip, seed) {
   return tex;
 }
 
+/**
+ * Fronde de fougère : la strate large du sous-bois. Les fougères étaient
+ * peintes avec la même recette que l'herbe — des brins fins — et se
+ * confondaient donc avec le tapis. Dans la référence, ce sont de GRANDES
+ * palmes découpées en folioles, presque horizontales, qui font une masse
+ * sombre au premier plan. On peint donc un rachis arqué garni de folioles
+ * décroissantes, plusieurs par carte.
+ */
+function frondTexture(scene, name, seed) {
+  // PAS de mipmaps : même raison que les brins (des palettes vertes volantes)
+  const S = 64;
+  const tex = new DynamicTexture(name, { width: S, height: S }, scene, false);
+  const g = tex.getContext();
+  g.clearRect(0, 0, S, S);
+  let s = seed;
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let f = 0; f < 5; f++) {
+    // la fronde part du pied (bas du canvas) et s'arque vers l'extérieur
+    const x0 = 22 + rnd() * 20, side = f % 2 ? 1 : -1;
+    const len = 34 + rnd() * 20;
+    const spread = (0.55 + rnd() * 0.75) * side;
+    const steps = 11;
+    let px = x0, py = S;
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      // arc : monte vite au départ, retombe vers l'extérieur en bout
+      const nx = x0 + spread * len * t * t * 0.9;
+      const ny = S - len * (t * 1.12 - t * t * 0.26);
+      // les folioles, perpendiculaires au rachis, décroissantes vers la pointe
+      const dx = nx - px, dy = ny - py, L = Math.hypot(dx, dy) || 1;
+      const ux = -dy / L, uy = dx / L;
+      const fl = (5.2 + rnd() * 2.4) * (1 - t * 0.72);
+      g.fillStyle = t > 0.5 ? '#4c7420' : '#28430f';
+      for (let sg = -1; sg <= 1; sg += 2) {
+        g.beginPath();
+        g.ellipse(px + ux * sg * fl * 0.55, py + uy * sg * fl * 0.55,
+          fl, fl * 0.34, Math.atan2(uy * sg, ux * sg), 0, 7);
+        g.fill();
+      }
+      g.strokeStyle = '#1e3a0c'; g.lineWidth = 1.1;
+      g.beginPath(); g.moveTo(px, py); g.lineTo(nx, ny); g.stroke();
+      px = nx; py = ny;
+    }
+  }
+  tex.update();
+  tex.hasAlpha = true;
+  tex.updateSamplingMode(1);
+  return tex;
+}
+
 /** brins fleuris : tiges vertes surmontées de corolles claires */
 function flowerTexture(scene, name, seed) {
   // PAS de mipmaps : le moyennage de l'alpha ferait passer des cartes
@@ -235,7 +285,7 @@ const RESEED = 7;          // au-delà, on re-sème
 
 export function plantGrass(scene, deformState, opts = {}) {
   const N_GRASS = opts.grass ?? 15000;
-  const N_FERN = opts.ferns ?? 900;
+  const N_FERN = opts.ferns ?? 1500;
   const N_BUSH = opts.bushes ?? 240;
 
   const mk = (name, mesh, color, strength, tex) => {
@@ -274,9 +324,11 @@ export function plantGrass(scene, deformState, opts = {}) {
   const flower = tuftGeometry(scene, 'flowerTuft', 0.42, 0.26, 3);
   mk('flower', flower, new Color3(1, 1, 1), 1.1,
     flowerTexture(scene, 'flowerTex', 91));
-  const fern = tuftGeometry(scene, 'fernTuft', 0.58, 0.85, 4);
-  mk('fern', fern, new Color3(1, 1, 1), 0.55,
-    bladeTexture(scene, 'fernTex', 14, '#17300a', '#456f1c', 71));
+  // la fougère est LARGE et basse : c'est elle qui fait la masse sombre du
+  // premier plan, pas une touffe d'herbe de plus
+  const fern = tuftGeometry(scene, 'fernTuft', 0.72, 1.55, 3);
+  mk('fern', fern, new Color3(1, 1, 1), 0.4,
+    frondTexture(scene, 'fernTex', 71));
   const bush = MeshBuilder.CreateSphere('bush', { diameter: 1.25, segments: 5 }, scene);
   bush.bakeCurrentTransformIntoVertices();
   mk('bush', bush, new Color3(0.19, 0.26, 0.13), 0.3);

@@ -8,7 +8,7 @@
  * S'applique aux matériaux du décor ; le ciel et les nuages en sont exclus.
  */
 import { MaterialPluginBase } from '@babylonjs/core/Materials/materialPluginBase.js';
-import { hazeShared } from '../vegetation/wind.js';
+import { hazeShared, sunShared } from '../vegetation/wind.js';
 
 export class HazePlugin extends MaterialPluginBase {
   constructor(material) {
@@ -24,9 +24,11 @@ export class HazePlugin extends MaterialPluginBase {
         { name: 'hzTop', size: 1, type: 'float' },
         { name: 'hzCol', size: 3, type: 'vec3' },
         { name: 'hzAmb', size: 3, type: 'vec3' },
+        { name: 'hzSun', size: 3, type: 'vec3' },
       ],
       fragment: `#ifdef HAZE
 uniform float hzD; uniform float hzTop; uniform vec3 hzCol; uniform vec3 hzAmb;
+uniform vec3 hzSun;
 #endif`,
     };
   }
@@ -35,6 +37,7 @@ uniform float hzD; uniform float hzTop; uniform vec3 hzCol; uniform vec3 hzAmb;
     ubo.updateFloat('hzTop', hazeShared.top);
     ubo.updateFloat3('hzCol', hazeShared.r, hazeShared.g, hazeShared.b);
     ubo.updateFloat3('hzAmb', hazeShared.ar, hazeShared.ag, hazeShared.ab);
+    ubo.updateFloat3('hzSun', sunShared.x, sunShared.y, sunShared.z);
   }
   getCustomCode(shaderType) {
     if (shaderType !== 'fragment') return null;
@@ -45,7 +48,11 @@ uniform float hzD; uniform float hzTop; uniform vec3 hzCol; uniform vec3 hzAmb;
         // horizontale reçoit N·L ~ 0 et tombe au noir. Le ciel, lui, éclaire
         // toujours un peu — sans ce terme, l'aube et le couchant creusent des
         // trous noirs entre les touffes et sous les arbres.
-        color.rgb += baseColor.rgb * hzAmb;
+        // ATTENTION : baseColor est la texture SEULE (blanche si le matériau
+        // n'en a pas). Sans vDiffuseColor, le plancher ajoutait du bleu de
+        // ciel PUR à tout ce qui n'est pas texturé — les troncs viraient au
+        // mauve à contre-jour au lieu de rester des silhouettes brunes.
+        color.rgb += baseColor.rgb * vDiffuseColor.rgb * hzAmb;
         float hzDist = length(vEyePosition.xyz - vPositionW);
         // Hauteur RELATIVE à l'œil, pas absolue : le monde descend jusqu'à
         // −40 m le long de la route, une altitude absolue aurait plongé tout
@@ -54,7 +61,16 @@ uniform float hzD; uniform float hzTop; uniform vec3 hzCol; uniform vec3 hzAmb;
         // et rien avant 18 m : le premier plan garde ses couleurs franches
         float hzNear = smoothstep(18.0, 55.0, hzDist);
         float hzF = (1.0 - exp(-hzDist * hzD * (0.25 + 1.55 * hzH * hzH))) * hzNear;
-        color.rgb = mix(color.rgb, hzCol, clamp(hzF, 0.0, 0.93));
+        // La brume prend la COULEUR DE LA LUMIÈRE QUI LA TRAVERSE. Une nappe
+        // d'une seule teinte étageait bien les plans mais laissait l'image
+        // plate : dans la référence, la moitié tournée vers le soleil est
+        // orangée et l'autre franchement bleue, et c'est ce basculement qui
+        // fait le contre-jour. On module donc la teinte par l'angle entre le
+        // regard et le soleil — gratuit, et il suit l'arc solaire tout seul.
+        vec3 hzV = normalize(vEyePosition.xyz - vPositionW);
+        float hzBack = clamp(dot(hzV, normalize(hzSun)), 0.0, 1.0);
+        vec3 hzTint = mix(vec3(0.80, 0.90, 1.18), vec3(1.42, 1.12, 0.72), pow(hzBack, 1.6));
+        color.rgb = mix(color.rgb, hzCol * hzTint, clamp(hzF, 0.0, 0.93));
 #endif
 `,
     };
