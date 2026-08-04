@@ -186,10 +186,12 @@ export function buildVanInterior(scene, shadows, vanBody, vanState) {
   wood.diffuseTexture = woodTexture(scene);
   const formica = mk('viFormicaM', null, new Color3(0.24, 0.24, 0.22), 52);
   formica.diffuseTexture = formicaTexture(scene);
+  // une seule toile peinte pour les deux matériaux : seul le culling diffère
+  const fabTex = fabricTexture(scene);
   const fabric = mk('viFabricM', null, new Color3(0.03, 0.03, 0.03));
-  fabric.diffuseTexture = fabricTexture(scene);
+  fabric.diffuseTexture = fabTex;
   const curtainM = mk('viCurtainM', null, new Color3(0.03, 0.03, 0.03));
-  curtainM.diffuseTexture = fabricTexture(scene);
+  curtainM.diffuseTexture = fabTex;
   curtainM.backFaceCulling = false;                   // vus du dehors par la vitre
   const rugM = mk('viRugM', null, new Color3(0.02, 0.02, 0.02));
   rugM.diffuseTexture = rugTexture(scene);
