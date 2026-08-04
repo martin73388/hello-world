@@ -313,7 +313,7 @@ export function buildVan(scene, shadows, ground) {
     const beamsOn = litFrac > 0.01;
     for (const s of beams) {
       if (s.isEnabled() !== beamsOn) s.setEnabled(beamsOn);
-      s.intensity = litFrac * 55;
+      s.intensity = litFrac * 34;   // assez pour la route, pas pour blanchir la forêt
     }
     coneMat.alpha = litFrac * (0.045 + (input.mist || 0) * 0.075);
     lampOn.emissiveColor.set(0.35 + 0.65 * litFrac * 1.4, 0.3 + 0.55 * litFrac * 1.3, 0.2 + 0.4 * litFrac);

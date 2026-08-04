@@ -107,8 +107,8 @@ const SKY = [
  * Ambiante / brouillard : trois jeux (nuit, entre-deux, jour) mélangés par
  * la hauteur du soleil. Un seul barycentre pilote lumière, brume et fond.
  * ---------------------------------------------------------------------- */
-const AMB_I = [0.30, 0.62, 0.78];
-const AMB_D = [[0.16, 0.21, 0.40], [0.34, 0.30, 0.46], [0.40, 0.50, 0.70]];
+const AMB_I = [0.55, 0.7, 0.9];   // la nuit reste LISIBLE : clair de lune, pas néant
+const AMB_D = [[0.24, 0.32, 0.62], [0.34, 0.30, 0.46], [0.40, 0.50, 0.70]];
 const AMB_G = [[0.06, 0.06, 0.09], [0.14, 0.11, 0.11], [0.20, 0.18, 0.15]];
 const FOG_D = [0.0135, 0.0125, 0.0082];
 const FOG_C = [[0.055, 0.065, 0.105], [0.20, 0.17, 0.21], [0.46, 0.53, 0.62]];
@@ -232,8 +232,11 @@ export function createWeather(scene, refs) {
   rainPS.minScaleX = 0.06; rainPS.maxScaleX = 0.08;    // le sprite s'étire
   rainPS.minScaleY = 0.65; rainPS.maxScaleY = 0.85;
   rainPS.billboardMode = ParticleSystem.BILLBOARDMODE_Y;
-  // les Color4 des gradients sont GARDÉS et mutés : la pluie prend la teinte
-  // de l'heure (grise à midi, presque noire à minuit) sans rien réallouer
+  // les Color4 des gradients sont GARDÉS et mutés en place : la pluie prend
+  // la teinte de l'heure (grise à midi, presque noire à minuit) sans rien
+  // réallouer. Une particule ne relit son palier qu'en le franchissant : la
+  // teinte accuse au plus une vie de retard — invisible sur une dérive qui
+  // dure des minutes.
   const RAIN_G = [
     new Color4(0.66, 0.72, 0.84, 0), new Color4(0.66, 0.72, 0.84, 0.34),
     new Color4(0.64, 0.70, 0.82, 0.30), new Color4(0.64, 0.70, 0.82, 0),
@@ -251,15 +254,19 @@ export function createWeather(scene, refs) {
   rainPS.start();
 
   /* ---- brume : nappe basse, bancs énormes et quasi transparents ---- */
-  const mistPS = new ParticleSystem('mistBank', 48, scene);
+  const mistPS = new ParticleSystem('mistBank', 40, scene);
   mistPS.particleTexture = glowTexture(scene, 'mistTex',
     'rgba(255,255,255,.55)', 'rgba(255,255,255,.3)');
   mistPS.emitter = new Vector3(0, -100, 0);
-  mistPS.minEmitBox = new Vector3(-34, 0.0, -34);      // 68 m de nappe
-  mistPS.maxEmitBox = new Vector3(34, 2.2, 34);
-  mistPS.minLifeTime = 16; mistPS.maxLifeTime = 24;    // 2,2/s × 20 s ≈ 44 < 48
-  mistPS.addSizeGradient(0, 7);
-  mistPS.addSizeGradient(1, 16);                       // le banc s'étale en mourant
+  mistPS.minEmitBox = new Vector3(-34, 0.2, -34);      // 68 m de nappe
+  mistPS.maxEmitBox = new Vector3(34, 2.4, 34);
+  // peu de bancs, énormes et presque transparents : c'est fogDensity qui
+  // porte la brume, ces voiles ne font qu'y mettre du mouvement (le pire cas
+  // 1,6/s × 22 s = 36 vivants tient sous la capacité, et le remplissage
+  // reste raisonnable malgré des sprites de 14 m)
+  mistPS.minLifeTime = 16; mistPS.maxLifeTime = 22;
+  mistPS.addSizeGradient(0, 6);
+  mistPS.addSizeGradient(1, 14);                       // le banc s'étale en mourant
   const MIST_G = [
     new Color4(0.72, 0.75, 0.80, 0), new Color4(0.72, 0.75, 0.80, 0.075),
     new Color4(0.70, 0.73, 0.78, 0.065), new Color4(0.68, 0.71, 0.76, 0),
@@ -306,6 +313,10 @@ export function createWeather(scene, refs) {
   let nf = 0;                          // nightFactor
   let paintClock = 1e9;                // force un premier repeint
   let skipP = 1, skipE = 1, skipD = 0; // glissement de skipTo
+  // les étoiles restent visibles (à 0,002 d'alpha : rien à l'écran) le temps
+  // que le warm-up de main.js compile leur pipeline sous l'écran de
+  // chargement — jamais un à-coup au premier crépuscule
+  let warm = 20;
 
   let seed = 4021;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -419,15 +430,15 @@ export function createWeather(scene, refs) {
       // la lune est l'antisolaire : haute à minuit, bleue et molle
       sun.direction.copyFromFloats(se, sy, sn);
       sun.diffuse.copyFromFloats(0.40, 0.52, 0.86);
-      sun.intensity = 0.35 * moonAmt * (1 - 0.7 * cur.cloud);
+      sun.intensity = 0.8 * moonAmt * (1 - 0.7 * cur.cloud);   // pleine lune
     } else {
       sun.direction.copyFromFloats(-se, -sy, -sn);
       // rasant = rouge-orangé, zénith = blanc chaud, en deux paliers
-      const warm = sstep(0.02, 0.30, sy);
+      const gold = sstep(0.02, 0.30, sy);
       const high = sstep(0.28, 0.62, sy);
       sun.diffuse.copyFromFloats(1,
-        lerp(lerp(0.40, 0.74, warm), 0.95, high),
-        lerp(lerp(0.17, 0.44, warm), 0.86, high));
+        lerp(lerp(0.40, 0.74, gold), 0.95, high),
+        lerp(lerp(0.17, 0.44, gold), 0.86, high));
       sun.intensity = sunAmt * (1.05 + 1.45 * sstep(0.02, 0.55, sy)) * cur.sun;
     }
 
@@ -476,9 +487,10 @@ export function createWeather(scene, refs) {
     // les étoiles percent dès que le soleil passe l'horizon, et les nuages
     // les mangent ; sous 0,01 d'alpha on coupe le maillage (rien à dessiner)
     const starA = 0.98 * sstep(0.0, -0.14, sy) * (1 - 0.92 * cur.cloud);
-    const starOn = starA > 0.01;
+    const starOn = starA > 0.01 || warm > 0;
     if (starOn !== stars.isVisible) stars.isVisible = starOn;
-    if (starOn) starMat.alpha = starA;
+    if (starOn) starMat.alpha = Math.max(0.002, starA);
+    if (warm > 0) warm--;
 
     /* ---- averse : cellule qui dérive au vent, retenue par une laisse ---- */
     // le débit effectif garde un plancher d'égouttement de la canopée : le
@@ -489,7 +501,7 @@ export function createWeather(scene, refs) {
     const wet = Math.max(cur.rain, drip * 0.2);
     // sous le toit du garage, la cellule est tenue franchement dehors : son
     // demi-côté fait 17 m, il en faut plus pour qu'aucune goutte ne traverse
-    const inside = px > -GARAGE.hw && px < GARAGE.hw && pz > GARAGE.z0 && pz < GARAGE.z1;
+    const inside = Math.abs(px - GARAGE.x) < GARAGE.hw && pz > GARAGE.z0 && pz < GARAGE.z1;
     const tz = inside ? GARAGE.z0 - 26 : pz;
     cellX += WX * DRIFT * dt;
     cellZ += WZ * DRIFT * dt;
@@ -525,7 +537,7 @@ export function createWeather(scene, refs) {
     /* ---- nappes et lucioles : une seule requête de sol par frame ---- */
     flyY += (groundHeight(px, pz) - flyY) * Math.min(1, 3 * dt);
     mistPS.emitter.set(px, flyY + 0.15, pz);
-    mistPS.emitRate = 2.4 * mistAmt;
+    mistPS.emitRate = 1.6 * mistAmt;
     for (let i = 0; i < 4; i++) {            // la nappe prend la teinte du ciel
       const c = MIST_G[i];
       c.r = fr * 0.5 + 0.42 * (wD + wT * 0.6);

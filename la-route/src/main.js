@@ -27,9 +27,8 @@ import { buildSky } from './world/sky.js';
 import { buildVan } from './vehicle/van.js';
 import { createDust } from './vehicle/dust.js';
 import { buildDriver } from './character/driver.js';
-import { createRain } from './world/rain.js';
 import { createCampfire } from './world/campfire.js';
-import { createDaycycle } from './world/daycycle.js';
+import { createWeather } from './world/weather.js';
 import { createHorn } from './world/horn.js';
 
 const canvas = document.getElementById('rc');
@@ -124,10 +123,10 @@ async function start() {
   const driver = buildDriver(scene, shadows);
   const van = buildVan(scene, shadows, groundAll);
   const dust = createDust(scene);                    // M5 : le sillage
-  // M6 : les cinq interactions — toutes lisent/écrivent l'état du monde
-  const rain = createRain(scene, deform);
+  // M6 : les interactions — toutes lisent/écrivent l'état du monde
   const fire = createCampfire(scene, deform, groundHeight);
-  const day = createDaycycle(scene, { sun, amb, sky });
+  // le temps qui passe : cycle jour/nuit continu + météo à états
+  const weather = createWeather(scene, { sun, amb, sky, deform, shadows });
   const horn = createHorn(scene, pines.trunks, groundHeight);
 
   // obstacles (troncs + rochers) : hachage spatial 4 m pour les collisions
@@ -256,7 +255,7 @@ async function start() {
     tx: -1.6, ty: GARAGE.y + 1.55, tz: 37.5,
     locked: false, drive: false, distOcc: 4.2,
   };
-  let walkDist = 4.2, wheelAcc = 0;
+  let walkDist = 4.2, wheelAcc = 0, lightsManual = false;
   let shake = 0, prevVanSpeed = 0, prevBodyY = 0;    // secousses caméra
 
   // aide contextuelle (E) — DOM léger, mis à jour hors alloc
@@ -282,8 +281,9 @@ async function start() {
   // touches 1-5 : la grammaire commune — tout s'installe et se retire en fondu
   addEventListener('keydown', (e) => {
     if (e.repeat) return;
-    if (e.code === 'Digit1') van.setLights(!van.lightsOn());
-    else if (e.code === 'Digit2') rain.toggle();
+    // 1 : reprise en main des phares — l'automatisme rend la main au joueur
+    if (e.code === 'Digit1') { lightsManual = true; van.setLights(!van.lightsOn()); }
+    else if (e.code === 'Digit2') weather.setWeather(weather.weatherName() === 'averse' ? 'clair' : 'averse');
     else if (e.code === 'Digit3' && !state.drive) {
       // le feu s'installe là où le mécano regarde — jamais sur la chaussée,
       // jamais dans le garage (extinction possible partout : on rappuie)
@@ -293,7 +293,7 @@ async function start() {
         || (roadQuery(fx, fz).dist > ROAD_HALF + 0.4 && !garage.isInterior(fx, fz))) {
         fire.toggleAt(fx, fz);
       }
-    } else if (e.code === 'Digit4') day.toggle();
+    } else if (e.code === 'Digit4') weather.skipTo((weather.timeOfDay() + 0.28) % 1);
     else if (e.code === 'Digit5') {
       horn.blast(state.drive ? van.st.x : state.px, state.drive ? van.st.z : state.pz);
     }
@@ -427,7 +427,7 @@ async function start() {
       const nearPad = Math.abs(van.st.x - GARAGE.x) < GARAGE.hw + 3
         && van.st.z > GARAGE.z0 - 7 && van.st.z < GARAGE.z1 + 3;
       const offroad = !nearPad && roadQuery(van.st.x, van.st.z).dist > ROAD_HALF + 0.5;
-      van.update(dt, { throttle: iz, steer: ix, offroad, mist: rain.ease() }, vanBlocked);
+      van.update(dt, { throttle: iz, steer: ix, offroad, mist: weather.rainEase() }, vanBlocked);
       // les pneus creusent hors chaussée — sillons continus (pas de 0,24 m)
       wheelAcc += Math.abs(van.st.speed) * dt;
       if (wheelAcc > 0.24 && Math.abs(van.st.speed) > 0.4) {
@@ -515,7 +515,7 @@ async function start() {
       }
       deform.update(dt, state.px, state.pz);
       terrain.patchTick(state.px, state.pz);
-      van.update(dt, { throttle: 0, steer: 0, offroad: false, mist: rain.ease() }, vanBlocked);
+      van.update(dt, { throttle: 0, steer: 0, offroad: false, mist: weather.rainEase() }, vanBlocked);
       dust.plumes[0].emitRate = 0; dust.plumes[1].emitRate = 0;
       const gy = groundAll(state.px, state.pz);
       state.py += (gy - state.py) * Math.min(1, 14 * dt);
@@ -545,19 +545,20 @@ async function start() {
     // la porte s'ouvre, le jour inonde, l'exposition redescend en ~1,2 s
     const inside = garage.isInterior(focAx, focAz);
     post.setExposure(1 + 0.3 * (inside ? 1 - garage.doorFrac() : 0));
-    // dedans, la cellule de pluie reste franchement dehors : son demi-côté
-    // fait 17 m, il faut plus que ça pour qu'aucune goutte ne traverse le toit
-    rain.update(dt, focAx, inside ? GARAGE.z0 - 26 : focAz);
+    // le temps qui passe : le cycle et la météo posent lumière, ciel et brume.
+    // Dedans, la cellule de pluie reste franchement dehors — son demi-côté
+    // fait 17 m, il en faut plus pour qu'aucune goutte ne traverse le toit.
+    weather.update(dt, focAx, inside ? GARAGE.z0 - 26 : focAz);
     fire.update(dt);
-    day.update(dt, focAx, focAz);
     horn.update(dt, focAx, focAz);
     post.update(dt);
-    const rd = rain.ease();
-    if (rd > 0.001) {
-      // l'averse mange la lumière — appliqué APRÈS day.update (valeurs absolues)
-      sun.intensity *= 1 - 0.45 * rd;
-      amb.intensity *= 1 - 0.2 * rd;
-      scene.fogDensity += 0.005 * rd;
+    // les phares s'allument tout seuls à la tombée du jour et sous l'averse,
+    // mais SEULEMENT quand quelqu'un conduit : un van garé et vide reste
+    // éteint (sinon il éclaire la forêt et le mécano toute la nuit)
+    if (!lightsManual) {
+      const dark = Math.max(weather.nightFactor(), weather.rainEase() * 0.55);
+      const want = state.drive && dark > 0.42;
+      if (want !== van.lightsOn()) van.setLights(want);
     }
 
     // caméra épaule : cible amortie, distance aisée, FOV qui s'élargit à la vitesse
@@ -606,5 +607,5 @@ async function start() {
   addEventListener('resize', () => engine.resize());
 
   // poignées de développement (cadrage des captures d'itération)
-  window.__laroute = { state, scene, engine, deform, van, driver, rain, fire, day, horn, garage, post };
+  window.__laroute = { state, scene, engine, deform, van, driver, weather, fire, horn, garage, post, retro, grass };
 }
