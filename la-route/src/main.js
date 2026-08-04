@@ -17,7 +17,8 @@ import { createOverlay } from './ui/overlay.js';
 import { createPost } from './post.js';
 import { buildTerrain } from './terrain/terrain.js';
 import { createDeform } from './terrain/deform.js';
-import { height, groundHeight, roadQuery, ROAD_HALF } from './terrain/road.js';
+import { height, groundHeight, roadQuery, ROAD_HALF, GARAGE } from './terrain/road.js';
+import { buildGarage } from './world/garage.js';
 import { plantPines } from './vegetation/pines.js';
 import { windClock } from './vegetation/wind.js';
 import { buildSky } from './world/sky.js';
@@ -74,6 +75,7 @@ async function start() {
   }
 
   const scene = new Scene(engine);
+  scene.skipPointerMovePicking = true;               // M8 : aucun picking par survol
   scene.clearColor = new Color4(0.05, 0.07, 0.115, 1);
   scene.fogMode = Scene.FOGMODE_EXP2;
   scene.fogDensity = 0.0105;
@@ -107,8 +109,14 @@ async function start() {
   console.log('pins plantés :', pines.count);
 
   // M4 : le mécano articulé remplace la capsule, le van attend sur la route
+  const garage = buildGarage(scene, shadows);        // M7 : la thèse de la démo
+  // sol de MARCHE unifié : dehors le terrain (+ ruban), dedans la dalle béton
+  const groundAll = (x, z) => {
+    const g = groundHeight(x, z);
+    return garage.isInterior(x, z) ? Math.max(g, GARAGE.y + 0.07) : g;
+  };
   const driver = buildDriver(scene, shadows);
-  const van = buildVan(scene, shadows, groundHeight);
+  const van = buildVan(scene, shadows, groundAll);
   const dust = createDust(scene);                    // M5 : le sillage
   // M6 : les cinq interactions — toutes lisent/écrivent l'état du monde
   const rain = createRain(scene, deform);
@@ -146,7 +154,12 @@ async function start() {
   const vanBlocked = (nx, nz) => {
     const c = Math.cos(van.st.yaw), s = Math.sin(van.st.yaw);
     for (const off of [1.6, -1.6]) {
-      if (pushOut(nx + s * off, nz + c * off, 1.02)) return true;
+      const ax = nx + s * off, az = nz + c * off;
+      if (pushOut(ax, az, 1.02)) return true;
+      for (const r of garage.colliders) {
+        if (r.door && !garage.doorBlocked()) continue;
+        if (ax > r.x0 - 1.02 && ax < r.x1 + 1.02 && az > r.z0 - 1.02 && az < r.z1 + 1.02) return true;
+      }
     }
     return false;
   };
@@ -156,6 +169,36 @@ async function start() {
   const camRects = [];
   const vanRect = { x0: 0, x1: 0, z0: 0, z1: 0, y1: 0, active: true };
   camRects.push(vanRect);
+  for (const c of garage.colliders) {
+    const r = { x0: c.x0, x1: c.x1, z0: c.z0, z1: c.z1, y1: GARAGE.y + 3.9, active: true };
+    if (c.door) { r.doorRect = true; }
+    camRects.push(r);
+  }
+
+  // résolution cercle-AABB : le mécano ne traverse ni murs ni établi
+  const resolveRects = (px, pz, r) => {
+    let x = px, z = pz;
+    for (const c of garage.colliders) {
+      if (c.door && !garage.doorBlocked()) continue;
+      const nx = Math.max(c.x0, Math.min(c.x1, x));
+      const nz = Math.max(c.z0, Math.min(c.z1, z));
+      const dx = x - nx, dz = z - nz;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < r * r) {
+        if (d2 > 1e-6) {
+          const d = Math.sqrt(d2);
+          x = nx + (dx / d) * r; z = nz + (dz / d) * r;
+        } else {
+          // au cœur de la boîte : expulsion par la face la plus proche
+          const l = x - c.x0, rr = c.x1 - x, b = z - c.z0, t = c.z1 - z;
+          const m = Math.min(l, rr, b, t);
+          if (m === l) x = c.x0 - r; else if (m === rr) x = c.x1 + r;
+          else if (m === b) z = c.z0 - r; else z = c.z1 + r;
+        }
+      }
+    }
+    return { x, z };
+  };
   const camClamp = (tx, ty, tz, dx, dyy, dz, want) => {
     const steps = Math.ceil(want / 0.55);
     for (let i = 1; i <= steps; i++) {
@@ -187,12 +230,12 @@ async function start() {
   const post = createPost(scene, camera);            // M7 : chaîne de post
 
   /* ---- état & scratch (aucune allocation dans la boucle) ---- */
-  // camYaw 0 : caméra au nord du joueur, regard vers le SUD — la route
-  // descend, le van attend à 10 m (dos au voyage depuis M1, corrigé au M4)
+  // M7 : la démo s'ouvre DANS le garage sombre, face à la porte fermée —
+  // caméra au fond du bâtiment, regard vers le sud (la porte, puis la route)
   const state = {
-    px: 0, pz: 20, py: groundHeight(0, 20), vx: 0, vz: 0, yaw: Math.PI,
-    camYaw: 0, camPitch: 0.22, dist: 4.2, distTarget: 4.2,
-    tx: 0, ty: groundHeight(0, 20) + 1.55, tz: 20,
+    px: -1.6, pz: 37.5, py: GARAGE.y, vx: 0, vz: 0, yaw: Math.PI,
+    camYaw: 0, camPitch: 0.14, dist: 4.2, distTarget: 4.2,
+    tx: -1.6, ty: GARAGE.y + 1.55, tz: 37.5,
     locked: false, drive: false, distOcc: 4.2,
   };
   let walkDist = 4.2, wheelAcc = 0;
@@ -238,10 +281,16 @@ async function start() {
       driver.setSeated(false);
       const d = doorWorld();
       state.px = d.x; state.pz = d.z; state.vx = 0; state.vz = 0;
-      state.py = groundHeight(d.x, d.z);
+      state.py = groundAll(d.x, d.z);
       state.yaw = van.st.yaw;
       state.distTarget = walkDist;
     } else {
+      // priorité au bouton de la porte du garage, puis à la portière du van
+      const b = garage.buttonWorld;
+      if (Math.hypot(state.px - b.x, state.pz - b.z) < 2.0) {
+        garage.toggleDoor();
+        return;
+      }
       const d = doorWorld();
       if (Math.hypot(state.px - d.x, state.pz - d.z) < 2.3) {
         state.drive = true;
@@ -326,7 +375,10 @@ async function start() {
     let focX, focY, focZ, fvx, fvz, speed;
     if (state.drive) {
       /* ---- conduite ---- */
-      const offroad = roadQuery(van.st.x, van.st.z).dist > ROAD_HALF + 0.5;
+      // l'esplanade du garage est compactée comme la chaussée
+      const nearPad = Math.abs(van.st.x - GARAGE.x) < GARAGE.hw + 3
+        && van.st.z > GARAGE.z0 - 7 && van.st.z < GARAGE.z1 + 3;
+      const offroad = !nearPad && roadQuery(van.st.x, van.st.z).dist > ROAD_HALF + 0.5;
       van.update(dt, { throttle: iz, steer: ix, offroad, mist: rain.ease() }, vanBlocked);
       // les pneus creusent hors chaussée — sillons continus (pas de 0,24 m)
       wheelAcc += Math.abs(van.st.speed) * dt;
@@ -334,7 +386,7 @@ async function start() {
         wheelAcc = 0;
         for (const w of van.wheels) {
           const p = van.wheelWorld(w);
-          if (roadQuery(p.x, p.z).dist > ROAD_HALF + 0.15) {
+          if (roadQuery(p.x, p.z).dist > ROAD_HALF + 0.15 && !garage.isInterior(p.x, p.z)) {
             deform.addSplat(p.x, p.z, 0.19,
               Math.min(0.04, 0.012 + Math.abs(van.st.speed) * 0.003));
           }
@@ -394,6 +446,8 @@ async function start() {
       state.pz += state.vz * dt;
       const po = pushOut(state.px, state.pz, 0.32);
       if (po) { state.px = po.x; state.pz = po.z; }
+      const pr = resolveRects(state.px, state.pz, 0.32);
+      state.px = pr.x; state.pz = pr.z;
       // empreintes de pas : un splat par foulée, alterné gauche/droite
       const spd = Math.hypot(state.vx, state.vz);
       if (spd > 0.4) {
@@ -401,8 +455,9 @@ async function start() {
         const stride = spd > 3.5 ? 1.05 : 0.62;
         if (stepAcc > stride) {
           stepAcc = 0; footSide = -footSide;
-          // le gravier compacté de la chaussée ne prend pas l'empreinte
-          if (roadQuery(state.px, state.pz).dist > ROAD_HALF + 0.2) {
+          // ni le gravier compacté de la chaussée, ni le béton du garage
+          if (roadQuery(state.px, state.pz).dist > ROAD_HALF + 0.2
+            && !garage.isInterior(state.px, state.pz)) {
             const fx = state.vx / spd, fz = state.vz / spd;
             deform.addSplat(
               state.px - fz * footSide * 0.15, state.pz + fx * footSide * 0.15,
@@ -414,7 +469,7 @@ async function start() {
       terrain.patchTick(state.px, state.pz);
       van.update(dt, { throttle: 0, steer: 0, offroad: false, mist: rain.ease() }, vanBlocked);
       dust.plumes[0].emitRate = 0; dust.plumes[1].emitRate = 0;
-      const gy = groundHeight(state.px, state.pz);
+      const gy = groundAll(state.px, state.pz);
       state.py += (gy - state.py) * Math.min(1, 14 * dt);
       driver.root.position.set(state.px, state.py, state.pz);
       driver.root.rotation.y = state.yaw;
@@ -423,13 +478,26 @@ async function start() {
       focX = state.px; focZ = state.pz; focY = state.py + 1.55;
       fvx = state.vx; fvz = state.vz;
       const d = doorWorld();
-      setHint(Math.hypot(state.px - d.x, state.pz - d.z) < 2.3 ? 'E — monter à bord' : '');
+      const b = garage.buttonWorld;
+      const dBtn = Math.hypot(state.px - b.x, state.pz - b.z);
+      if (dBtn < 2.0) {
+        setHint(garage.doorFrac() > 0.5 ? 'E — fermer la porte' : 'E — ouvrir la porte');
+      } else {
+        setHint(Math.hypot(state.px - d.x, state.pz - d.z) < 2.3 ? 'E — monter à bord' : '');
+      }
     }
 
     // interactions : la cellule de pluie et les lucioles suivent le focus
     const focAx = state.drive ? van.st.x : state.px;
     const focAz = state.drive ? van.st.z : state.pz;
-    rain.update(dt, focAx, focAz);
+    garage.update(dt);
+    for (const r of camRects) { if (r.doorRect) r.active = garage.doorBlocked(); }
+    // la révélation : dans le garage porte fermée l'œil est adapté au sombre ;
+    // la porte s'ouvre, le jour inonde, l'exposition redescend en ~1,2 s
+    const inside = garage.isInterior(focAx, focAz);
+    post.setExposure(1 + 0.3 * (inside ? 1 - garage.doorFrac() : 0));
+    // à l'intérieur, la cellule de pluie reste dehors, devant la façade
+    rain.update(dt, focAx, inside ? GARAGE.z0 - 14 : focAz);
     fire.update(dt);
     day.update(dt, focAx, focAz);
     horn.update(dt, focAx, focAz);
@@ -488,5 +556,5 @@ async function start() {
   addEventListener('resize', () => engine.resize());
 
   // poignées de développement (cadrage des captures d'itération)
-  window.__laroute = { state, scene, engine, deform, van, driver, rain, fire, day, horn };
+  window.__laroute = { state, scene, engine, deform, van, driver, rain, fire, day, horn, garage, post };
 }

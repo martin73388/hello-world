@@ -13,7 +13,18 @@
 
 Mesures à faire sur la machine cible à chaque milestone (machine réelle du
 joueur : MacBook M4, WebGPU/Metal — le brief visait une RTX, on juge sur le
-M4). Le milestone 1 n'a pas encore de mesure — la scène est un plan.
+M4). La colonne « Mesuré » se remplit avec l'overlay F1 sur cette machine ;
+le SwiftShader de CI ne mesure rien d'utile.
+
+Coûts M6/M7 à surveiller :
+- particules : pluie 1400 + flammes/braises/fumée ~370 + lucioles 70 +
+  poussière 480 — toutes CPU, ~2 300 quads max simultanés ;
+- 6 lumières max/matériau ; les lumières d'interaction sont désactivées
+  éteintes ; pire cas simultané rare à 8 lumières actives ;
+- chaîne de post : FXAA + MSAA 4 + bloom + grain + sharpen + ACES + vignette,
+  chaque passe toggleable dans F1 pour l'A/B de coût ;
+- warm-up : ~10 frames sous l'écran de chargement compilent particules,
+  phares, feu, vue garage — « no hitch on first use ».
 
 Coûts M4 à surveiller :
 - van : ~45 petits maillages (draw calls) — à fusionner par matériau si ça

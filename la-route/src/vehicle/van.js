@@ -219,7 +219,7 @@ export function buildVan(scene, shadows, ground) {
 
   /* ---- dynamique ---- */
   const st = {
-    x: 1.2, z: 10, yaw: Math.PI, speed: 0, steerA: 0,
+    x: 1.2, z: 36.6, yaw: Math.PI, speed: 0, steerA: 0,  // garé dans le garage
     vx: 0, vz: 0, odo: 0,                              // vélocité réelle, odomètre
     bodyY: 0, pitch: 0, roll: 0, fresh: { x: 0, z: 0, vx: 0, vz: 0 },
     lastAcc: 0,
@@ -232,7 +232,7 @@ export function buildVan(scene, shadows, ground) {
 
   function update(dt, input, blocked) {
     /* conduite : couple, freinage, traînée — lourd et analogique */
-    const off = input.offroad ? 0.85 : 0;
+    const off = input.offroad ? 0.55 : 0;
     const drag = 0.45 + Math.abs(st.speed) * (0.32 + off) + st.speed * st.speed * 0.012;
     let acc = 0;
     if (input.throttle > 0) acc = st.speed >= 0 ? 4.6 * (1 - Math.abs(st.speed) / 13) : 8.5;

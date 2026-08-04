@@ -87,3 +87,32 @@ Chaque écart au brief, en une ligne, avec sa raison.
   sapin réagissent par la chaîne de suspension existante.
 - M5 : stries de vent en espace écran reportées au M7 (chaîne de post) ;
   secousses caméra plafonnées à 5 cm et amorties en ~0,5 s.
+- M6 : particules CPU pour les cinq interactions (pluie/feu/lucioles/
+  oiseaux/feuilles) plutôt que compute GPU — les densités visées ne le
+  justifient pas ; les feuilles et oiseaux sont des pools CPU pré-alloués.
+- M6 : quota de lumières porté à 6 par matériau ; les lumières d'interaction
+  (phares, feu, lueur de seuil) sont DÉSACTIVÉES éteintes pour rester sous
+  le quota. Pire cas (phares + feu + garage + seuil = 8) : 2 lumières
+  peuvent être ignorées localement — assumé, cas rare.
+- M6 : la brillance humide passe par une globale de shader posée à
+  BEFORE_LIGHTS et consommée à BEFORE_FOG (specularColor n'existe pas
+  encore au hook BEFORE_LIGHTS dans le fragment standard de Babylon 7).
+- M6 : leçon de warm-up — manualEmitCount ≥ 0 bascule un ParticleSystem en
+  mode manuel DÉFINITIVEMENT ; il faut le rendre à -1 après la pré-compile.
+- M7 : la porte s'ouvre au BOUTON (E, diégétique, hérité de L'Atelier) et
+  non au premier input comme dans le brief — plus lisible, même effet.
+- M7 : pas de TAA (pas d'implémentation robuste WebGPU+WebGL en Babylon 7) —
+  FXAA + MSAA 4 + sharpen en tiennent lieu ; SSAO/SSR/DoF écartés
+  (robustesse WebGPU/Metal non vérifiable en CI, budget frame) — consigné
+  comme dette d'écart au brief.
+- M7 : l'exposition « œil qui s'adapte » = cible 1,3 dans le garage porte
+  close, glissée vers 1,0 quand la porte s'ouvre (τ 0,4 s).
+- M7 : dalle béton 7 cm au-dessus du terrain pour que le patch de
+  déformation (zOffset -2) ne perce jamais ; sol de marche unifié
+  groundAll (terrain + ruban dehors, dalle dedans).
+- M8 : freeze()/blockMaterialDirtyMechanism évalués puis ÉCARTÉS : les
+  lumières togglées (phares, feu, seuil) invalident les defines des
+  matériaux — les geler casserait l'éclairage dynamique. Le warm-up
+  compile chaque pipeline sous l'écran de chargement à la place.
+- M8 : la mesure 90 fps / 1 % low se fait sur la machine du joueur
+  (M4/WebGPU, overlay F1) — le SwiftShader de CI ne mesure rien d'utile.

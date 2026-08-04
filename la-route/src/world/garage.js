@@ -342,8 +342,10 @@ export function buildGarage(scene, shadows) {
   wall('gFlancD', TH, WALL_H, Z1 - Z0, X_HALF - TH / 2, WALL_H / 2, ZC, plaster);
   wall('gToit', X_HALF * 2 + 0.6, 0.16, Z1 - Z0 + 0.6, 0, WALL_H + 0.08, ZC, roofM);
 
+  // dalle 7 cm au-dessus du terrain : le patch de déformation (soulevé de
+  // 1,5 cm, zOffset -2) ne peut jamais percer le béton
   const floor = MeshBuilder.CreateGround('gSol', { width: X_HALF * 2, height: Z1 - Z0 }, scene);
-  floor.position.set(0, 0.02, ZC);
+  floor.position.set(0, 0.07, ZC);
   floor.material = concrete; floor.parent = root;
   statics.push(floor);
 
@@ -440,7 +442,7 @@ export function buildGarage(scene, shadows) {
     spot.diffuse = new Color3(1, 0.62, 0.3);
     spot.specular = new Color3(0.35, 0.25, 0.15);
     spot.range = 12;
-    spot.intensity = 18;
+    spot.intensity = 13;
     spot.parent = root;
   }
   const glow = new PointLight('doorGlow', new Vector3(0, 1.5, Z0 + 1.1), scene);
@@ -488,6 +490,8 @@ export function buildGarage(scene, shadows) {
       }
     }
     glow.intensity = ef * 8;                         // le jour entre avec la porte
+    const gOn = ef > 0.02;                           // éteinte, elle libère le quota
+    if (glow.isEnabled() !== gOn) glow.setEnabled(gOn);
     ledM.emissiveColor.set(0.85 - 0.7 * ef, 0.12 + 0.68 * ef, 0.08 + 0.2 * ef);
   }
   update(0);                                         // pose fermée avant la 1re frame
