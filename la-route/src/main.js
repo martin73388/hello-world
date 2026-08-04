@@ -20,6 +20,8 @@ import { createDeform } from './terrain/deform.js';
 import { height, groundHeight, roadQuery, ROAD_HALF, GARAGE } from './terrain/road.js';
 import { buildGarage } from './world/garage.js';
 import { plantPines } from './vegetation/pines.js';
+import { plantGrass } from './vegetation/grass.js';
+import { createRetro } from './retro.js';
 import { windClock } from './vegetation/wind.js';
 import { buildSky } from './world/sky.js';
 import { buildVan } from './vehicle/van.js';
@@ -86,9 +88,9 @@ async function start() {
   sun.diffuse = new Color3(1.0, 0.66, 0.36);
   sun.intensity = 2.3;
   const amb = new HemisphericLight('amb', new Vector3(0, 1, 0), scene);
-  amb.diffuse = new Color3(0.3, 0.4, 0.6);
-  amb.groundColor = new Color3(0.17, 0.15, 0.14);
-  amb.intensity = 0.72;
+  amb.diffuse = new Color3(0.34, 0.45, 0.68);        // le ciel bleuit les ombres
+  amb.groundColor = new Color3(0.2, 0.19, 0.16);
+  amb.intensity = 0.95;
   const shadows = new CascadedShadowGenerator(2048, sun);
   shadows.numCascades = 2;
   shadows.shadowMaxZ = 220;
@@ -97,7 +99,9 @@ async function start() {
   shadows.usePercentageCloserFiltering = true;
   shadows.bias = 0.004;
   shadows.normalBias = 0.03;
-  shadows.setDarkness(0.32);
+  // ombres franches mais JAMAIS bouchées : le brief interdit le noir écrasé
+  // sous la canopée — elles doivent rester bleues et lisibles
+  shadows.setDarkness(0.5);
 
   // Le monde du M2 : terrain sculpté par la route, forêt, ciel
   const sky = buildSky(scene);
@@ -106,6 +110,8 @@ async function start() {
   const deform = createDeform(engine, { res: DEV_GL ? 768 : 2048 });
   const terrain = buildTerrain(scene, shadows, deform.state);
   const pines = plantPines(scene, shadows);
+  // le tapis : herbe, fougères, buissons — se couchent dans les ornières
+  const grass = plantGrass(scene, deform.state);
   console.log('pins plantés :', pines.count);
 
   // M4 : le mécano articulé remplace la capsule, le van attend sur la route
@@ -239,6 +245,7 @@ async function start() {
   camera.minZ = 0.05; camera.maxZ = 800;
   camera.fov = 0.95;
   const post = createPost(scene, camera);            // M7 : chaîne de post
+  const retro = createRetro(scene, camera);          // patine PS1, en dernier
 
   /* ---- état & scratch (aucune allocation dans la boucle) ---- */
   // M7 : la démo s'ouvre DANS le garage sombre, face à la porte fermée —
@@ -363,7 +370,7 @@ async function start() {
   // + phares/feu/garage — sinon les lumières d'interaction sont ignorées
   for (const m of scene.materials) m.maxSimultaneousLights = 6;
 
-  const overlay = createOverlay(engine, scene, { sun, fog: scene, post });
+  const overlay = createOverlay(engine, scene, { sun, fog: scene, post, retro });
 
   const WALK = 2.2, RUN = 6.5, ACCEL = 26, DAMP = 10;
   let last = performance.now();
@@ -531,6 +538,7 @@ async function start() {
     // interactions : la cellule de pluie et les lucioles suivent le focus
     const focAx = state.drive ? van.st.x : state.px;
     const focAz = state.drive ? van.st.z : state.pz;
+    grass.tick(focAx, focAz);
     garage.update(dt, focAx, focAz);
     for (const r of camRects) { if (r.doorRect) r.active = garage.doorBlocked(); }
     // la révélation : dans le garage porte fermée l'œil est adapté au sombre ;

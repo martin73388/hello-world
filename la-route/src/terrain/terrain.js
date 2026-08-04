@@ -53,27 +53,48 @@ function buildGrid(scene, name, size, subdiv, cx, cz, hole) {
   return mesh;
 }
 
+/* Sol forestier peint à la main, façon Valheim : peu de teintes, franches,
+ * posées en larges plaques — la lisibilité prime sur la finesse. */
 function floorTexture(scene) {
   const tex = new DynamicTexture('floorTex', 512, scene, true);
   const g = tex.getContext();
-  g.fillStyle = '#2a2e1f'; g.fillRect(0, 0, 512, 512);
+  g.fillStyle = '#4a4a30'; g.fillRect(0, 0, 512, 512);        // terre-herbe de base
   let seed = 11;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  for (let i = 0; i < 5200; i++) {
+  // grandes plaques de couleur : mousse, terre nue, herbe sèche
+  for (const [col, n, rmin, rmax] of [
+    ['#3d5230', 30, 26, 78],       // mousse verte
+    ['#5b4a2e', 22, 20, 62],       // terre nue
+    ['#6b6438', 18, 18, 54],       // herbe sèche
+  ]) {
+    g.fillStyle = col;
+    for (let i = 0; i < n; i++) {
+      const x = rnd() * 512, y = rnd() * 512, r = rmin + rnd() * (rmax - rmin);
+      g.beginPath();
+      for (let k = 0; k <= 9; k++) {                          // contour irrégulier
+        const a = (k / 9) * Math.PI * 2, rr = r * (0.62 + rnd() * 0.55);
+        const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr;
+        if (k === 0) g.moveTo(px, py); else g.lineTo(px, py);
+      }
+      g.closePath(); g.fill();
+    }
+  }
+  for (let i = 0; i < 3400; i++) {                            // aiguilles et brindilles
     const v = rnd();
-    g.fillStyle = v < 0.45 ? 'rgba(74,60,40,.35)' : v < 0.8 ? 'rgba(44,56,34,.4)' : 'rgba(18,16,10,.4)';
+    g.fillStyle = v < 0.4 ? 'rgba(96,78,48,.4)' : v < 0.78 ? 'rgba(70,84,46,.4)' : 'rgba(30,26,16,.35)';
     const x = rnd() * 512, y = rnd() * 512, a = rnd() * Math.PI;
     g.save(); g.translate(x, y); g.rotate(a);
-    g.fillRect(-3 - rnd() * 5, -0.8, 6 + rnd() * 10, 1.6);   // aiguilles
+    g.fillRect(-3 - rnd() * 5, -0.8, 6 + rnd() * 10, 1.6);
     g.restore();
   }
-  for (let i = 0; i < 46; i++) {                             // plaques de mousse
-    const x = rnd() * 512, y = rnd() * 512, r = 14 + rnd() * 34;
-    const rg = g.createRadialGradient(x, y, 2, x, y, r);
-    rg.addColorStop(0, 'rgba(58,74,42,.5)'); rg.addColorStop(1, 'rgba(58,74,42,0)');
-    g.fillStyle = rg; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  for (let i = 0; i < 130; i++) {                             // cailloux, feuilles mortes
+    g.fillStyle = rnd() < 0.5 ? 'rgba(122,116,100,.5)' : 'rgba(140,104,52,.45)';
+    const x = rnd() * 512, y = rnd() * 512, r = 2 + rnd() * 4;
+    g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
   }
   tex.update();
+  // filtrage NEAREST : le grain de texel assumé, signature 32 bits
+  tex.updateSamplingMode(1);
   return tex;
 }
 
@@ -101,6 +122,7 @@ function roadTexture(scene) {
     g.fillRect(512 * 0.5 - 14 + rnd() * 28, rnd() * 512, 1.6, 3.5 + rnd() * 4);
   }
   tex.update();
+  tex.updateSamplingMode(1);                                 // nearest, comme le sol
   return tex;
 }
 

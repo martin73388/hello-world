@@ -47,6 +47,18 @@ export function createOverlay(engine, scene, refs) {
       lab.appendChild(document.createTextNode(name));
       row.appendChild(lab);
     }
+    // la patine PS1 : même rangée, mais c'est un choix de DA, pas une passe
+    if (refs.retro) {
+      const lab = document.createElement('label');
+      lab.style.cssText = 'display:flex;align-items:center;gap:5px;cursor:pointer;color:#ffb066';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = refs.retro.has();
+      cb.addEventListener('change', () => refs.retro.set(cb.checked));
+      lab.appendChild(cb);
+      lab.appendChild(document.createTextNode('rétro'));
+      row.appendChild(lab);
+    }
     root.appendChild(row);
   }
 
