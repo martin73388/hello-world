@@ -15,11 +15,13 @@ export function createPost(scene, camera) {
   pipe.fxaaEnabled = true;
   pipe.samples = 4;                       // MSAA sur la cible de la chaîne
 
-  pipe.bloomEnabled = true;               // halo discret des feux et du ciel
-  pipe.bloomThreshold = 0.82;
-  pipe.bloomWeight = 0.16;
-  pipe.bloomKernel = 48;
-  pipe.bloomScale = 0.6;
+  // bloom généreux : c'est lui qui fait « respirer » les hautes lumières —
+  // l'herbe à contre-jour, les trouées de ciel, l'eau au soleil
+  pipe.bloomEnabled = true;
+  pipe.bloomThreshold = 0.62;
+  pipe.bloomWeight = 0.42;
+  pipe.bloomKernel = 64;
+  pipe.bloomScale = 0.75;
 
   pipe.grainEnabled = true;               // grain pellicule, animé
   pipe.grain.intensity = 5;

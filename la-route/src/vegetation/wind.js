@@ -19,6 +19,13 @@ export const windClock = { t: 0 };
  */
 export const sunShared = { x: -0.62, y: -0.3, z: -0.75 };
 
+/**
+ * Brume de vallée partagée : densité et couleur de la nappe basse, tenues à
+ * jour par le cycle météo. C'est elle qui étage les plans — le sol lointain
+ * se noie pendant que les cimes émergent.
+ */
+export const hazeShared = { d: 0.02, top: 26, r: 0.62, g: 0.7, b: 0.82 };
+
 export class WindPlugin extends MaterialPluginBase {
   constructor(material, opts = {}) {
     super(material, 'Wind', 190, { WIND: false });

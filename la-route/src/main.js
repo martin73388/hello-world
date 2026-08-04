@@ -28,6 +28,8 @@ import { buildSky } from './world/sky.js';
 import { buildClouds } from './world/clouds.js';
 import { buildShafts } from './world/shafts.js';
 import { buildWater } from './world/water.js';
+import { applyHaze } from './world/haze.js';
+import { hazeShared } from './vegetation/wind.js';
 import { buildVan } from './vehicle/van.js';
 import { createDust } from './vehicle/dust.js';
 import { buildDriver } from './character/driver.js';
@@ -382,6 +384,8 @@ async function start() {
   // 6 lumières simultanées par matériau (défaut 4) : soleil + hémisphérique
   // + phares/feu/garage — sinon les lumières d'interaction sont ignorées
   for (const m of scene.materials) m.maxSimultaneousLights = 6;
+  // la brume de vallée étage les plans (posée en dernier, sur tout le décor)
+  applyHaze(scene, ['skyMat', 'waterFoamM', 'waterRipM']);
 
   const overlay = createOverlay(engine, scene, { sun, fog: scene, post, retro });
 
@@ -568,6 +572,13 @@ async function start() {
     // fait 17 m, il en faut plus pour qu'aucune goutte ne traverse le toit.
     weather.update(dt, focAx, inside ? GARAGE.z0 - 26 : focAz);
     clouds.update(dt, weather.sunHeight(), weather.cloudiness(), focAx, focAz, state.camYaw);
+    // la nappe de brume prend la couleur du brouillard du moment et
+    // s'épaissit au petit matin, sous l'averse et par temps de brume
+    hazeShared.d = 0.0055 + weather.rainEase() * 0.004
+      + Math.max(0, 0.24 - weather.sunHeight()) * 0.016;
+    hazeShared.r = scene.fogColor.r * 1.18 + 0.1;
+    hazeShared.g = scene.fogColor.g * 1.18 + 0.12;
+    hazeShared.b = scene.fogColor.b * 1.18 + 0.16;
     water.update(dt, weather.sunHeight());
     shafts.update(dt, focAx, focAz, weather.sunHeight(), weather.sunAzimuth(),
       state.camYaw, 1 - weather.cloudiness() * 0.8);
