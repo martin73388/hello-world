@@ -32,6 +32,7 @@ import { buildWater } from './world/water.js';
 import { applyHaze } from './world/haze.js';
 import { hazeShared } from './vegetation/wind.js';
 import { buildVan } from './vehicle/van.js';
+import { buildVanInterior } from './vehicle/vanInterior.js';
 import { createDust } from './vehicle/dust.js';
 import { buildDriver } from './character/driver.js';
 import { createCampfire } from './world/campfire.js';
@@ -148,6 +149,9 @@ async function start() {
   };
   const driver = buildDriver(scene, shadows);
   const van = buildVan(scene, shadows, groundAll);
+  // l'intérieur habitable : physique en repère LOCAL du van, donc la
+  // cellule reste praticable pendant que le véhicule roule
+  const cabin = buildVanInterior(scene, shadows, van.body, van.st);
   const dust = createDust(scene);                    // M5 : le sillage
   // M6 : les interactions — toutes lisent/écrivent l'état du monde
   const fire = createCampfire(scene, deform, groundHeight);
@@ -288,6 +292,11 @@ async function start() {
     locked: false, drive: false, distOcc: 4.2,
   };
   let walkDist = 4.2, wheelAcc = 0, lightsManual = false;
+  // « à bord » : le mécano marche DANS le van pendant qu'il roule. Sa
+  // position est alors tenue en coordonnées LOCALES du véhicule.
+  let aboard = false;
+  const lp = { x: 0, z: 0 };                         // position locale à bord
+  const sc1 = { x: 0, z: 0 }, sc2 = { x: 0, z: 0 };  // scratchs de conversion
   let shake = 0, prevVanSpeed = 0, prevBodyY = 0;    // secousses caméra
 
   // aide contextuelle (E) — DOM léger, mis à jour hors alloc
@@ -332,32 +341,34 @@ async function start() {
   });
   addEventListener('keydown', (e) => {
     if (e.code !== 'KeyE') return;
+    // --- au volant : on se lève, on reste DANS le van ---
     if (state.drive) {
       if (Math.abs(van.st.speed) > 1.6) return;        // pas en marche
       state.drive = false;
       driver.setSeated(false);
-      // balayage du centre du van vers la portière : on descend à la
-      // DERNIÈRE position libre — jamais téléporté à travers un mur
-      const d = doorWorld();
-      let ex = van.st.x, ez = van.st.z;
-      for (let i = 1; i <= 10; i++) {
-        const t = i / 10;
-        const x = van.st.x + (d.x - van.st.x) * t;
-        const z = van.st.z + (d.z - van.st.z) * t;
-        if (pushOut(x, z, 0.32)) break;
-        let hit = false;
-        for (const c of garage.colliders) {
-          if (c.door && !garage.doorBlocked()) continue;
-          if (x > c.x0 - 0.32 && x < c.x1 + 0.32 && z > c.z0 - 0.32 && z < c.z1 + 0.32) { hit = true; break; }
-        }
-        if (hit) break;
-        ex = x; ez = z;
+      aboard = true;                                   // on passe dans la cellule
+      lp.x = cabin.seatLocal.x - 0.55; lp.z = cabin.seatLocal.z - 0.9;
+      state.distTarget = 2.4;                          // caméra resserrée dedans
+      return;
+    }
+    // --- à bord, à pied : s'asseoir au volant, ou descendre ---
+    if (aboard) {
+      if (Math.hypot(lp.x - cabin.seatLocal.x, lp.z - cabin.seatLocal.z) < 1.0) {
+        aboard = false; state.drive = true;
+        driver.setSeated(true, van.body);
+        state.distTarget = 8.4;
+        return;
       }
-      state.px = ex; state.pz = ez; state.vx = 0; state.vz = 0;
-      state.py = groundAll(ex, ez);
-      state.yaw = van.st.yaw;
+      if (Math.abs(van.st.speed) > 0.6) return;        // on ne saute pas en marche
+      cabin.openDoor();
+      const d = cabin.doorWorld(sc1);
+      aboard = false;
+      state.px = d.x; state.pz = d.z; state.vx = 0; state.vz = 0;
+      state.py = groundAll(d.x, d.z);
       state.distTarget = walkDist;
-    } else {
+      return;
+    }
+    {
       // priorité au bouton de la porte du garage, puis à la portière du van
       const b = garage.buttonWorld;
       if (Math.hypot(state.px - b.x, state.pz - b.z) < 2.0
@@ -368,12 +379,17 @@ async function start() {
         if (!(garage.doorFrac() > 0.5 && vanInDoorway)) garage.toggleDoor();
         return;
       }
-      const d = doorWorld();
+      const d = cabin.doorWorld(sc1);
       if (Math.hypot(state.px - d.x, state.pz - d.z) < 2.3) {
-        state.drive = true;
-        driver.setSeated(true, van.body);
+        // on ENTRE dans la cellule à pied : la position bascule en local
+        cabin.openDoor();
+        cabin.toLocal(state.px, state.pz, lp);
+        lp.x = Math.max(-0.7, Math.min(0.7, lp.x));
+        lp.z = Math.max(-1.4, Math.min(1.2, lp.z));
+        aboard = true;
+        state.vx = 0; state.vz = 0;
         walkDist = state.distTarget;
-        state.distTarget = 8.4;
+        state.distTarget = 2.4;
         // pof d'échappement au démarrage
         const c = Math.cos(van.st.yaw), s = Math.sin(van.st.yaw);
         dust.puff(van.st.x - 0.6 * c - 2.5 * s, van.st.bodyY - 0.3, van.st.z + 0.6 * s - 2.5 * c);
@@ -532,6 +548,43 @@ async function start() {
       focX = van.st.x; focZ = van.st.z; focY = van.st.bodyY + 1.1;
       fvx = van.st.vx; fvz = van.st.vz;              // le regard suit la glisse
       setHint(speed <= 1.6 ? 'E — descendre' : '');
+    } else if (aboard) {
+      /* ---- à pied DANS le van : tout se joue en repère local ----
+       * On déplace le mécano dans les coordonnées de la caisse, on résout
+       * les collisions contre le mobilier en local, PUIS on repasse en
+       * monde. Le van peut rouler pendant ce temps : le sol bouge sous les
+       * pieds sans que la marche ait besoin de le savoir. */
+      van.update(dt, { throttle: 0, steer: 0, offroad: false, mist: weather.rainEase() }, vanBlocked);
+      dust.plumes[0].emitRate = 0; dust.plumes[1].emitRate = 0;
+      const il = Math.hypot(ix, iz);
+      if (il > 0) {
+        ix /= il; iz /= il;
+        // la marche est relative à la caméra, elle-même relative au van
+        const cy = state.camYaw - van.st.yaw;
+        const dx = -Math.sin(cy) * iz - Math.cos(cy) * ix;
+        const dz = -Math.cos(cy) * iz + Math.sin(cy) * ix;
+        lp.x += dx * WALK * 0.55 * dt;
+        lp.z += dz * WALK * 0.55 * dt;
+        state.yaw = van.st.yaw + Math.atan2(dx, dz);
+      }
+      cabin.resolve(lp.x, lp.z, 0.28, sc2);
+      lp.x = sc2.x; lp.z = sc2.z;
+      cabin.toWorld(lp.x, lp.z, sc1);
+      state.px = sc1.x; state.pz = sc1.z;
+      state.py = van.st.bodyY + cabin.floorY;
+      driver.root.position.set(state.px, state.py, state.pz);
+      driver.root.rotation.y = state.yaw;
+      driver.update(dt, il > 0 ? WALK * 0.55 : 0);
+      deform.update(dt, van.st.x, van.st.z);
+      terrain.patchTick(van.st.x, van.st.z);
+      speed = 0;
+      focX = state.px; focZ = state.pz; focY = state.py + 1.45;
+      fvx = 0; fvz = 0;
+      // l'indice vit dans CETTE branche aussi, sinon il reste figé sur le
+      // dernier texte affiché dehors
+      const atSeat = Math.hypot(lp.x - cabin.seatLocal.x, lp.z - cabin.seatLocal.z) < 1.0;
+      setHint(atSeat ? 'E — prendre le volant'
+        : (Math.abs(van.st.speed) <= 0.6 ? 'E — descendre' : ''));
     } else {
       /* ---- à pied ---- */
       const il = Math.hypot(ix, iz);
@@ -587,13 +640,18 @@ async function start() {
       speed = spd;
       focX = state.px; focZ = state.pz; focY = state.py + 1.55;
       fvx = state.vx; fvz = state.vz;
-      const d = doorWorld();
-      const b = garage.buttonWorld;
-      const dBtn = Math.hypot(state.px - b.x, state.pz - b.z);
-      if (dBtn < 2.0) {
-        setHint(garage.doorFrac() > 0.5 ? 'E — fermer la porte' : 'E — ouvrir la porte');
+      if (aboard) {
+        const nearSeat = Math.hypot(lp.x - cabin.seatLocal.x, lp.z - cabin.seatLocal.z) < 1.0;
+        setHint(nearSeat ? 'E — prendre le volant' : 'E — descendre');
       } else {
-        setHint(Math.hypot(state.px - d.x, state.pz - d.z) < 2.3 ? 'E — monter à bord' : '');
+        const d = cabin.doorWorld(sc1);
+        const b = garage.buttonWorld;
+        const dBtn = Math.hypot(state.px - b.x, state.pz - b.z);
+        if (dBtn < 2.0) {
+          setHint(garage.doorFrac() > 0.5 ? 'E — fermer la porte' : 'E — ouvrir la porte');
+        } else {
+          setHint(Math.hypot(state.px - d.x, state.pz - d.z) < 2.3 ? 'E — entrer dans le van' : '');
+        }
       }
     }
 
@@ -601,6 +659,7 @@ async function start() {
     const focAx = state.drive ? van.st.x : state.px;
     const focAz = state.drive ? van.st.z : state.pz;
     grass.tick(focAx, focAz);
+    cabin.update(dt);
     garage.update(dt, focAx, focAz);
     for (const r of camRects) { if (r.doorRect) r.active = garage.doorBlocked(); }
     // la révélation : dans le garage porte fermée l'œil est adapté au sombre ;
@@ -633,6 +692,8 @@ async function start() {
     // les phares s'allument tout seuls à la tombée du jour et sous l'averse,
     // mais SEULEMENT quand quelqu'un conduit : un van garé et vide reste
     // éteint (sinon il éclaire la forêt et le mécano toute la nuit)
+    cabin.lampSet((aboard || state.drive)
+      && Math.max(weather.nightFactor(), weather.rainEase() * 0.7) > 0.35);
     if (!lightsManual) {
       const dark = Math.max(weather.nightFactor(), weather.rainEase() * 0.55);
       const want = state.drive && dark > 0.42;
@@ -655,12 +716,18 @@ async function start() {
       vanRect.x0 = van.st.x - hx; vanRect.x1 = van.st.x + hx;
       vanRect.z0 = van.st.z - hz; vanRect.z1 = van.st.z + hz;
       vanRect.y1 = van.st.bodyY + 1.7;
-      vanRect.active = !state.drive;
+      // le van bloque la marche… SAUF au droit de sa portière ouverte :
+      // sinon le mécano est expulsé du seuil avant d'avoir pu entrer
+      const dw = cabin.doorWorld(sc2);
+      const nearDoor = Math.hypot(state.px - dw.x, state.pz - dw.z) < 2.6;
+      vanRect.active = !state.drive && !aboard && !nearDoor;
     }
     const odx = (Math.sin(state.camYaw) * cp * state.dist + Math.cos(state.camYaw) * shoulder) / state.dist;
     const ody = sp2;
     const odz = (Math.cos(state.camYaw) * cp * state.dist - Math.sin(state.camYaw) * shoulder) / state.dist;
-    const allowed = camClamp(state.tx, state.ty, state.tz, odx, ody, odz, state.dist);
+    let allowed = camClamp(state.tx, state.ty, state.tz, odx, ody, odz, state.dist);
+    // à bord, la cellule fait 3,4 m : au-delà, la caméra traverse la tôle
+    if (aboard) allowed = Math.min(allowed, 1.9);
     // rapproche vite quand un obstacle surgit, réélargit en douceur
     state.distOcc += (allowed - state.distOcc) * Math.min(1, (allowed < state.distOcc ? 22 : 4.5) * dt);
     const dEff = Math.min(state.dist, state.distOcc);
@@ -686,5 +753,6 @@ async function start() {
 
   // poignées de développement (cadrage des captures d'itération)
   window.__laroute = { state, scene, engine, deform, van, driver, weather, fire, horn,
-    garage, post, retro, grass, clouds, shafts, water, flora };
+    garage, post, retro, grass, clouds, shafts, water, flora, cabin, ridges,
+    isAboard: () => aboard, localPos: lp };
 }
