@@ -15,7 +15,7 @@ import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js';
 import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import { MaterialPluginBase } from '@babylonjs/core/Materials/materialPluginBase.js';
-import { windClock, sunShared } from './wind.js';
+import { windClock, sunShared, hazeShared } from './wind.js';
 import { groundHeight, roadQuery, ROAD_HALF, GARAGE, FORD } from '../terrain/road.js';
 
 /**
@@ -43,12 +43,13 @@ class GrassPlugin extends MaterialPluginBase {
         { name: 'grSize', size: 1, type: 'float' },
         { name: 'grTransl', size: 1, type: 'float' },
         { name: 'grSun', size: 3, type: 'vec3' },
+        { name: 'grAmb', size: 3, type: 'vec3' },
       ],
       vertex: `#ifdef GRASS
 uniform float grTime; uniform float grStrength; uniform vec2 grCenter; uniform float grSize;
 #endif`,
       fragment: `#ifdef GRASS
-uniform float grTransl; uniform vec3 grSun;
+uniform float grTransl; uniform vec3 grSun; uniform vec3 grAmb;
 #endif`,
     };
   }
@@ -60,6 +61,7 @@ uniform float grTransl; uniform vec3 grSun;
     ubo.updateFloat('grSize', s.size);
     ubo.updateFloat('grTransl', this.transl);
     ubo.updateFloat3('grSun', sunShared.x, sunShared.y, sunShared.z);
+    ubo.updateFloat3('grAmb', hazeShared.ar, hazeShared.ag, hazeShared.ab);
     ubo.setTexture('grTex', s.frontTex);
   }
   getCustomCode(shaderType) {
@@ -81,9 +83,10 @@ uniform float grTransl; uniform vec3 grSun;
                    * (0.25 + 1.5 * grUp) * grTransl * baseColor.rgb * 2.2;
         // plancher d'éclairage : la carte a une normale VERTICALE, donc au
         // soleil rasant N·L tombe à zéro et le brin devient noir. Une herbe
-        // réelle capte toujours un peu de ciel — sans ce terme, l'aube et le
-        // couchant creusent des trous noirs entre les touffes.
-        color.rgb += baseColor.rgb * vec3(0.13, 0.17, 0.16);
+        // réelle capte toujours un peu de ciel. Le plancher SUIT l'ambiante
+        // du moment (le même que le décor) — constant, il faisait luire
+        // l'herbe en plein milieu de la nuit.
+        color.rgb += baseColor.rgb * grAmb * 1.35;
 #endif
 `,
       };
