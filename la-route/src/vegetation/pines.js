@@ -2,62 +2,188 @@
  * Pins en thin instances : un maillage de feuillage + un de tronc, mêmes
  * matrices. Placement déterministe, la route et ses talus restent libres.
  * Vent hiérarchique + translucidité des aiguilles via WindPlugin (M2b).
+ *
+ * L'archétype vient des références Valheim (forêt de conifères) : ce n'est
+ * PAS un cône, ni une pile de cônes. C'est
+ *   1. un fût NU et haut — les deux premiers tiers de l'arbre sont du bois,
+ *      c'est ce qui donne la forêt-colonnade et laisse passer les rais ;
+ *   2. du feuillage seulement en couronne, fait de BRANCHES INDIVIDUELLES :
+ *      des cartes plates rayonnant du tronc et qui retombent, découpées en
+ *      aiguilles dans l'alpha.
+ * La silhouette est donc irrégulière et AJOURÉE — on voit à travers l'arbre,
+ * et c'est ce trou-là qui fait respirer le sous-bois.
  */
 import '@babylonjs/core/Meshes/thinInstanceMesh.js';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js';
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
+import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js';
 import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { height, roadQuery, GARAGE } from '../terrain/road.js';
 import { WindPlugin } from './wind.js';
 
+/** une brindille : la tige, puis les aiguilles en chevrons de part et d'autre */
+function twig(g, x0, y0, x1, y1, rnd, dark, light) {
+  const dx = x1 - x0, dy = y1 - y0;
+  const L = Math.hypot(dx, dy) || 1;
+  const ux = dx / L, uy = dy / L;
+  const px = -uy, py = ux;
+  g.strokeStyle = dark; g.lineWidth = 1.3; g.lineCap = 'round';
+  g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+  const n = Math.max(5, Math.round(L * 0.85));
+  for (let i = 0; i < n; i++) {
+    const t = i / n;
+    const bx = x0 + dx * t, by = y0 + dy * t;
+    // l'aiguille raccourcit vers la pointe et s'incline vers l'avant
+    const nl = (2.6 + rnd() * 2.8) * (1 - t * 0.4);
+    const sg = i % 2 ? 1 : -1;
+    const ax = ux * 0.5 + px * sg * 0.86, ay = uy * 0.5 + py * sg * 0.86;
+    g.strokeStyle = t > 0.5 ? light : dark;
+    g.lineWidth = 1;
+    g.beginPath(); g.moveTo(bx, by); g.lineTo(bx + ax * nl, by + ay * nl); g.stroke();
+  }
+}
+
+/**
+ * Carte de branche : un rachis qui part du bord gauche (l'attache au tronc)
+ * vers la droite (la pointe), garni de brindilles qui s'évasent au pied et se
+ * resserrent en bout. Le reste est transparent — c'est le vide entre les
+ * brindilles qui fait l'arbre ajouré.
+ */
+function branchTexture(scene, name, seed, dark, light) {
+  // PAS de mipmaps : le moyennage de l'alpha rendrait les cartes pleines à
+  // distance (des palettes vertes volantes), comme pour l'herbe.
+  const W = 128, H = 64;
+  const tex = new DynamicTexture(name, { width: W, height: H }, scene, false);
+  const g = tex.getContext();
+  g.clearRect(0, 0, W, H);
+  let s = seed;
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const mid = H / 2;
+  const tipY = mid + (rnd() - 0.5) * 10;
+  // deux générations de brindilles : la première tient la silhouette, la
+  // seconde la remplit. Une seule passe donnait une branche squelettique —
+  // vu de loin l'arbre disparaissait.
+  for (let gen = 0; gen < 2; gen++) {
+    const TW = gen ? 14 : 11;
+    for (let i = 0; i < TW; i++) {
+      const u = 0.04 + ((i + (gen ? 0.5 : 0)) / TW) * 0.9;
+      const x0 = 3 + u * (W - 8);
+      const y0 = mid + (tipY - mid) * u;
+      const sg = i % 2 ? 1 : -1;
+      const spread = (1 - u * 0.72) * H * 0.5;     // évasé au pied, fin en bout
+      twig(g, x0, y0,
+        x0 + (9 + rnd() * 14), y0 + sg * spread * (0.5 + rnd() * 0.5),
+        rnd, dark, light);
+    }
+  }
+  twig(g, 2, mid, W - 4, tipY, rnd, dark, light);  // le rachis
+  tex.update();
+  tex.hasAlpha = true;
+  tex.updateSamplingMode(1);                        // nearest : grain 32 bits
+  return tex;
+}
+
+/* Verticilles : hauteur, rayon, nombre de branches, angle de retombée.
+ * Le plus large n'est pas en bas mais un cran au-dessus (un épicéa perd ses
+ * branches basses), et la retombée s'accentue vers le sol. */
+const WHORLS = [
+  { y: 3.9, r: 1.70, n: 6, droop: 0.56 },
+  { y: 4.8, r: 1.98, n: 6, droop: 0.50 },
+  { y: 5.7, r: 1.92, n: 6, droop: 0.45 },
+  { y: 6.6, r: 1.74, n: 5, droop: 0.40 },
+  { y: 7.5, r: 1.52, n: 5, droop: 0.34 },
+  { y: 8.4, r: 1.26, n: 4, droop: 0.28 },
+  { y: 9.2, r: 1.00, n: 4, droop: 0.21 },
+  { y: 9.9, r: 0.76, n: 4, droop: 0.15 },
+  { y: 10.6, r: 0.54, n: 3, droop: 0.08 },
+  { y: 11.2, r: 0.38, n: 3, droop: 0.02 },
+];
+const TRUNK_H = 11.6;      // le fût dépasse le dernier verticille : la flèche
+
 export function plantPines(scene, shadows) {
-  // gabarit feuillage : 3 étages de cône
-  const c1 = MeshBuilder.CreateCylinder('c1', { diameterTop: 0, diameterBottom: 3.1, height: 2.6, tessellation: 10 }, scene);
-  c1.position.y = 2.4;
-  const c2 = c1.clone('c2'); c2.scaling.setAll(0.78); c2.position.y = 3.6;
-  const c3 = c1.clone('c3'); c3.scaling.setAll(0.55); c3.position.y = 4.7;
-  const foliage = Mesh.MergeMeshes([c1, c2, c3], true, true);
+  let ps = 3;
+  const prnd = () => (ps = (ps * 16807) % 2147483647) / 2147483647;
+
+  const cards = [];
+  for (let w = 0; w < WHORLS.length; w++) {
+    const L = WHORLS[w];
+    const base = w * 1.399;                          // verticilles décalés
+    for (let k = 0; k < L.n; k++) {
+      const len = L.r * (1.2 + prnd() * 0.42);
+      const wid = L.r * (0.5 + prnd() * 0.24);
+      const a = base + (k / L.n) * Math.PI * 2 + (prnd() - 0.5) * 0.5;
+      const droop = L.droop + (prnd() - 0.5) * 0.16;
+      const y = L.y + (prnd() - 0.5) * 0.28;
+      const off = len * 0.42;
+      // DEUX cartes croisées par branche, roulées de part et d'autre de
+      // l'horizontale : une carte plate seule disparaît quand on la regarde
+      // par la tranche, et l'arbre se volatilisait de trois quarts.
+      for (let f = 0; f < 2; f++) {
+        const roll = (f ? 1 : -1) * (0.36 + prnd() * 0.16);
+        const c = MeshBuilder.CreatePlane('pb', { width: len, height: wid }, scene);
+        // à plat (normale vers le haut) PUIS roulée autour de l'axe de la
+        // branche — les deux tiennent dans la même rotation X, qu'on fige
+        c.rotation.x = Math.PI / 2 + roll;
+        c.bakeCurrentTransformIntoVertices();
+        // reste Ry * Rz : la retombée s'applique d'abord, le lacet ensuite
+        c.rotation.z = -droop;
+        c.rotation.y = a;
+        c.position.set(Math.cos(a) * off, y, -Math.sin(a) * off);
+        cards.push(c);
+      }
+    }
+  }
+  const foliage = Mesh.MergeMeshes(cards, true, true);
   foliage.name = 'pineFoliage';
   const fmat = new StandardMaterial('pineMat', scene);
-  fmat.diffuseColor = new Color3(0.115, 0.2, 0.135);
+  fmat.diffuseColor = new Color3(0.72, 0.8, 0.7);
   fmat.specularColor = new Color3(0.02, 0.03, 0.02);
-  new WindPlugin(fmat, { strength: 1.0, transl: 0.55 });
+  fmat.backFaceCulling = false;                      // la carte se voit des deux bords
+  fmat.diffuseTexture = branchTexture(scene, 'pineBranchTex', 47, '#1b3011', '#48691f');
+  fmat.useAlphaFromDiffuseTexture = true;
+  // découpe franche : aucun tri de transparence sur 1 900 arbres
+  fmat.needAlphaTesting = () => true;
+  fmat.needAlphaBlending = () => false;
+  // la cime est haute : le vent doit être DOUX ici, l'amplitude du plugin
+  // croît en y² et un arbre de 12 m battrait la campagne
+  new WindPlugin(fmat, { strength: 0.2, transl: 0.6 });
   foliage.material = fmat;
 
-  const trunk = MeshBuilder.CreateCylinder('pineTrunk', { diameterTop: 0.22, diameterBottom: 0.34, height: 2.4, tessellation: 7 }, scene);
-  trunk.position.y = 0;
-  trunk.bakeCurrentTransformIntoVertices();
-  trunk.position.y = 1.2;
+  // le fût : nu sur les deux premiers tiers, c'est lui qui fait la colonnade
+  const trunk = MeshBuilder.CreateCylinder('pineTrunk', {
+    diameterTop: 0.17, diameterBottom: 0.56, height: TRUNK_H, tessellation: 7,
+  }, scene);
+  trunk.position.y = TRUNK_H / 2;
   trunk.bakeCurrentTransformIntoVertices();
   const tmat = new StandardMaterial('trunkMat', scene);
-  tmat.diffuseColor = new Color3(0.21, 0.15, 0.1);
+  tmat.diffuseColor = new Color3(0.28, 0.19, 0.12);
   tmat.specularColor = new Color3(0.02, 0.02, 0.02);
-  new WindPlugin(tmat, { strength: 0.26 });                 // le bois plie à peine
+  new WindPlugin(tmat, { strength: 0.05 });          // le bois plie à peine
   trunk.material = tmat;
 
   // placement
   let seed = 17;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const mats = [];
-  const trunks = [];                                   // {x, z, r} pour les collisions
+  const trunks = [];                                 // {x, z, r} pour les collisions
   const q = new Quaternion(), sc = new Vector3(), tr = new Vector3();
   for (let i = 0; i < 9000 && mats.length < 1900; i++) {
     const x = (rnd() - 0.5) * 330 - 8;
     const z = 40 - rnd() * 320;
     const rq = roadQuery(x, z);
-    if (rq.dist < 8.0) continue;                       // la route respire — et les
+    if (rq.dist < 8.0) continue;                     // la route respire — et les
     // couronnes (jusqu'à ~3 m de rayon) ne surplombent jamais la chaussée
     if (Math.abs(x - GARAGE.x) < GARAGE.hw + 5 && z > GARAGE.z0 - 8 && z < GARAGE.z1 + 5) continue;
-    const s = 0.75 + rnd() * 1.15;
+    const s = 0.62 + rnd() * 0.55;                   // ~7 à 14 m : on lève la tête
     const y = height(x, z) - 0.08;
-    Quaternion.RotationYawPitchRollToRef(rnd() * Math.PI * 2, (rnd() - 0.5) * 0.06, (rnd() - 0.5) * 0.06, q);
-    sc.set(s, s * (0.9 + rnd() * 0.3), s);
+    Quaternion.RotationYawPitchRollToRef(rnd() * Math.PI * 2, (rnd() - 0.5) * 0.05, (rnd() - 0.5) * 0.05, q);
+    sc.set(s, s * (0.88 + rnd() * 0.34), s);
     tr.set(x, y, z);
     const m = Matrix.Compose(sc, q, tr);
     mats.push(m);
-    trunks.push({ x, z, r: 0.17 * s + 0.1 });
+    trunks.push({ x, z, r: 0.26 * s + 0.1 });
   }
   const buf = new Float32Array(mats.length * 16);
   for (let i = 0; i < mats.length; i++) mats[i].copyToArray(buf, i * 16);
