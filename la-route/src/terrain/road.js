@@ -123,6 +123,42 @@ function padDist(x, z) {
   return Math.sqrt(dx * dx + dz * dz);
 }
 
+/* Le gué : un ruisseau perpendiculaire au tracé, creusé dans le terrain.
+ * Il faut le décrire ICI parce que c'est height() qui creuse — water.js ne
+ * fait que poser la nappe et les berges par-dessus. */
+let fi = 0, fbest = 1e9;
+for (let i = 0; i < samples.length; i++) {
+  const d = Math.abs(samples[i].z + 100);
+  if (d < fbest) { fbest = d; fi = i; }
+}
+const FS = samples[fi];
+export const FORD = {
+  x: FS.x, z: FS.z, y: FS.y - 0.09,
+  nx: -FS.tz, nz: FS.tx, tx: FS.tx, tz: FS.tz,
+  halfLen: 46,
+};
+/** demi-largeur et méandre du lit à l'abscisse t ∈ [−1, 1] */
+export function fordShape(t) {
+  return {
+    wob: Math.sin(t * 4.1) * 2.6 + Math.sin(t * 9.3) * 1.1,
+    half: 1.6 + 1.9 * (0.5 + 0.5 * Math.sin(t * 5.7 + 1.2)),
+  };
+}
+/** profondeur à creuser sous le niveau de l'eau (0 hors du lit) */
+function fordCut(x, z) {
+  const dx = x - FORD.x, dz = z - FORD.z;
+  const along = dx * FORD.nx + dz * FORD.nz;
+  if (Math.abs(along) > FORD.halfLen) return 0;
+  const sh = fordShape(along / FORD.halfLen);
+  const across = dx * FORD.tx + dz * FORD.tz - sh.wob;
+  const a = Math.abs(across);
+  const bank = sh.half + 2.6;                     // les berges remontent
+  if (a > bank) return 0;
+  // profil en U doux : plat au fond, remontée sur les berges
+  const t = Math.min(1, Math.max(0, (a - sh.half) / (bank - sh.half)));
+  return 0.62 * (1 - t * t * (3 - 2 * t));
+}
+
 /** hauteur finale du terrain : sol sculpté par la route (déblai/remblai + bombé) */
 export function height(x, z) {
   const h = baseHeight(x, z);
@@ -137,6 +173,10 @@ export function height(x, z) {
     const t = sstep(0, 3, pd);
     out = GARAGE.y * (1 - t) + out * t;
   }
+  // le ruisseau se creuse en dernier : il passe SOUS la chaussée, donc le van
+  // traverse dans l'eau au lieu de rouler sur un pont invisible
+  const cut = fordCut(x, z);
+  if (cut > 0) out = Math.min(out, FORD.y + 0.02 - cut);
   return out;
 }
 

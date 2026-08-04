@@ -16,7 +16,7 @@ import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTextur
 import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import { MaterialPluginBase } from '@babylonjs/core/Materials/materialPluginBase.js';
 import { windClock, sunShared } from './wind.js';
-import { groundHeight, roadQuery, ROAD_HALF, GARAGE } from '../terrain/road.js';
+import { groundHeight, roadQuery, ROAD_HALF, GARAGE, FORD } from '../terrain/road.js';
 
 /**
  * Vent + couchage : un seul plugin pour le tapis. L'amplitude croît avec la
