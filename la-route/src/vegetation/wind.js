@@ -11,12 +11,19 @@ import { MaterialPluginBase } from '@babylonjs/core/Materials/materialPluginBase
 /** horloge partagée, avancée par la boucle de rendu (aucune allocation) */
 export const windClock = { t: 0 };
 
+/**
+ * Direction du soleil PARTAGÉE et vivante : le cycle jour/nuit la met à jour
+ * chaque frame, tous les feuillages en contre-jour la lisent. Sans ça, la
+ * translucidité resterait calée sur la pose du premier jour et ne suivrait
+ * jamais l'arc solaire.
+ */
+export const sunShared = { x: -0.62, y: -0.3, z: -0.75 };
+
 export class WindPlugin extends MaterialPluginBase {
   constructor(material, opts = {}) {
     super(material, 'Wind', 190, { WIND: false });
     this.strength = opts.strength ?? 1;
     this.transl = opts.transl ?? 0;
-    this.sunDir = opts.sunDir ?? { x: -0.62, y: -0.3, z: -0.75 };
     this._enable(true);
   }
 
@@ -44,7 +51,7 @@ uniform float wTransl; uniform vec3 wSunDir;
     ubo.updateFloat('wTime', windClock.t);
     ubo.updateFloat('wStrength', this.strength);
     ubo.updateFloat('wTransl', this.transl);
-    ubo.updateFloat3('wSunDir', this.sunDir.x, this.sunDir.y, this.sunDir.z);
+    ubo.updateFloat3('wSunDir', sunShared.x, sunShared.y, sunShared.z);
   }
 
   getCustomCode(shaderType) {

@@ -23,7 +23,7 @@ import { plantPines } from './vegetation/pines.js';
 import { plantGrass } from './vegetation/grass.js';
 import { plantFlora } from './vegetation/flora.js';
 import { createRetro } from './retro.js';
-import { windClock } from './vegetation/wind.js';
+import { windClock, sunShared } from './vegetation/wind.js';
 import { buildSky } from './world/sky.js';
 import { buildVan } from './vehicle/van.js';
 import { createDust } from './vehicle/dust.js';
@@ -415,6 +415,11 @@ async function start() {
     const dt = Math.min((now - last) / 1000, 0.05);
     last = now;
     windClock.t = now / 1000;
+    // les feuillages en contre-jour suivent l'arc solaire (le cycle a
+    // réorienté sun.direction juste avant, cf. weather.update)
+    sunShared.x = sun.direction.x;
+    sunShared.y = sun.direction.y;
+    sunShared.z = sun.direction.z;
 
     // entrées
     let ix = 0, iz = 0;

@@ -15,7 +15,7 @@ import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js';
 import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import { MaterialPluginBase } from '@babylonjs/core/Materials/materialPluginBase.js';
-import { windClock } from './wind.js';
+import { windClock, sunShared } from './wind.js';
 import { groundHeight, roadQuery, ROAD_HALF, GARAGE } from '../terrain/road.js';
 
 /**
@@ -28,6 +28,7 @@ class GrassPlugin extends MaterialPluginBase {
     super(material, 'Grass', 200, { GRASS: false });
     this._st = deformState;
     this.strength = opts.strength ?? 1;
+    this.transl = opts.transl ?? 1.35;               // le brin s'allume à contre-jour
     this._enable(true);
   }
   getClassName() { return 'GrassPlugin'; }
@@ -40,9 +41,14 @@ class GrassPlugin extends MaterialPluginBase {
         { name: 'grStrength', size: 1, type: 'float' },
         { name: 'grCenter', size: 2, type: 'vec2' },
         { name: 'grSize', size: 1, type: 'float' },
+        { name: 'grTransl', size: 1, type: 'float' },
+        { name: 'grSun', size: 3, type: 'vec3' },
       ],
       vertex: `#ifdef GRASS
 uniform float grTime; uniform float grStrength; uniform vec2 grCenter; uniform float grSize;
+#endif`,
+      fragment: `#ifdef GRASS
+uniform float grTransl; uniform vec3 grSun;
 #endif`,
     };
   }
@@ -52,9 +58,31 @@ uniform float grTime; uniform float grStrength; uniform vec2 grCenter; uniform f
     ubo.updateFloat('grStrength', this.strength);
     ubo.updateFloat2('grCenter', s.cx, s.cz);
     ubo.updateFloat('grSize', s.size);
+    ubo.updateFloat('grTransl', this.transl);
+    ubo.updateFloat3('grSun', sunShared.x, sunShared.y, sunShared.z);
     ubo.setTexture('grTex', s.frontTex);
   }
   getCustomCode(shaderType) {
+    if (shaderType === 'fragment') {
+      return {
+        // Le cœur du rendu d'herbe : à contre-jour, le brin est TRAVERSÉ par
+        // la lumière et s'allume en jaune-vert. Le terme monte quand on
+        // regarde vers le soleil, et il est le plus fort en haut du brin
+        // (la pointe est fine, elle transmet mieux que la base).
+        CUSTOM_FRAGMENT_BEFORE_FRAGCOLOR: `
+#ifdef GRASS
+        vec3 grV = normalize(vEyePosition.xyz - vPositionW);
+        float grBack = clamp(dot(grV, normalize(grSun)), 0.0, 1.0);
+        // la texture du brin est peinte en dégradé pied sombre → pointe
+        // claire : sa luminance EST la hauteur le long du brin, et c'est
+        // la pointe, fine, qui transmet le mieux la lumière
+        float grUp = dot(baseColor.rgb, vec3(0.33, 0.5, 0.17));
+        color.rgb += vec3(0.78, 0.86, 0.30) * pow(grBack, 2.2)
+                   * (0.25 + 1.5 * grUp) * grTransl * baseColor.rgb * 2.2;
+#endif
+`,
+      };
+    }
     if (shaderType !== 'vertex') return null;
     return {
       // le sampler se déclare ici (comme deformPlugin) : dans le bloc
@@ -157,6 +185,37 @@ function bladeTexture(scene, name, blades, base, tip, seed) {
   return tex;
 }
 
+/** brins fleuris : tiges vertes surmontées de corolles claires */
+function flowerTexture(scene, name, seed) {
+  const tex = new DynamicTexture(name, { width: 64, height: 64 }, scene, true);
+  const g = tex.getContext();
+  g.clearRect(0, 0, 64, 64);
+  let s = seed;
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const petals = ['#f2e9c8', '#e8c46a', '#d9a0b8', '#efe3ea'];
+  for (let i = 0; i < 9; i++) {
+    const x0 = 6 + rnd() * 52, top = 8 + rnd() * 20, bend = (rnd() - 0.5) * 14;
+    g.strokeStyle = '#3d5a1c'; g.lineWidth = 1.4;                // la tige
+    g.beginPath(); g.moveTo(x0, 64);
+    g.quadraticCurveTo(x0 + bend * 0.4, (64 + top) / 2, x0 + bend, top + 3);
+    g.stroke();
+    g.fillStyle = petals[(i + seed) % petals.length];            // la corolle
+    const cx = x0 + bend, cy = top;
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * Math.PI * 2;
+      g.beginPath();
+      g.ellipse(cx + Math.cos(a) * 2.1, cy + Math.sin(a) * 2.1, 1.9, 1.4, a, 0, 7);
+      g.fill();
+    }
+    g.fillStyle = '#c98f2a';
+    g.beginPath(); g.arc(cx, cy, 1.2, 0, 7); g.fill();
+  }
+  tex.update();
+  tex.hasAlpha = true;
+  tex.updateSamplingMode(1);
+  return tex;
+}
+
 const R = 34;              // rayon du tapis autour du joueur (dense au près)
 const RESEED = 7;          // au-delà, on re-sème
 
@@ -186,21 +245,37 @@ export function plantGrass(scene, deformState, opts = {}) {
     return mat;
   };
 
-  // herbe : cartes de 26 cm portant des brins peints ; le tapis lit comme
-  // de l'herbe et non comme des sapins nains
-  const grass = tuftGeometry(scene, 'grassTuft', 0.26, 0.2, 3);
+  // trois strates d'herbe : le tapis ras, les hautes tiges qui montent à
+  // mi-cuisse, et les roseaux des creux — c'est la VARIÉTÉ de hauteur qui
+  // fait la prairie, pas la densité d'une seule espèce
+  const grass = tuftGeometry(scene, 'grassTuft', 0.34, 0.24, 3);
   mk('grass', grass, new Color3(1, 1, 1), 1.0,
-    bladeTexture(scene, 'bladeTex', 26, '#2f4517', '#7d9038', 13));
-  const fern = tuftGeometry(scene, 'fernTuft', 0.52, 0.8, 4);
+    bladeTexture(scene, 'bladeTex', 26, '#38571a', '#a8bd66', 13));
+  const tall = tuftGeometry(scene, 'tallTuft', 0.92, 0.34, 4);
+  mk('tall', tall, new Color3(1, 1, 1), 1.25,
+    bladeTexture(scene, 'tallTex', 16, '#42611d', '#c6cf72', 29));
+  const reed = tuftGeometry(scene, 'reedTuft', 1.35, 0.22, 3);
+  mk('reed', reed, new Color3(1, 1, 1), 1.5,
+    bladeTexture(scene, 'reedTex', 9, '#4a5c22', '#d8cf84', 53));
+  const flower = tuftGeometry(scene, 'flowerTuft', 0.42, 0.26, 3);
+  mk('flower', flower, new Color3(1, 1, 1), 1.1,
+    flowerTexture(scene, 'flowerTex', 91));
+  const fern = tuftGeometry(scene, 'fernTuft', 0.58, 0.85, 4);
   mk('fern', fern, new Color3(1, 1, 1), 0.55,
-    bladeTexture(scene, 'fernTex', 14, '#1d3312', '#496b26', 71));
+    bladeTexture(scene, 'fernTex', 14, '#22400f', '#5a8029', 71));
   const bush = MeshBuilder.CreateSphere('bush', { diameter: 1.25, segments: 5 }, scene);
   bush.bakeCurrentTransformIntoVertices();
   mk('bush', bush, new Color3(0.19, 0.26, 0.13), 0.3);
 
+  const N_TALL = opts.tall ?? 4200;
+  const N_REED = opts.reeds ?? 1100;
+  const N_FLOW = opts.flowers ?? 900;
   const bufG = new Float32Array(N_GRASS * 16);
   const bufF = new Float32Array(N_FERN * 16);
   const bufB = new Float32Array(N_BUSH * 16);
+  const bufT = new Float32Array(N_TALL * 16);
+  const bufR = new Float32Array(N_REED * 16);
+  const bufW = new Float32Array(N_FLOW * 16);
 
   /** écrit une matrice TRS (rotation Y seule) à plat, colonne-major */
   function writeM(buf, i, x, y, z, sx, sy, ry) {
@@ -239,6 +314,46 @@ export function plantGrass(scene, deformState, opts = {}) {
     }
     for (; fi < N_FERN; fi++) writeM(bufF, fi, 0, -999, 0, 0, 0, 0);
 
+    // hautes tiges : en touffes, jamais uniformes — elles font la prairie
+    let ti = 0, ri = 0, wi = 0;
+    for (let i = 0; i < N_TALL * 3 && ti < N_TALL; i++) {
+      const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * R;
+      const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+      const rq = roadQuery(x, z);
+      if (rq.dist < ROAD_HALF + 1.6) continue;
+      const s = 0.62 + rnd() * 0.75;
+      writeM(bufT, ti++, x, groundHeight(x, z) - 0.05, z, s, s * (0.75 + rnd() * 0.6), rnd() * 3.14);
+    }
+    for (; ti < N_TALL; ti++) writeM(bufT, ti, 0, -999, 0, 0, 0, 0);
+    // roseaux : seulement dans les creux, là où l'eau stagnerait
+    for (let i = 0; i < N_REED * 8 && ri < N_REED; i++) {
+      const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * R;
+      const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+      const rq = roadQuery(x, z);
+      if (rq.dist < ROAD_HALF + 3) continue;
+      const gy = groundHeight(x, z);
+      // un creux local : le sol descend par rapport à ses voisins
+      const low = (groundHeight(x + 3, z) + groundHeight(x - 3, z)
+        + groundHeight(x, z + 3) + groundHeight(x, z - 3)) / 4 - gy;
+      if (low < 0.12) continue;
+      const s = 0.7 + rnd() * 0.6;
+      writeM(bufR, ri++, x, gy - 0.05, z, s, s * (0.8 + rnd() * 0.55), rnd() * 3.14);
+    }
+    for (; ri < N_REED; ri++) writeM(bufR, ri, 0, -999, 0, 0, 0, 0);
+    // fleurs : en petites colonies, dans les zones ouvertes
+    for (let i = 0; i < N_FLOW * 4 && wi < N_FLOW; i++) {
+      const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * R;
+      const bx = cx + Math.cos(a) * r, bz = cz + Math.sin(a) * r;
+      const n = 3 + Math.floor(rnd() * 7);                        // la colonie
+      for (let k = 0; k < n && wi < N_FLOW; k++) {
+        const x = bx + (rnd() - 0.5) * 2.6, z = bz + (rnd() - 0.5) * 2.6;
+        if (roadQuery(x, z).dist < ROAD_HALF + 1.2) continue;
+        const s = 0.7 + rnd() * 0.6;
+        writeM(bufW, wi++, x, groundHeight(x, z) - 0.03, z, s, s, rnd() * 3.14);
+      }
+    }
+    for (; wi < N_FLOW; wi++) writeM(bufW, wi, 0, -999, 0, 0, 0, 0);
+
     for (let i = 0; i < N_BUSH * 6 && bi < N_BUSH; i++) {
       const a = rnd() * Math.PI * 2, r = 6 + Math.sqrt(rnd()) * (R - 6);
       const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
@@ -254,6 +369,9 @@ export function plantGrass(scene, deformState, opts = {}) {
   grass.thinInstanceSetBuffer('matrix', bufG, 16, false);
   fern.thinInstanceSetBuffer('matrix', bufF, 16, false);
   bush.thinInstanceSetBuffer('matrix', bufB, 16, false);
+  tall.thinInstanceSetBuffer('matrix', bufT, 16, false);
+  reed.thinInstanceSetBuffer('matrix', bufR, 16, false);
+  flower.thinInstanceSetBuffer('matrix', bufW, 16, false);
 
   // re-semis en 2 phases (CPU lourd, upload léger) — étalé sur 2 frames
   let phase = 0, tx = 0, tz = 0;
@@ -266,8 +384,11 @@ export function plantGrass(scene, deformState, opts = {}) {
     grass.thinInstanceBufferUpdated('matrix');
     fern.thinInstanceBufferUpdated('matrix');
     bush.thinInstanceBufferUpdated('matrix');
+    tall.thinInstanceBufferUpdated('matrix');
+    reed.thinInstanceBufferUpdated('matrix');
+    flower.thinInstanceBufferUpdated('matrix');
     cx = tx; cz = tz; phase = 0;
   }
 
-  return { tick, meshes: [grass, fern, bush] };
+  return { tick, meshes: [grass, tall, reed, flower, fern, bush] };
 }
