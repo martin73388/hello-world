@@ -58,14 +58,14 @@ function buildGrid(scene, name, size, subdiv, cx, cz, hole) {
 function floorTexture(scene) {
   const tex = new DynamicTexture('floorTex', 512, scene, true);
   const g = tex.getContext();
-  g.fillStyle = '#4a4a30'; g.fillRect(0, 0, 512, 512);        // terre-herbe de base
+  g.fillStyle = '#39442a'; g.fillRect(0, 0, 512, 512);        // sous-bois : vert-terre, pas kaki
   let seed = 11;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   // grandes plaques de couleur : mousse, terre nue, herbe sèche
   for (const [col, n, rmin, rmax] of [
-    ['#3d5230', 30, 26, 78],       // mousse verte
-    ['#5b4a2e', 22, 20, 62],       // terre nue
-    ['#6b6438', 18, 18, 54],       // herbe sèche
+    ['#2f4b24', 38, 30, 86],       // mousse verte — la teinte dominante du sol
+    ['#4a3d26', 18, 18, 54],       // terre nue
+    ['#55592c', 16, 18, 50],       // herbe sèche
   ]) {
     g.fillStyle = col;
     for (let i = 0; i < n; i++) {

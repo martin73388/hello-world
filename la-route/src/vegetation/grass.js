@@ -86,7 +86,7 @@ uniform float grTransl; uniform vec3 grSun; uniform vec3 grAmb;
         // réelle capte toujours un peu de ciel. Le plancher SUIT l'ambiante
         // du moment (le même que le décor) — constant, il faisait luire
         // l'herbe en plein milieu de la nuit.
-        color.rgb += baseColor.rgb * grAmb * 1.35;
+        color.rgb += baseColor.rgb * grAmb * 1.05;
 #endif
 `,
       };
@@ -264,19 +264,19 @@ export function plantGrass(scene, deformState, opts = {}) {
   // fait la prairie, pas la densité d'une seule espèce
   const grass = tuftGeometry(scene, 'grassTuft', 0.34, 0.24, 3);
   mk('grass', grass, new Color3(1, 1, 1), 1.0,
-    bladeTexture(scene, 'bladeTex', 26, '#38571a', '#a8bd66', 13));
+    bladeTexture(scene, 'bladeTex', 26, '#2c4a13', '#7ea23a', 13));
   const tall = tuftGeometry(scene, 'tallTuft', 0.86, 0.3, 4);
   mk('tall', tall, new Color3(1, 1, 1), 1.25,
-    bladeTexture(scene, 'tallTex', 34, '#42611d', '#c6cf72', 29));
+    bladeTexture(scene, 'tallTex', 34, '#355516', '#93b243', 29));
   const reed = tuftGeometry(scene, 'reedTuft', 1.05, 0.2, 3);
   mk('reed', reed, new Color3(1, 1, 1), 1.5,
-    bladeTexture(scene, 'reedTex', 22, '#4a5c22', '#d8cf84', 53));
+    bladeTexture(scene, 'reedTex', 22, '#405219', '#b3ac57', 53));
   const flower = tuftGeometry(scene, 'flowerTuft', 0.42, 0.26, 3);
   mk('flower', flower, new Color3(1, 1, 1), 1.1,
     flowerTexture(scene, 'flowerTex', 91));
   const fern = tuftGeometry(scene, 'fernTuft', 0.58, 0.85, 4);
   mk('fern', fern, new Color3(1, 1, 1), 0.55,
-    bladeTexture(scene, 'fernTex', 14, '#22400f', '#5a8029', 71));
+    bladeTexture(scene, 'fernTex', 14, '#17300a', '#456f1c', 71));
   const bush = MeshBuilder.CreateSphere('bush', { diameter: 1.25, segments: 5 }, scene);
   bush.bakeCurrentTransformIntoVertices();
   mk('bush', bush, new Color3(0.19, 0.26, 0.13), 0.3);
