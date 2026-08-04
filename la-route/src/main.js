@@ -26,6 +26,7 @@ import { createRetro } from './retro.js';
 import { windClock, sunShared } from './vegetation/wind.js';
 import { buildSky } from './world/sky.js';
 import { buildClouds } from './world/clouds.js';
+import { buildRidges } from './world/ridges.js';
 import { buildShafts } from './world/shafts.js';
 import { buildWater } from './world/water.js';
 import { applyHaze } from './world/haze.js';
@@ -126,6 +127,7 @@ async function start() {
   // Le monde du M2 : terrain sculpté par la route, forêt, ciel
   const sky = buildSky(scene);
   const clouds = buildClouds(scene);                 // deux nappes de cumulus
+  const ridges = buildRidges(scene);                 // le troisième plan : les crêtes
   // M3 : buffer d'état de déformation (2048² ≈ 4 cm/texel sur 80 m ; réduit
   // sur le chemin dev WebGL logiciel)
   const deform = createDeform(engine, { res: DEV_GL ? 768 : 2048 });
@@ -610,6 +612,7 @@ async function start() {
     // fait 17 m, il en faut plus pour qu'aucune goutte ne traverse le toit.
     weather.update(dt, focAx, inside ? GARAGE.z0 - 26 : focAz);
     clouds.update(dt, weather.sunHeight(), weather.cloudiness(), focAx, focAz, state.camYaw);
+    ridges.update(weather.sunHeight(), focAx, focAz);
     // la nappe de brume prend la couleur du brouillard du moment et
     // s'épaissit au petit matin, sous l'averse et par temps de brume
     hazeShared.d = (0.0055 + weather.rainEase() * 0.004
