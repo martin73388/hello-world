@@ -116,3 +116,7 @@ Chaque écart au brief, en une ligne, avec sa raison.
   compile chaque pipeline sous l'écran de chargement à la place.
 - M8 : la mesure 90 fps / 1 % low se fait sur la machine du joueur
   (M4/WebGPU, overlay F1) — le SwiftShader de CI ne mesure rien d'utile.
+- Captures : M3-M5 et M7 sont en 1440p ; le bivouac M6 est en 720p — les
+  compositions nocturnes en 1440p sous SwiftShader coûtent >5 min par
+  cadrage et se disputent le feu avec le warm-up. Les captures de
+  référence définitives se prennent sur la machine cible.
