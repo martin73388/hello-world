@@ -51,6 +51,11 @@ const NOGPU_MSGS = {
     1. Active l'accélération matérielle : <code>chrome://settings/system</code><br>
     2. Mets les pilotes GPU à jour, puis redémarre Chrome<br>
     3. Le détail est dans <code>chrome://gpu</code> (section WebGPU)`,
+  shaders: `WebGPU a démarré mais le <b>transpileur de shaders</b> n'a pas pu
+    être chargé.<br>Babylon va chercher <code>glslang</code> et <code>twgsl</code>
+    sur son CDN ; un blocage réseau, un pare-feu ou une extension suffit à
+    l'empêcher.<br>Vérifie ta connexion, ou lance en WebGL ci-dessous — le
+    rendu y est identique, seule l'API change.`,
   error: `L'initialisation WebGPU a échoué (détail dans la console F12).`,
 };
 function showNoGpu(reason) {
@@ -78,7 +83,17 @@ async function start() {
     engine = new Engine(canvas, true);
   } else {
     engine = new WebGPUEngine(canvas, { antialias: true });
-    await engine.initAsync();
+    // initAsync télécharge glslang et twgsl depuis le CDN Babylon : ils
+    // transpilent en WGSL le GLSL de nos plugins matériau (herbe, brume,
+    // déformation). Sans eux, WebGPU démarre mais AUCUN shader ne compile —
+    // écran noir sans explication. On échoue donc bruyamment et on propose
+    // le repli WebGL, qui n'a pas besoin de cette transpilation.
+    try {
+      await engine.initAsync();
+    } catch (e) {
+      console.error('[LA ROUTE] transpilation WebGPU indisponible :', e);
+      return showNoGpu('shaders');
+    }
   }
 
   const scene = new Scene(engine);
@@ -386,6 +401,28 @@ async function start() {
   for (const m of scene.materials) m.maxSimultaneousLights = 6;
   // la brume de vallée étage les plans (posée en dernier, sur tout le décor)
   applyHaze(scene, ['skyMat', 'waterFoamM', 'waterRipM']);
+
+  // Filet de sécurité WebGPU : si un plugin GLSL ne survit pas à la
+  // transpilation WGSL, Babylon désactive l'effet en silence et la scène se
+  // dégrade sans rien dire. On le signale à l'écran — c'est exactement ce
+  // qu'on veut savoir en validant le rendu sur une autre machine.
+  let shaderFail = 0;
+  scene.onAfterRenderObservable.addOnce(() => {
+    for (const m of scene.materials) {
+      const e = m.getEffect && m.getEffect();
+      if (e && e.getCompilationError && e.getCompilationError()) shaderFail++;
+    }
+    if (shaderFail > 0) {
+      const w = document.createElement('div');
+      w.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:60;'
+        + 'background:rgba(120,20,20,.9);color:#ffe;padding:9px 13px;border-radius:7px;'
+        + 'font:12px system-ui;max-width:420px;line-height:1.5';
+      w.textContent = shaderFail + ' shader(s) n\'ont pas compilé — le rendu est '
+        + 'incomplet. Détail en console (F12). Essaie le mode WebGL (?gl) pour comparer.';
+      document.body.appendChild(w);
+      console.warn('[LA ROUTE]', shaderFail, 'shaders en échec de compilation');
+    }
+  });
 
   const overlay = createOverlay(engine, scene,
     { sun, fog: scene, post, retro, weather, haze: hazeShared });

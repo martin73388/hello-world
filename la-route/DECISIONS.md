@@ -148,3 +148,40 @@ Chaque écart au brief, en une ligne, avec sa raison.
   compositions nocturnes en 1440p sous SwiftShader coûtent >5 min par
   cadrage et se disputent le feu avec le warm-up. Les captures de
   référence définitives se prennent sur la machine cible.
+
+## Passe Valheim (direction artistique)
+
+- Herbe : cartes à brins peints dans l'alpha (découpe franche, aucun tri de
+  transparence sur 20 000 instances) ; la LUMINANCE de la texture sert de
+  hauteur le long du brin pour le terme de translucidité — la pointe, fine,
+  transmet plus que la base. Pas de mipmaps sur ces textures : le moyennage
+  de l'alpha faisait passer des cartes entières au test de découpe.
+- Cinq strates (tapis, hautes tiges, roseaux dans les creux détectés par
+  échantillonnage du relief, fleurs en colonies, fougères) : c'est la
+  variété de HAUTEUR qui fait la prairie, pas la densité d'une espèce.
+- Nuages : cartes en billboard, pas un dôme texturé. Un dôme à 700 m n'est
+  plus séparé du dôme de ciel par le depth buffer et disparaît derrière.
+  Au passage, minZ de la caméra remonté de 0,05 à 0,2 — un plan proche aussi
+  serré ruine toute la précision au loin.
+- Eau : Fresnel vers la couleur du ciel plutôt qu'une MirrorTexture. Une
+  passe de réflexion coûte une seconde caméra, impose une renderList à
+  tenir, et rendait du blanc sur certains pilotes.
+- Étagement : le fog EXP2 de Babylon noie tout uniformément. Le HazePlugin
+  ajoute une nappe dont la densité décroît avec l'altitude RELATIVE À L'ŒIL
+  (en absolu, le monde descendant à −40 m, tout plongeait dans la brume dès
+  le premier plan) et qui ne démarre qu'à 18 m.
+- Plancher de ciel diffus sur tout le décor et sur l'herbe : au soleil
+  rasant, une surface horizontale reçoit N·L ≈ 0 et tombe au noir. Les
+  cartes d'herbe, à normale verticale, s'éteignaient les premières.
+- Saturation appliquée AVANT la quantification rétro : sinon la palette
+  réduite vire au gris. C'est ce qui sépare le 32 bits coloré du délavé.
+- Les quatre leviers d'étalonnage (heure, saturation, brume, bloom) sont des
+  curseurs vivants dans F1 : le rendu de développement est du WebGL logiciel,
+  plus terne que la cible, donc le calage final se fait sur la machine du
+  joueur. Les anciens curseurs soleil/brume écrivaient des valeurs que le
+  cycle jour/nuit réécrit chaque frame — ils étaient devenus inopérants.
+- RISQUE WEBGPU consigné : nos plugins matériau sont en GLSL et Babylon les
+  transpile en WGSL via glslang et twgsl, qu'il télécharge depuis son CDN.
+  Réseau bloqué = aucun shader ne compile. L'échec est désormais explicite
+  (écran de diagnostic dédié) au lieu d'un écran noir, et tout shader qui
+  échoue à compiler est signalé à l'écran plutôt que dégradé en silence.
