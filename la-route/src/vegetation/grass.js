@@ -28,7 +28,7 @@ class GrassPlugin extends MaterialPluginBase {
     super(material, 'Grass', 200, { GRASS: false });
     this._st = deformState;
     this.strength = opts.strength ?? 1;
-    this.transl = opts.transl ?? 1.35;               // le brin s'allume à contre-jour
+    this.transl = opts.transl ?? 1.05;               // le brin s'allume à contre-jour
     this._enable(true);
   }
   getClassName() { return 'GrassPlugin'; }

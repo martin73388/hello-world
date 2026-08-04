@@ -88,8 +88,8 @@ const HEX = {
   aube: ['#0a1130', '#16224c', '#33356a', '#6b4668', '#3a2c48', '#141527', '#070a14'],
   lever: ['#1d3060', '#3a5490', '#8d6b96', '#eda06a', '#c06848', '#4a3450', '#151122'],
   matin: ['#1f56a8', '#4180cc', '#84b2dc', '#e6cfa2', '#a89880', '#4a5464', '#1e2736'],
-  jour: ['#0b4fd4', '#2b7ae4', '#6cadec', '#b6dcf4', '#a4c2d4', '#5b7080', '#2c3a48'],
-  aprem: ['#2360c4', '#4a88d2', '#a2bcd8', '#e8dcb6', '#b8a684', '#5c6068', '#2a2f3a'],
+  jour: ['#0b4fd4', '#2b7ae4', '#6cadec', '#a8d4f2', '#8fbcda', '#5c82a0', '#2c3a48'],
+  aprem: ['#2360c4', '#4a88d2', '#94c0dc', '#e8dcb6', '#b8a684', '#5c6874', '#2a2f3a'],
   crep: ['#264c92', '#4a6ea8', '#a08ea0', '#e8a25c', '#b87a4a', '#4a5a74', '#1c3050'],
   couchant: ['#152a5e', '#2d4076', '#7d5072', '#d66a3a', '#8b4028', '#33344f', '#101828'],
   bleue: ['#0c1738', '#182354', '#3a3668', '#6a415a', '#43314b', '#1a1d35', '#080c18'],
@@ -310,7 +310,8 @@ export function createWeather(scene, refs) {
   /* ---- état (tout est scalaire, rien n'est alloué dans update) ---- */
   let t = 0.30;                        // heure du monde, milieu de matinée
   let sy = 0;                          // sinus de la hauteur du soleil
-  let nf = 0;                          // nightFactor
+  let nf = 0;
+  let sunE = 0, sunN = 1;                    // composantes d'azimut, lues par les rais                          // nightFactor
   let paintClock = 1e9;                // force un premier repeint
   let skipP = 1, skipE = 1, skipD = 0; // glissement de skipTo
   // les étoiles restent visibles (à 0,002 d'alpha : rien à l'écran) le temps
@@ -403,7 +404,9 @@ export function createWeather(scene, refs) {
     const cH = Math.cos(H), sH = Math.sin(H);
     sy = SIN_DEC * SIN_LAT + COS_DEC * cH * COS_LAT;
     const se = -COS_DEC * sH;
+    sunE = se;
     const sn = SIN_DEC * COS_LAT - COS_DEC * cH * SIN_LAT;
+    sunN = sn;
 
     /* ---- météo : un seul vecteur interpolé, tout en découle ---- */
     dwell -= dt;
@@ -585,5 +588,7 @@ export function createWeather(scene, refs) {
     sunUp: () => sy > 0,
     sunHeight: () => sy,                     // hauteur du soleil, pour les nuages
     cloudiness: () => cur.cloud,
+    // azimut du soleil : d'où vient la lumière, pour les rais
+    sunAzimuth: () => Math.atan2(sunE, sunN),
   };
 }

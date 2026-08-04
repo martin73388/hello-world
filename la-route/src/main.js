@@ -26,6 +26,7 @@ import { createRetro } from './retro.js';
 import { windClock, sunShared } from './vegetation/wind.js';
 import { buildSky } from './world/sky.js';
 import { buildClouds } from './world/clouds.js';
+import { buildShafts } from './world/shafts.js';
 import { buildVan } from './vehicle/van.js';
 import { createDust } from './vehicle/dust.js';
 import { buildDriver } from './character/driver.js';
@@ -133,6 +134,8 @@ async function start() {
   // le temps qui passe : cycle jour/nuit continu + météo à états
   const weather = createWeather(scene, { sun, amb, sky, deform, shadows });
   const horn = createHorn(scene, pines.trunks, groundHeight);
+  // rais de lumière rasante entre les troncs (aube et couchant seulement)
+  const shafts = buildShafts(scene, pines.trunks, groundHeight);
 
   // obstacles (troncs + rochers) : hachage spatial 4 m pour les collisions
   const OBS = new Map();
@@ -562,6 +565,8 @@ async function start() {
     // fait 17 m, il en faut plus pour qu'aucune goutte ne traverse le toit.
     weather.update(dt, focAx, inside ? GARAGE.z0 - 26 : focAz);
     clouds.update(dt, weather.sunHeight(), weather.cloudiness(), focAx, focAz, state.camYaw);
+    shafts.update(dt, focAx, focAz, weather.sunHeight(), weather.sunAzimuth(),
+      state.camYaw, 1 - weather.cloudiness() * 0.8);
     fire.update(dt);
     horn.update(dt, focAx, focAz);
     post.update(dt);
