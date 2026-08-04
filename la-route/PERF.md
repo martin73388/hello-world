@@ -37,3 +37,22 @@ Coûts M3 à surveiller (overlay F1 sur le M4) :
 - recentrage du patch : ~66 k `height()` CPU en phase 1 + ComputeNormals en
   phase 2 (étalé sur 2 frames, tous les ~6 m de marche) — si un à-coup se
   sent, découper la phase 1 en bandes.
+
+## Systèmes ajoutés par la passe Valheim
+
+| Système | Coût à surveiller |
+| --- | --- |
+| Tapis d'herbe | ~22 000 instances sur 5 maillages, re-semées en 2 phases tous les 7 m ; alpha-test (pas de tri), pas de mipmaps |
+| Bouleaux et repères | thin instances, construits une fois puis figés |
+| Nuages | 26 cartes en billboard, matrices recomposées chaque frame (négligeable) |
+| Crêtes | 3 cylindres texturés, aucune mise à jour de géométrie |
+| Rais de lumière | 16 quads additifs, inactifs hors lumière rasante — coût nul à midi et la nuit |
+| Gué | nappe + écume + rides (3 passes transparentes), 260 galets et 46 nénuphars en thin instances |
+| Faune | 2 chevreuils, 14 oiseaux, 5 chauves-souris en pools ; 4 systèmes de particules |
+| Brume étagée | un plugin fragment sur tous les matériaux du décor — 3 taps de plus, pas de passe |
+| Patine rétro | une passe plein écran de plus (quantification + tramage), débrayable |
+
+Le poste le plus lourd est le tapis d'herbe. Si le budget se tend sur la
+machine cible, les leviers dans l'ordre : nombre d'instances (`plantGrass`
+accepte `{grass, tall, reeds, flowers, ferns, bushes}`), rayon du tapis
+(`R`), puis résolution du buffer de déformation.
