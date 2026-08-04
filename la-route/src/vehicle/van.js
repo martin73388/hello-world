@@ -225,9 +225,13 @@ export function buildVan(scene, shadows, ground) {
     lastAcc: 0,
   };
 
+  // scratch réutilisé (consommer le résultat avant l'appel suivant)
+  const wheelOut = { x: 0, z: 0 };
   function wheelWorld(w) {
     const c = Math.cos(st.yaw), s = Math.sin(st.yaw);
-    return { x: st.x + w.wx * c + w.wz * s, z: st.z - w.wx * s + w.wz * c };
+    wheelOut.x = st.x + w.wx * c + w.wz * s;
+    wheelOut.z = st.z - w.wx * s + w.wz * c;
+    return wheelOut;
   }
 
   function update(dt, input, blocked) {

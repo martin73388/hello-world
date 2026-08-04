@@ -176,6 +176,7 @@ async function start() {
   }
 
   // résolution cercle-AABB : le mécano ne traverse ni murs ni établi
+  const rectOut = { x: 0, z: 0 };                    // scratch, zéro alloc
   const resolveRects = (px, pz, r) => {
     let x = px, z = pz;
     for (const c of garage.colliders) {
@@ -197,7 +198,8 @@ async function start() {
         }
       }
     }
-    return { x, z };
+    rectOut.x = x; rectOut.z = z;
+    return rectOut;
   };
   const camClamp = (tx, ty, tz, dx, dyy, dz, want) => {
     const steps = Math.ceil(want / 0.55);
@@ -253,10 +255,13 @@ async function start() {
     if (!!text !== hintShown) { hintShown = !!text; hint.style.display = text ? 'block' : 'none'; }
   };
 
-  // porte conducteur (côté gauche de la cabine)
+  // porte conducteur (côté gauche de la cabine) — scratch réutilisé
+  const doorOut = { x: 0, z: 0 };
   const doorWorld = () => {
     const c = Math.cos(van.st.yaw), s = Math.sin(van.st.yaw);
-    return { x: van.st.x - 1.35 * c + 1.6 * s, z: van.st.z + 1.35 * s + 1.6 * c };
+    doorOut.x = van.st.x - 1.35 * c + 1.6 * s;
+    doorOut.z = van.st.z + 1.35 * s + 1.6 * c;
+    return doorOut;
   };
   // touches 1-5 : la grammaire commune — tout s'installe et se retire en fondu
   addEventListener('keydown', (e) => {
