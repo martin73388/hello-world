@@ -78,5 +78,8 @@ export function createPost(scene, camera) {
     }
   };
 
-  return { setExposure, getExposure, update, set, has };
+  /** force du bloom, réglable à chaud depuis l'overlay */
+  const setBloom = (w) => { pipe.bloomWeight = w; };
+
+  return { setExposure, getExposure, update, set, has, setBloom };
 }

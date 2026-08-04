@@ -24,7 +24,10 @@ export const sunShared = { x: -0.62, y: -0.3, z: -0.75 };
  * jour par le cycle météo. C'est elle qui étage les plans — le sol lointain
  * se noie pendant que les cimes émergent.
  */
-export const hazeShared = { d: 0.02, top: 26, r: 0.62, g: 0.7, b: 0.82 };
+export const hazeShared = {
+  d: 0.02, top: 26, r: 0.62, g: 0.7, b: 0.82,
+  ar: 0.1, ag: 0.12, ab: 0.15,          // plancher de ciel diffus
+};
 
 export class WindPlugin extends MaterialPluginBase {
   constructor(material, opts = {}) {

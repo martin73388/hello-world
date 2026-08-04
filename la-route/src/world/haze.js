@@ -23,9 +23,10 @@ export class HazePlugin extends MaterialPluginBase {
         { name: 'hzD', size: 1, type: 'float' },
         { name: 'hzTop', size: 1, type: 'float' },
         { name: 'hzCol', size: 3, type: 'vec3' },
+        { name: 'hzAmb', size: 3, type: 'vec3' },
       ],
       fragment: `#ifdef HAZE
-uniform float hzD; uniform float hzTop; uniform vec3 hzCol;
+uniform float hzD; uniform float hzTop; uniform vec3 hzCol; uniform vec3 hzAmb;
 #endif`,
     };
   }
@@ -33,12 +34,18 @@ uniform float hzD; uniform float hzTop; uniform vec3 hzCol;
     ubo.updateFloat('hzD', hazeShared.d);
     ubo.updateFloat('hzTop', hazeShared.top);
     ubo.updateFloat3('hzCol', hazeShared.r, hazeShared.g, hazeShared.b);
+    ubo.updateFloat3('hzAmb', hazeShared.ar, hazeShared.ag, hazeShared.ab);
   }
   getCustomCode(shaderType) {
     if (shaderType !== 'fragment') return null;
     return {
       CUSTOM_FRAGMENT_BEFORE_FRAGCOLOR: `
 #ifdef HAZE
+        // Plancher de ciel diffus : sous un soleil rasant, une surface
+        // horizontale reçoit N·L ~ 0 et tombe au noir. Le ciel, lui, éclaire
+        // toujours un peu — sans ce terme, l'aube et le couchant creusent des
+        // trous noirs entre les touffes et sous les arbres.
+        color.rgb += baseColor.rgb * hzAmb;
         float hzDist = length(vEyePosition.xyz - vPositionW);
         // Hauteur RELATIVE à l'œil, pas absolue : le monde descend jusqu'à
         // −40 m le long de la route, une altitude absolue aurait plongé tout

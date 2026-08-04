@@ -14,20 +14,31 @@ export function createOverlay(engine, scene, refs) {
     <div style="letter-spacing:.3em;color:#ffb066;margin-bottom:6px">LA ROUTE — PERF</div>
     <canvas id="fg" width="256" height="64" style="display:block;background:rgba(0,0,0,.35);border-radius:4px"></canvas>
     <div id="stats" style="margin:8px 0"></div>
-    <label style="display:block">soleil <input id="sunA" type="range" min="-80" max="80" value="-20" style="width:150px"></label>
-    <label style="display:block">brume <input id="fogD" type="range" min="0" max="40" value="6" style="width:150px"></label>
+    <label style="display:block">heure <input id="tod" type="range" min="0" max="1000" value="400" style="width:150px"></label>
+    <label style="display:block">saturation <input id="sat" type="range" min="80" max="200" value="130" style="width:150px"></label>
+    <label style="display:block">brume <input id="haze" type="range" min="0" max="200" value="55" style="width:150px"></label>
+    <label style="display:block">bloom <input id="bloom" type="range" min="0" max="120" value="42" style="width:150px"></label>
   `;
   document.body.appendChild(root);
 
   const fg = root.querySelector('#fg').getContext('2d');
   const stats = root.querySelector('#stats');
 
-  root.querySelector('#sunA').addEventListener('input', (e) => {
-    const a = (+e.target.value) * Math.PI / 180;
-    refs.sun.direction.set(Math.sin(a) * 0.8, -Math.max(0.12, Math.cos(a) * 0.5), 0.75);
+  // Les trois leviers d'étalonnage : à caler sur l'écran du joueur, puisque
+  // le rendu de développement (WebGL logiciel) est plus terne que le vrai.
+  // L'ancien curseur « soleil » écrivait sun.direction, que le cycle
+  // jour/nuit réécrit chaque frame — il est remplacé par l'heure elle-même.
+  root.querySelector('#tod').addEventListener('input', (e) => {
+    if (refs.weather) refs.weather.setTime((+e.target.value) / 1000);
   });
-  root.querySelector('#fogD').addEventListener('input', (e) => {
-    refs.fog.fogDensity = (+e.target.value) / 1000;
+  root.querySelector('#sat').addEventListener('input', (e) => {
+    if (refs.retro) refs.retro.cfg.sat = (+e.target.value) / 100;
+  });
+  root.querySelector('#haze').addEventListener('input', (e) => {
+    if (refs.haze) refs.haze.scale = (+e.target.value) / 55;
+  });
+  root.querySelector('#bloom').addEventListener('input', (e) => {
+    if (refs.post) refs.post.setBloom((+e.target.value) / 100);
   });
 
   // M7 : cases A/B des passes de post (si la chaîne est branchée)

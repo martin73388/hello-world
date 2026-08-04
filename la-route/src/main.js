@@ -387,7 +387,8 @@ async function start() {
   // la brume de vallée étage les plans (posée en dernier, sur tout le décor)
   applyHaze(scene, ['skyMat', 'waterFoamM', 'waterRipM']);
 
-  const overlay = createOverlay(engine, scene, { sun, fog: scene, post, retro });
+  const overlay = createOverlay(engine, scene,
+    { sun, fog: scene, post, retro, weather, haze: hazeShared });
 
   const WALK = 2.2, RUN = 6.5, ACCEL = 26, DAMP = 10;
   let last = performance.now();
@@ -574,8 +575,12 @@ async function start() {
     clouds.update(dt, weather.sunHeight(), weather.cloudiness(), focAx, focAz, state.camYaw);
     // la nappe de brume prend la couleur du brouillard du moment et
     // s'épaissit au petit matin, sous l'averse et par temps de brume
-    hazeShared.d = 0.0055 + weather.rainEase() * 0.004
-      + Math.max(0, 0.24 - weather.sunHeight()) * 0.016;
+    hazeShared.d = (0.0055 + weather.rainEase() * 0.004
+      + Math.max(0, 0.24 - weather.sunHeight()) * 0.016) * (hazeShared.scale || 1);
+    // le plancher de ciel suit l'ambiante du moment : bleu la nuit, franc le jour
+    hazeShared.ar = amb.diffuse.r * amb.intensity * 0.2;
+    hazeShared.ag = amb.diffuse.g * amb.intensity * 0.21;
+    hazeShared.ab = amb.diffuse.b * amb.intensity * 0.24;
     hazeShared.r = scene.fogColor.r * 1.18 + 0.1;
     hazeShared.g = scene.fogColor.g * 1.18 + 0.12;
     hazeShared.b = scene.fogColor.b * 1.18 + 0.16;

@@ -79,6 +79,11 @@ uniform float grTransl; uniform vec3 grSun;
         float grUp = dot(baseColor.rgb, vec3(0.33, 0.5, 0.17));
         color.rgb += vec3(0.78, 0.86, 0.30) * pow(grBack, 2.2)
                    * (0.25 + 1.5 * grUp) * grTransl * baseColor.rgb * 2.2;
+        // plancher d'éclairage : la carte a une normale VERTICALE, donc au
+        // soleil rasant N·L tombe à zéro et le brin devient noir. Une herbe
+        // réelle capte toujours un peu de ciel — sans ce terme, l'aube et le
+        // couchant creusent des trous noirs entre les touffes.
+        color.rgb += baseColor.rgb * vec3(0.13, 0.17, 0.16);
 #endif
 `,
       };
