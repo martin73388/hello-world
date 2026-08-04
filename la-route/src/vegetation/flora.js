@@ -29,6 +29,50 @@ function freeAt(x, z, minRoad) {
   return true;
 }
 
+/* ---- bouquet de feuilles : le houppier n'est pas un volume, c'est un amas
+ * de petites feuilles avec du vide entre elles. On peint donc un bouquet
+ * découpé dans l'alpha — quelques rameaux garnis de feuilles pointues, bord
+ * déchiqueté — et on en habille une coque de cartes. Le contour du houppier
+ * devient irrégulier et la lumière passe au travers. */
+function leafClumpTexture(scene, name, seed, dark, light) {
+  // PAS de mipmaps : le moyennage de l'alpha rendrait les cartes pleines à
+  // distance (les mêmes blocs verts volants que pour l'herbe).
+  const S = 64;
+  const tex = new DynamicTexture(name, { width: S, height: S }, scene, false);
+  const g = tex.getContext();
+  g.clearRect(0, 0, S, S);
+  let s = seed;
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let b = 0; b < 5; b++) {                       // les rameaux
+    const a0 = rnd() * Math.PI * 2;
+    const x0 = S / 2 + Math.cos(a0) * 6, y0 = S / 2 + Math.sin(a0) * 6;
+    const a1 = a0 + (rnd() - 0.5) * 1.1;
+    const L = 16 + rnd() * 12;
+    const x1 = x0 + Math.cos(a1) * L, y1 = y0 + Math.sin(a1) * L;
+    g.strokeStyle = dark; g.lineWidth = 1; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+    const n = 7;
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const bx = x0 + (x1 - x0) * t, by = y0 + (y1 - y0) * t;
+      for (let sg = -1; sg <= 1; sg += 2) {
+        const ang = a1 + sg * (0.7 + rnd() * 0.5);
+        const r = 2.6 + rnd() * 2.2;
+        // la feuille est une ellipse orientée : pointue, pas un rond
+        g.fillStyle = t > 0.45 ? light : dark;
+        g.beginPath();
+        g.ellipse(bx + Math.cos(ang) * r * 0.8, by + Math.sin(ang) * r * 0.8,
+          r, r * 0.62, ang, 0, 7);
+        g.fill();
+      }
+    }
+  }
+  tex.update();
+  tex.hasAlpha = true;
+  tex.updateSamplingMode(1);                          // nearest : grain 32 bits
+  return tex;
+}
+
 /* ---- écorce de bouleau : blanc crème, lenticelles noires irrégulières ----
  * v = 0 est le PIED du cylindre (bas du canvas) : le socle sombre s'y peint.
  * u boucle une fois autour du tronc — les marques qui débordent à droite sont
@@ -182,9 +226,14 @@ export function plantFlora(scene, shadows) {
   const woodTex = deadWoodTexture(scene);
   const barkM = mat('flBirchBarkM', null, birchBarkTexture(scene));
   new WindPlugin(barkM, { strength: 0.18 });          // le fût plie à peine
-  const leafM = mat('flBirchLeafM', new Color3(0.44, 0.56, 0.24));
+  const leafM = mat('flBirchLeafM', new Color3(0.82, 0.9, 0.7));
+  leafM.diffuseTexture = leafClumpTexture(scene, 'flLeafTex', 137, '#2c4a17', '#6d8f2c');
+  leafM.useAlphaFromDiffuseTexture = true;
+  leafM.backFaceCulling = false;
+  leafM.needAlphaTesting = () => true;                // découpe franche, aucun tri
+  leafM.needAlphaBlending = () => false;
   // feuilles fines : elles s'allument à contre-jour et dansent plus que l'aiguille
-  new WindPlugin(leafM, { strength: 1.2, transl: 0.7 });
+  new WindPlugin(leafM, { strength: 0.9, transl: 0.7 });
   const woodM = mat('flDeadWoodM', null, woodTex);
   const mossM = mat('flMossM', new Color3(0.21, 0.35, 0.15));
   const rockM = mat('flRockM', new Color3(0.34, 0.35, 0.38));
@@ -216,17 +265,37 @@ export function plantFlora(scene, shadows) {
   bTrunk.position.y = 2.8;
   bTrunk.bakeCurrentTransformIntoVertices();          // origine au pied, comme les pins
   setup(bTrunk, barkM, true);
-  // Trois masses décalées : un houppier, pas une boule. Icosaèdres (20 faces,
-  // ombrage à facettes) et non sphères UV — une CreateSphere à 5 segments
-  // coûtait 536 triangles par arbre, soit 225 k pour le bosquet entier, pour
-  // un galbe que la DA ne veut pas. Ici 60 triangles, le budget d'un pin.
-  const f1 = MeshBuilder.CreateIcoSphere('flB1', { radius: 1.35, subdivisions: 1 }, scene);
-  f1.position.set(0.12, 3.7, 0.06); f1.scaling.set(1, 0.85, 1);
-  const f2 = MeshBuilder.CreateIcoSphere('flB2', { radius: 1.05, subdivisions: 1 }, scene);
-  f2.position.set(-0.55, 4.55, 0.28); f2.scaling.set(1, 0.9, 1);
-  const f3 = MeshBuilder.CreateIcoSphere('flB3', { radius: 0.78, subdivisions: 1 }, scene);
-  f3.position.set(0.45, 4.95, -0.32);
-  const bLeaf = Mesh.MergeMeshes([f1, f2, f3], true, true);
+  // Le houppier n'est PAS un volume. Les icosaèdres pleins qui tenaient ce
+  // rôle lisaient comme des cailloux verts facettés : un contour lisse, une
+  // masse opaque, zéro lumière au travers. La référence montre un amas de
+  // bouquets de feuilles au bord déchiqueté. On habille donc trois grappes
+  // décalées d'une coque de cartes découpées, orientées vers l'extérieur,
+  // posées à des rayons irréguliers pour que la coque ne se lise pas.
+  const CLUMPS = [
+    { x: 0.12, y: 3.7, z: 0.06, r: 1.42, n: 13, s: 1.5 },
+    { x: -0.55, y: 4.55, z: 0.28, r: 1.12, n: 10, s: 1.3 },
+    { x: 0.45, y: 4.95, z: -0.32, r: 0.84, n: 8, s: 1.1 },
+  ];
+  const leafCards = [];
+  const ctr = new Vector3();
+  for (const C of CLUMPS) {
+    ctr.set(C.x, C.y, C.z);
+    for (let i = 0; i < C.n; i++) {
+      // spirale de Fibonacci : une répartition régulière sans grille visible
+      const yy = 1 - (i + 0.5) / C.n * 2;
+      const rr = Math.sqrt(Math.max(0, 1 - yy * yy));
+      const ph = i * 2.3999632;
+      const rad = C.r * (0.62 + rnd() * 0.42);
+      const card = MeshBuilder.CreatePlane('flLeaf',
+        { width: C.s * (0.85 + rnd() * 0.4), height: C.s * (0.8 + rnd() * 0.4) }, scene);
+      card.position.set(C.x + Math.cos(ph) * rr * rad,
+        C.y + yy * rad * 0.82, C.z + Math.sin(ph) * rr * rad);
+      card.lookAt(ctr);                               // la normale regarde dehors
+      card.rotate(new Vector3(0, 0, 1), rnd() * Math.PI * 2);
+      leafCards.push(card);
+    }
+  }
+  const bLeaf = Mesh.MergeMeshes(leafCards, true, true);
   bLeaf.name = 'flBirchLeaf';
   setup(bLeaf, leafM, true);
 
