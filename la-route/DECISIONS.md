@@ -186,6 +186,48 @@ Chaque écart au brief, en une ligne, avec sa raison.
   (écran de diagnostic dédié) au lieu d'un écran noir, et tout shader qui
   échoue à compiler est signalé à l'écran plutôt que dégradé en silence.
 
+## Premier démarrage sur la machine cible (WebGPU réel, MacBook M4)
+
+Le M3 avait consigné : « la passe EffectWrapper, le texelFetch au vertex et
+les hooks de plugin doivent être confirmés sur WebGPU réel (Mac M4) — premier
+point à vérifier au retour ». C'est fait. La démo n'avait JAMAIS tourné
+ailleurs qu'en `?gl` : quatre pannes en série, chacune masquée par la
+précédente, toutes en amont du premier pixel.
+
+- Les capacités du moteur ne sont pas dans la classe, ce sont des greffes de
+  prototype livrées par des modules à effet de bord — et `dynamicTexture.js`
+  n'importe QUE la version WebGL (greffée sur `ThinEngine`, dont
+  `WebGPUEngine` ne descend pas). En ESM tree-shaké, le chemin WebGPU partait
+  sans `createDynamicTexture` : plantage au premier ciel peint. On importe
+  désormais `Engines/WebGPU/Extensions/index.js` en entier — treize greffes
+  minuscules, plutôt qu'une liste à la carte qui se venge trois milestones
+  plus tard sur un chemin rare.
+- Babylon 7 génère du **WGSL natif** pour StandardMaterial dès qu'il tourne
+  sur WebGPU, et le gestionnaire de plugins REFUSE un plugin GLSL sur un
+  matériau WGSL. Nos cinq plugins (vent, herbe, brume, déformation, nuages)
+  seraient tombés d'un bloc — silencieusement, hors console. D'où
+  `StandardMaterial.ForceGLSL` + `EffectWrapper.ForceGLSL` : le moteur
+  transpile notre GLSL par glslang/twgsl, ce qui est l'architecture consignée
+  au M2b et jamais branchée. Vérifié : 100 matériaux en GLSL, plugins attachés
+  (Haze 89, Wind 6, Grass 6, Cloud 3, Deform 2), 361 sous-maillages prêts.
+- `uniform vec4 splats[16]` ressort de la chaîne GLSL→SPIR-V→WGSL en
+  `@stride(16) array<…>`, attribut RETIRÉ de la spécification : Tint refuse le
+  module entier. Le piège déjà noté (« pas de tableau indexé dynamiquement »)
+  était trop étroit — c'est la DÉCLARATION qui casse. Les trois boucles de
+  `deform.js` sont désormais déroulées à la génération du source.
+- WGSL impose que `textureSample` soit appelé en **flot de contrôle uniforme**.
+  Deux shaders lisaient une texture sous un `if` dépendant du fragment
+  (`deform.js`, `deformPlugin.js`). Les lectures sont hoistées et le masque
+  appliqué après — équivalent au terme près, puisque le masque multipliait
+  déjà chaque contribution. Au passage, les ThinTexture du buffer d'état
+  passent en CLAMP : elles arrivaient en RÉPÉTITION, et les consommateurs
+  lisent hors domaine en confiance parce qu'ils masquent le résultat.
+- Perf : 0,3 fps pendant le warm-up WebGPU (compilation des pipelines, c'est
+  précisément ce que l'écran de chargement couvre), puis parité avec WebGL une
+  fois chaud. Les chiffres de PERF.md se mesurent fenêtre au premier plan —
+  Chrome bride un onglet occulté à 30 fps, ce qui invalide toute mesure prise
+  en pilotage automatique.
+
 ## Passe « d'après référence » (silhouettes et lumière)
 
 Cette passe-là n'est pas partie d'une idée mais de dix captures de la

@@ -86,24 +86,28 @@ float dfWetG = 0.0;   // brillance humide, posée avant l'éclairage, lue après
         vec2 dfUvF = (vPositionW.xz - dfCenter) / dfSize + 0.5;
         vec2 dfE = min(dfUvF, vec2(1.0) - dfUvF);
         float dfM = clamp(min(dfE.x, dfE.y) * dfSize * 0.5, 0.0, 1.0);
-        if (dfM > 0.0) {
-          vec4 dfC0 = texture2D(dfTex, dfUvF);
-          float dfH = dfC0.y - dfC0.x;
-          float dfHx = dot(texture2D(dfTex, dfUvF + vec2(dfTexel, 0.0)).rg, vec2(-1.0, 1.0));
-          float dfHz = dot(texture2D(dfTex, dfUvF + vec2(0.0, dfTexel)).rg, vec2(-1.0, 1.0));
-          float dfW = dfSize * dfTexel;
-          vec3 dfN = vec3(-(dfHx - dfH) / dfW, 0.0, -(dfHz - dfH) / dfW);
-          normalW = normalize(normalW + dfN * 1.4 * dfM);
-          baseColor.rgb *= 1.0 - clamp(dfC0.x * 2.4, 0.0, 0.5) * dfM;   // terre compressée
-          float dfWet = clamp(dfC0.b, 0.0, 1.0) * dfM;
-          float dfSc = clamp(dfC0.a, 0.0, 1.0) * dfM;
-          baseColor.rgb *= 1.0 - dfWet * 0.38;                           // terre mouillée sombre
-          baseColor.rgb = mix(baseColor.rgb, vec3(0.055, 0.048, 0.042), dfSc * 0.85); // charbon
-          // flaque : l'eau s'accumule là où c'est mouillé ET creusé
-          float dfPud = smoothstep(0.55, 0.95, dfC0.b) * smoothstep(0.02, 0.08, dfC0.x) * dfM;
-          baseColor.rgb = mix(baseColor.rgb, vec3(0.07, 0.085, 0.115), dfPud);
-          dfWetG = max(dfWet * 0.55, dfPud);
-        }
+        // Aucun if (dfM > 0.0) autour des lectures : WGSL exige que
+        // textureSample soit appelé en flot de contrôle uniforme, et dfM sort
+        // de vPositionW — donc du fragment. Le garde est de toute façon inutile
+        // ici : dfM multiplie DÉJÀ chacun des termes ci-dessous, si bien qu'à
+        // dfM = 0 le bloc entier est l'identité. Hors du buffer on lit du bord
+        // clampé, borné et fini, et on le multiplie par zéro.
+        vec4 dfC0 = texture2D(dfTex, dfUvF);
+        float dfH = dfC0.y - dfC0.x;
+        float dfHx = dot(texture2D(dfTex, dfUvF + vec2(dfTexel, 0.0)).rg, vec2(-1.0, 1.0));
+        float dfHz = dot(texture2D(dfTex, dfUvF + vec2(0.0, dfTexel)).rg, vec2(-1.0, 1.0));
+        float dfW = dfSize * dfTexel;
+        vec3 dfN = vec3(-(dfHx - dfH) / dfW, 0.0, -(dfHz - dfH) / dfW);
+        normalW = normalize(normalW + dfN * 1.4 * dfM);
+        baseColor.rgb *= 1.0 - clamp(dfC0.x * 2.4, 0.0, 0.5) * dfM;   // terre compressée
+        float dfWet = clamp(dfC0.b, 0.0, 1.0) * dfM;
+        float dfSc = clamp(dfC0.a, 0.0, 1.0) * dfM;
+        baseColor.rgb *= 1.0 - dfWet * 0.38;                           // terre mouillée sombre
+        baseColor.rgb = mix(baseColor.rgb, vec3(0.055, 0.048, 0.042), dfSc * 0.85); // charbon
+        // flaque : l'eau s'accumule là où c'est mouillé ET creusé
+        float dfPud = smoothstep(0.55, 0.95, dfC0.b) * smoothstep(0.02, 0.08, dfC0.x) * dfM;
+        baseColor.rgb = mix(baseColor.rgb, vec3(0.07, 0.085, 0.115), dfPud);
+        dfWetG = max(dfWet * 0.55, dfPud);
 #endif
 `,
         // ici specularBase (somme spéculaire des lumières) et color existent :

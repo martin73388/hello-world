@@ -4,7 +4,18 @@
  * provisoire, overlay de performance (F1). Zéro allocation dans la boucle.
  */
 import { WebGPUEngine } from '@babylonjs/core/Engines/webgpuEngine.js';
+// Les capacités du moteur (textures dynamiques, cibles de rendu, lecture de
+// pixels…) ne sont PAS dans la classe : ce sont des greffes sur le prototype,
+// livrées par des modules à effet de bord. Or `dynamicTexture.js` & consorts
+// n'importent QUE la version WebGL (greffée sur ThinEngine, dont WebGPUEngine
+// ne descend pas). En ESM tree-shaké, le chemin WebGPU part donc sans aucune
+// de ces méthodes : `engine.createDynamicTexture is not a function` dès le
+// premier ciel peint. C'est pour ça que la démo n'avait jamais démarré
+// ailleurs qu'en `?gl`. On importe le jeu complet — treize greffes minuscules.
+import '@babylonjs/core/Engines/WebGPU/Extensions/index.js';
 import { Engine } from '@babylonjs/core/Engines/engine.js';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
+import { EffectWrapper } from '@babylonjs/core/Materials/effectRenderer.js';
 import { Scene } from '@babylonjs/core/scene.js';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js';
@@ -84,6 +95,17 @@ const DEV_GL = new URLSearchParams(location.search).has('gl');
 })().catch((e) => { console.error(e); showNoGpu('error'); });
 
 async function start() {
+  // Babylon 7 génère du WGSL NATIF pour StandardMaterial dès qu'il tourne sur
+  // WebGPU. Or nos cinq plugins matériau (vent, herbe, brume, déformation,
+  // nuages) sont écrits en GLSL : le gestionnaire de plugins les REFUSE sur un
+  // matériau WGSL (« plugin is not compatible with the shader language »), et
+  // la scène perdrait d'un coup le vent, la translucidité, l'étagement de
+  // brume et les ornières. On force donc la génération GLSL, que le moteur
+  // transpile en WGSL par glslang/twgsl — c'est l'architecture consignée
+  // depuis le M2b, elle n'avait simplement jamais été branchée.
+  StandardMaterial.ForceGLSL = true;
+  EffectWrapper.ForceGLSL = true;                      // la passe de déformation
+
   let engine;
   if (DEV_GL) {
     engine = new Engine(canvas, true);

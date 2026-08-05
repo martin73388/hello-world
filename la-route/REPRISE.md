@@ -77,6 +77,15 @@ restante**, tout commité/poussé avant la pause.
 
 ## Pièges connus (ne pas retomber dedans)
 
+- **WGSL — tableaux d'uniformes** : un `uniform vec4 x[16]` ressort de la
+  transpilation en `@stride(16) array<…>`, attribut retiré de la spec : Tint
+  refuse le module. Dérouler à la génération du source. Le piège n'est PAS
+  l'indexation dynamique, c'est la déclaration.
+- **WGSL — flot de contrôle uniforme** : `textureSample` ne peut pas être
+  appelé sous un `if` qui dépend du fragment. Lire d'abord, masquer ensuite.
+- **Backticks dans le GLSL** : les shaders vivent dans des template strings
+  JS — un backtick dans un commentaire ferme la chaîne. `node --check` sur
+  tous les fichiers de `src/` attrape ça en une seconde.
 - Samplers de plugins : à déclarer dans `CUSTOM_VERTEX_DEFINITIONS`, jamais
   dans le bloc d'uniformes (sinon UBO → compilation cassée).
 - Textures à découpe alpha : PAS de mipmaps, sinon blocs verts volants.
