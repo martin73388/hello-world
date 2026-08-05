@@ -47,6 +47,7 @@ class GrassPlugin extends MaterialPluginBase {
     this._st = deformState;
     this.strength = opts.strength ?? 1;
     this.transl = opts.transl ?? 1.05;               // le brin s'allume à contre-jour
+    this.abax = opts.abax ?? 0;                      // face abaxiale : cartes larges seulement
     this._enable(true);
   }
   getClassName() { return 'GrassPlugin'; }
@@ -60,6 +61,7 @@ class GrassPlugin extends MaterialPluginBase {
         { name: 'grCenter', size: 2, type: 'vec2' },
         { name: 'grSize', size: 1, type: 'float' },
         { name: 'grTransl', size: 1, type: 'float' },
+        { name: 'grAbax', size: 1, type: 'float' },
         { name: 'grSun', size: 3, type: 'vec3' },
         { name: 'grAmb', size: 3, type: 'vec3' },
       ],
@@ -67,7 +69,7 @@ class GrassPlugin extends MaterialPluginBase {
 uniform float grTime; uniform float grStrength; uniform vec2 grCenter; uniform float grSize;
 #endif`,
       fragment: `#ifdef GRASS
-uniform float grTransl; uniform vec3 grSun; uniform vec3 grAmb;
+uniform float grTransl; uniform float grAbax; uniform vec3 grSun; uniform vec3 grAmb;
 #endif`,
     };
   }
@@ -78,6 +80,7 @@ uniform float grTransl; uniform vec3 grSun; uniform vec3 grAmb;
     ubo.updateFloat2('grCenter', s.cx, s.cz);
     ubo.updateFloat('grSize', s.size);
     ubo.updateFloat('grTransl', this.transl);
+    ubo.updateFloat('grAbax', this.abax);
     ubo.updateFloat3('grSun', sunShared.x, sunShared.y, sunShared.z);
     ubo.updateFloat3('grAmb', hazeShared.ar, hazeShared.ag, hazeShared.ab);
     ubo.setTexture('grTex', s.frontTex);
@@ -102,7 +105,15 @@ uniform float grTransl; uniform vec3 grSun; uniform vec3 grAmb;
         float grDith = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
         if (grDith > grFade) discard;
         vec3 grV = normalize(vEyePosition.xyz - vPositionW);
-        float grBack = clamp(dot(grV, normalize(grSun)), 0.0, 1.0);
+        vec3 grN = normalize(vNormalW);
+        // Lobe COURBÉ par la normale (PORTAGE 1.5), même formulation que
+        // wind.js. Le dot(V, soleil) pur éteignait net un brin vu de profil ;
+        // en courbant le vecteur, une feuille de profil transmet encore.
+        // Les cartes du tapis portent une normale VERTICALE : la courbure
+        // incline donc le lobe vers le ciel, ce qui est exactement le trajet
+        // de la lumière qui traverse une touffe par le dessus.
+        vec3 grHs = normalize(normalize(grSun) + grN * 0.6);
+        float grBack = clamp(dot(grV, grHs), 0.0, 1.0);
         // la texture du brin est peinte en dégradé pied sombre → pointe
         // claire : sa luminance EST la hauteur le long du brin, et c'est
         // la pointe, fine, qui transmet le mieux la lumière
@@ -112,6 +123,14 @@ uniform float grTransl; uniform vec3 grSun; uniform vec3 grAmb;
         float grVar = 0.6 + 0.8 * fract(sin(dot(floor(vPositionW.xz * 0.9), vec2(37.719, 61.313))) * 43758.5453);
         color.rgb += vec3(0.78, 0.86, 0.30) * pow(grBack, 2.2)
                    * (0.25 + 1.5 * grUp) * grTransl * baseColor.rgb * 2.2 * grVar;
+        // Face abaxiale (PORTAGE 1.5) — réservée aux cartes LARGES : on voit
+        // le dessous d'une palme de fougère, mat et plus pâle, jamais celui
+        // d'un brin. grAbax vaut 0 sur les strates de brins, et le terme
+        // disparaît alors complètement.
+        if (grAbax > 0.0 && !gl_FrontFacing) {
+          color.rgb = mix(color.rgb,
+            vec3(dot(color.rgb, vec3(0.35, 0.5, 0.15))) * vec3(0.84, 0.96, 0.8), grAbax);
+        }
         // plancher d'éclairage : la carte a une normale VERTICALE, donc au
         // soleil rasant N·L tombe à zéro et le brin devient noir. Une herbe
         // réelle capte toujours un peu de ciel. Le plancher SUIT l'ambiante
@@ -340,7 +359,7 @@ export function plantGrass(scene, deformState, opts = {}) {
   const N_FERN = opts.ferns ?? 1500;
   const N_BUSH = opts.bushes ?? 240;
 
-  const mk = (name, mesh, color, strength, tex, transl) => {
+  const mk = (name, mesh, color, strength, tex, transl, abax) => {
     const mat = new StandardMaterial(name + 'M', scene);
     mat.diffuseColor = color;
     mat.specularColor = new Color3(0.02, 0.03, 0.02);
@@ -353,7 +372,7 @@ export function plantGrass(scene, deformState, opts = {}) {
       mat.needAlphaTesting = () => true;
       mat.needAlphaBlending = () => false;
     }
-    new GrassPlugin(mat, deformState, { strength, transl });
+    new GrassPlugin(mat, deformState, { strength, transl, abax });
     mesh.material = mat;
     mesh.receiveShadows = true;
     mesh.alwaysSelectAsActiveMesh = true;                        // suit le joueur
@@ -381,8 +400,10 @@ export function plantGrass(scene, deformState, opts = {}) {
   const fern = fernGeometry(scene, 'fernTuft');
   // translucidité modérée : la palme est LARGE, au réglage des brins fins
   // elle s'embrasait toute entière et flottait comme un néon vert
+  // et c'est la SEULE strate assez large pour que sa face abaxiale veuille
+  // dire quelque chose : on voit le dessous d'une palme, jamais celui d'un brin
   mk('fern', fern, new Color3(1, 1, 1), 0.4,
-    frondCardTexture(scene, 'fernTex', 71), 0.5);
+    frondCardTexture(scene, 'fernTex', 71), 0.5, 0.3);
   const bush = MeshBuilder.CreateSphere('bush', { diameter: 1.25, segments: 5 }, scene);
   bush.bakeCurrentTransformIntoVertices();
   mk('bush', bush, new Color3(0.19, 0.26, 0.13), 0.3);
@@ -397,13 +418,52 @@ export function plantGrass(scene, deformState, opts = {}) {
   const bufR = new Float32Array(N_REED * 16);
   const bufW = new Float32Array(N_FLOW * 16);
 
-  /** écrit une matrice TRS (rotation Y seule) à plat, colonne-major */
-  function writeM(buf, i, x, y, z, sx, sy, ry) {
-    const c = Math.cos(ry) * sx, s = Math.sin(ry) * sx;
+  /**
+   * Écrit une matrice TRS à plat, colonne-major (PORTAGE 1.3 : stand + bulk).
+   *
+   * `conform` est la part de la pente que la plante épouse : 0 = toujours à
+   * l'aplomb, 1 = perpendiculaire au sol. Une touffe d'herbe pousse vers la
+   * lumière mais suit largement son talus (0,9) ; un buisson ligneux se
+   * redresse (0,5). Sans ce terme, tout le tapis d'un remblai est planté à la
+   * verticale et le talus lit comme une brosse — c'est le premier symptôme que
+   * la référence n'a pas.
+   *
+   * La pente vient de deux différences avant sur `groundHeight` (deux
+   * échantillons de plus par instance, pas quatre : on cherche une inclinaison,
+   * pas une normale exacte). Elle se mesure depuis `gy`, la VRAIE hauteur du
+   * sol — pas depuis `y`, qui porte déjà l'enfoncement de la plante. L'écart
+   * paraît minime, mais le buisson s'enfonce de 0,35 × son échelle : mesurée
+   * depuis `y`, sa pente serait fausse de trente degrés, tous les buissons
+   * penchant dans la même direction.
+   *
+   * `bulk` : sx et sz sont tirés indépendamment, donc la touffe cesse d'avoir
+   * une empreinte circulaire — deux voisines de même graine n'ont plus le même
+   * rapport largeur/profondeur.
+   */
+  const D = 0.6;                                    // portée des différences
+  /** ±15 % sur un axe horizontal — le « bulk » du PORTAGE 1.3 */
+  const BULK = (rnd) => 0.85 + rnd() * 0.3;
+  function writeM(buf, i, x, y, z, sx, sy, ry, conform = 0, sz = sx, gy = y) {
     const o = i * 16;
-    buf[o] = c; buf[o + 1] = 0; buf[o + 2] = -s; buf[o + 3] = 0;
-    buf[o + 4] = 0; buf[o + 5] = sy; buf[o + 6] = 0; buf[o + 7] = 0;
-    buf[o + 8] = s; buf[o + 9] = 0; buf[o + 10] = c; buf[o + 11] = 0;
+    let ux = 0, uy = 1, uz = 0;
+    if (conform > 0) {
+      // pente locale, ramenée à la fraction voulue
+      ux = -((groundHeight(x + D, z) - gy) / D) * conform;
+      uz = -((groundHeight(x, z + D) - gy) / D) * conform;
+      const inv = 1 / Math.hypot(ux, 1, uz);
+      ux *= inv; uy = inv; uz *= inv;
+    }
+    // axe X : le cap voulu, redressé perpendiculairement à l'axe Y conformé
+    const cx = Math.cos(ry), cz = -Math.sin(ry);
+    const d = cx * ux + cz * uz;
+    let ax = cx - ux * d, ay = -uy * d, az = cz - uz * d;
+    const ai = 1 / Math.hypot(ax, ay, az);
+    ax *= ai; ay *= ai; az *= ai;
+    // axe Z = X × Y (main gauche) — à plat, on retrouve exactement (sin,0,cos)
+    const bx = ay * uz - az * uy, by = az * ux - ax * uz, bz = ax * uy - ay * ux;
+    buf[o] = ax * sx; buf[o + 1] = ay * sx; buf[o + 2] = az * sx; buf[o + 3] = 0;
+    buf[o + 4] = ux * sy; buf[o + 5] = uy * sy; buf[o + 6] = uz * sy; buf[o + 7] = 0;
+    buf[o + 8] = bx * sz; buf[o + 9] = by * sz; buf[o + 10] = bz * sz; buf[o + 11] = 0;
     buf[o + 12] = x; buf[o + 13] = y; buf[o + 14] = z; buf[o + 15] = 1;
   }
 
@@ -422,7 +482,9 @@ export function plantGrass(scene, deformState, opts = {}) {
       // plus rase sur le talus, plus haute dans le sous-bois
       const lush = 0.6 + Math.min(1, rq.dist / 14) * 0.55;
       const s = (0.7 + rnd() * 0.6) * lush;
-      writeM(bufG, gi++, x, groundHeight(x, z) - 0.04, z, s, s * (0.75 + rnd() * 0.7), rnd() * 3.14);
+      const gy = groundHeight(x, z);
+      writeM(bufG, gi++, x, gy - 0.04, z, s * BULK(rnd), s * (0.75 + rnd() * 0.7),
+        rnd() * 3.14, 0.9, s * BULK(rnd), gy);
     }
     for (; gi < N_GRASS; gi++) writeM(bufG, gi, 0, -999, 0, 0, 0, 0);
 
@@ -432,7 +494,9 @@ export function plantGrass(scene, deformState, opts = {}) {
       if (roadQuery(x, z).dist < ROAD_HALF + 2.2) continue;      // la fougère fuit la route
       if (inStream(x, z)) continue;
       const s = 0.7 + rnd() * 0.75;
-      writeM(bufF, fi++, x, groundHeight(x, z) - 0.05, z, s, s * (0.8 + rnd() * 0.5), rnd() * 3.14);
+      const gy = groundHeight(x, z);
+      writeM(bufF, fi++, x, gy - 0.05, z, s * BULK(rnd), s * (0.8 + rnd() * 0.5),
+        rnd() * 3.14, 0.7, s * BULK(rnd), gy);
     }
     for (; fi < N_FERN; fi++) writeM(bufF, fi, 0, -999, 0, 0, 0, 0);
 
@@ -445,7 +509,9 @@ export function plantGrass(scene, deformState, opts = {}) {
       if (rq.dist < ROAD_HALF + 1.6) continue;
       if (inStream(x, z)) continue;
       const s = 0.62 + rnd() * 0.75;
-      writeM(bufT, ti++, x, groundHeight(x, z) - 0.05, z, s, s * (0.75 + rnd() * 0.6), rnd() * 3.14);
+      const gy = groundHeight(x, z);
+      writeM(bufT, ti++, x, gy - 0.05, z, s * BULK(rnd), s * (0.75 + rnd() * 0.6),
+        rnd() * 3.14, 0.85, s * BULK(rnd), gy);
     }
     for (; ti < N_TALL; ti++) writeM(bufT, ti, 0, -999, 0, 0, 0, 0);
     // roseaux : seulement dans les creux, là où l'eau stagnerait
@@ -461,7 +527,10 @@ export function plantGrass(scene, deformState, opts = {}) {
         + groundHeight(x, z + 3) + groundHeight(x, z - 3)) / 4 - gy;
       if (low < 0.12) continue;
       const s = 0.7 + rnd() * 0.6;
-      writeM(bufR, ri++, x, gy - 0.05, z, s, s * (0.8 + rnd() * 0.55), rnd() * 3.14);
+      // le roseau est raide et pousse dans un creux : il se redresse plus que
+      // l'herbe, sinon il se couche vers le fond de la cuvette
+      writeM(bufR, ri++, x, gy - 0.05, z, s * BULK(rnd), s * (0.8 + rnd() * 0.55),
+        rnd() * 3.14, 0.45, s * BULK(rnd), gy);
     }
     for (; ri < N_REED; ri++) writeM(bufR, ri, 0, -999, 0, 0, 0, 0);
     // fleurs : en petites colonies, dans les zones ouvertes
@@ -474,7 +543,9 @@ export function plantGrass(scene, deformState, opts = {}) {
         if (roadQuery(x, z).dist < ROAD_HALF + 1.2) continue;
         if (inStream(x, z)) continue;
         const s = 0.7 + rnd() * 0.6;
-        writeM(bufW, wi++, x, groundHeight(x, z) - 0.03, z, s, s, rnd() * 3.14);
+        const gy = groundHeight(x, z);
+        writeM(bufW, wi++, x, gy - 0.03, z, s * BULK(rnd), s,
+          rnd() * 3.14, 0.8, s * BULK(rnd), gy);
       }
     }
     for (; wi < N_FLOW; wi++) writeM(bufW, wi, 0, -999, 0, 0, 0, 0);
@@ -485,7 +556,10 @@ export function plantGrass(scene, deformState, opts = {}) {
       if (roadQuery(x, z).dist < ROAD_HALF + 3.5) continue;
       if (inStream(x, z)) continue;
       const s = 0.55 + rnd() * 0.8;
-      writeM(bufB, bi++, x, groundHeight(x, z) - 0.35 * s, z, s, s * (0.6 + rnd() * 0.35), rnd() * 3.14);
+      const gy = groundHeight(x, z);
+      // ligneux : il se redresse (PORTAGE 1.3 donne 0,5 au buisson)
+      writeM(bufB, bi++, x, gy - 0.35 * s, z, s * BULK(rnd), s * (0.6 + rnd() * 0.35),
+        rnd() * 3.14, 0.5, s * BULK(rnd), gy);
     }
     for (; bi < N_BUSH; bi++) writeM(bufB, bi, 0, -999, 0, 0, 0, 0);
   }
