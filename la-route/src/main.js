@@ -782,8 +782,14 @@ async function start() {
     const ody = sp2;
     const odz = (Math.cos(state.camYaw) * cp * state.dist - Math.sin(state.camYaw) * shoulder) / state.dist;
     let allowed = camClamp(state.tx, state.ty, state.tz, odx, ody, odz, state.dist);
-    // à bord, la cellule fait 3,4 m : au-delà, la caméra traverse la tôle
-    if (aboard) allowed = Math.min(allowed, 1.9);
+    // à bord, la caméra reste DANS le volume habitable : lancer de rayon en
+    // repère van (les parois du van ne sont pas des camRects — l'ancien
+    // plafond fixe à 1,9 m laissait la caméra traverser la tôle et cadrer
+    // le van de DEHORS, mécano invisible)
+    if (aboard) {
+      allowed = Math.min(allowed,
+        cabin.camLimit(state.tx, state.ty, state.tz, odx, ody, odz));
+    }
     // rapproche vite quand un obstacle surgit, réélargit en douceur
     state.distOcc += (allowed - state.distOcc) * Math.min(1, (allowed < state.distOcc ? 22 : 4.5) * dt);
     const dEff = Math.min(state.dist, state.distOcc);

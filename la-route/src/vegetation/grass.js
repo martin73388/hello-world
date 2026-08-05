@@ -27,6 +27,13 @@ import { groundHeight, roadQuery, ROAD_HALF, GARAGE, FORD, fordShape } from '../
  * paquets bleus à bords francs de part et d'autre du courant. La marge
  * évite aussi les brins qui percent la surface au ras de la berge.
  */
+/** l'emprise du garage, dalle et abords immédiats : rien n'y pousse.
+ * L'exclusion n'était appliquée qu'à l'herbe rase — fougères, tiges, roseaux,
+ * fleurs et buissons poussaient à travers la dalle en béton. */
+function inGarage(x, z) {
+  return Math.abs(x - GARAGE.x) < GARAGE.hw + 1 && z > GARAGE.z0 - 2 && z < GARAGE.z1;
+}
+
 function inStream(x, z) {
   const dx = x - FORD.x, dz = z - FORD.z;
   const along = dx * FORD.nx + dz * FORD.nz;
@@ -514,8 +521,7 @@ export function plantGrass(scene, deformState, opts = {}) {
       const x = x0 + rnd() * CELL, z = z0 + rnd() * CELL;
       const rq = roadQuery(x, z);
       if (rq.dist < ROAD_HALF + 0.35) continue;                  // pas sur la chaussée
-      if (Math.abs(x - GARAGE.x) < GARAGE.hw + 1 && z > GARAGE.z0 - 2 && z < GARAGE.z1) continue;
-      if (inStream(x, z)) continue;
+      if (inStream(x, z) || inGarage(x, z)) continue;
       // plus rase sur le talus, plus haute dans le sous-bois
       const lush = 0.6 + Math.min(1, rq.dist / 14) * 0.55;
       const s = (0.7 + rnd() * 0.6) * lush;
@@ -530,7 +536,7 @@ export function plantGrass(scene, deformState, opts = {}) {
     for (let k = 0; k < Q_FERN * 4 && n < Q_FERN && ctr.f < N_FERN; k++) {
       const x = x0 + rnd() * CELL, z = z0 + rnd() * CELL;
       if (roadQuery(x, z).dist < ROAD_HALF + 2.2) continue;      // la fougère fuit la route
-      if (inStream(x, z)) continue;
+      if (inStream(x, z) || inGarage(x, z)) continue;
       const s = 0.7 + rnd() * 0.75;
       const gy = groundHeight(x, z);
       writeM(bufF, ctr.f++, x, gy - 0.05, z, s * BULK(rnd), s * (0.8 + rnd() * 0.5),
@@ -543,7 +549,7 @@ export function plantGrass(scene, deformState, opts = {}) {
     for (let k = 0; k < Q_TALL * 3 && n < Q_TALL && ctr.t < N_TALL; k++) {
       const x = x0 + rnd() * CELL, z = z0 + rnd() * CELL;
       if (roadQuery(x, z).dist < ROAD_HALF + 1.6) continue;
-      if (inStream(x, z)) continue;
+      if (inStream(x, z) || inGarage(x, z)) continue;
       const s = 0.62 + rnd() * 0.75;
       const gy = groundHeight(x, z);
       writeM(bufT, ctr.t++, x, gy - 0.05, z, s * BULK(rnd), s * (0.75 + rnd() * 0.6),
@@ -556,7 +562,7 @@ export function plantGrass(scene, deformState, opts = {}) {
     for (let k = 0; k < Q_REED * 8 && n < Q_REED && ctr.r < N_REED; k++) {
       const x = x0 + rnd() * CELL, z = z0 + rnd() * CELL;
       if (roadQuery(x, z).dist < ROAD_HALF + 3) continue;
-      if (inStream(x, z)) continue;                              // le roseau borde l'eau, il n'y pousse pas
+      if (inStream(x, z) || inGarage(x, z)) continue;            // le roseau borde l'eau, il n'y pousse pas
       const gy = groundHeight(x, z);
       // un creux local : le sol descend par rapport à ses voisins
       const low = (groundHeight(x + 3, z) + groundHeight(x - 3, z)
@@ -578,7 +584,7 @@ export function plantGrass(scene, deformState, opts = {}) {
       for (let q = 0; q < cn && n < Q_FLOW && ctr.w < N_FLOW; q++) {
         const x = bx + (rnd() - 0.5) * 2.6, z = bz + (rnd() - 0.5) * 2.6;
         if (roadQuery(x, z).dist < ROAD_HALF + 1.2) continue;
-        if (inStream(x, z)) continue;
+        if (inStream(x, z) || inGarage(x, z)) continue;
         const s = 0.7 + rnd() * 0.6;
         const gy = groundHeight(x, z);
         writeM(bufW, ctr.w++, x, gy - 0.03, z, s * BULK(rnd), s,
@@ -592,7 +598,7 @@ export function plantGrass(scene, deformState, opts = {}) {
     for (let k = 0; k < Q_BUSH * 6 && n < Q_BUSH && ctr.b < N_BUSH; k++) {
       const x = x0 + rnd() * CELL, z = z0 + rnd() * CELL;
       if (roadQuery(x, z).dist < ROAD_HALF + 3.5) continue;
-      if (inStream(x, z)) continue;
+      if (inStream(x, z) || inGarage(x, z)) continue;
       const s = 0.55 + rnd() * 0.8;
       const gy = groundHeight(x, z);
       writeM(bufB, ctr.b++, x, gy - 0.35 * s, z, s * BULK(rnd), s * (0.6 + rnd() * 0.35),

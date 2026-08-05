@@ -523,6 +523,35 @@ export function buildVanInterior(scene, shadows, vanBody, vanState) {
     return out;
   }
 
+  /**
+   * Distance de recul admissible pour la caméra épaule quand on marche DANS le
+   * van. Sans cette borne, la caméra reculait de 1,9 m, traversait la paroi et
+   * se retrouvait DEHORS : l'écran était rempli par la tôle et le doublage, le
+   * mécano invisible derrière — le clamp général ne connaît que les murs du
+   * garage, et le rectangle du van est justement désactivé quand on est à bord.
+   *
+   * Lancer de rayon contre le volume habitable, en repère van : depuis la
+   * cible (wx, wy, wz, en monde), le long de l'offset caméra (ox, oy, oz),
+   * jusqu'à la première paroi. Aucune allocation.
+   */
+  const CAM_M = 0.10;                                 // marge aux parois
+  function camLimit(wx, wy, wz, ox, oy, oz) {
+    const c = Math.cos(vanState.yaw), s = Math.sin(vanState.yaw);
+    const dx = wx - vanState.x, dz = wz - vanState.z;
+    const lx = dx * c - dz * s, lz = dx * s + dz * c;
+    const ly = wy - vanState.bodyY;
+    const ldx = ox * c - oz * s, ldz = ox * s + oz * c, ldy = oy;
+    // volume habitable : cellule + cabine d'un seul tenant (le passage est
+    // dans l'axe, l'approximation ne coince la caméra nulle part)
+    const slab = (p, d, lo, hi) =>
+      d > 1e-6 ? (hi - p) / d : (d < -1e-6 ? (lo - p) / d : 9);
+    let t = slab(lx, ldx, -HW + CAM_M, HW - CAM_M);
+    t = Math.min(t, slab(ly, ldy, FLOOR_Y + 0.15, CEIL_Y - CAM_M));
+    t = Math.min(t, slab(lz, ldz, Z_BACK + CAM_M, 2.42 - CAM_M));
+    // plancher à 0,35 : sous ça l'épaule entre dans la tête du mécano
+    return Math.max(0.35, t);
+  }
+
   /* ---- plafonnier ---- */
   let lampLit = false, lampI = 0, lampEnabled = false;
   function lampSet(on) { lampLit = on; }
@@ -578,7 +607,7 @@ export function buildVanInterior(scene, shadows, vanBody, vanState) {
   update(0);                                          // pose fermée et éteinte
 
   return {
-    toLocal, toWorld, resolve, floorY: FLOOR_Y, doorWorld, insideLocal,
+    toLocal, toWorld, resolve, floorY: FLOOR_Y, doorWorld, insideLocal, camLimit,
     seatLocal: SEAT, update, lampSet, lampOn: () => lampLit,
     openDoor, closeDoor, doorOpen, doorFrac: () => doorE,
     colliders, root, node: doorNode,
