@@ -226,7 +226,15 @@ export function plantPines(scene, shadows) {
     bufC[i * 4] = r; bufC[i * 4 + 1] = g; bufC[i * 4 + 2] = b; bufC[i * 4 + 3] = 1;
   }
   foliage.thinInstanceSetBuffer('color', bufC, 4, true);
-  trunk.thinInstanceSetBuffer('color', bufC, 4, true);
+  // le tronc a SON buffer, presque neutre : partager celui du feuillage
+  // peignait des fûts carotte — l'écorce d'un arbre mourant brunit à
+  // peine, ce sont les aiguilles qui roussissent
+  const bufT = new Float32Array(mats.length * 4);
+  for (let i = 0; i < mats.length; i++) {
+    const v = 0.82 + (bufC[i * 4 + 1] - 0.74) * 0.35;  // suit la valeur du feuillage, amorti
+    bufT[i * 4] = v; bufT[i * 4 + 1] = v; bufT[i * 4 + 2] = v * 0.98; bufT[i * 4 + 3] = 1;
+  }
+  trunk.thinInstanceSetBuffer('color', bufT, 4, true);
   foliage.receiveShadows = true;
   shadows.addShadowCaster(foliage);
   shadows.addShadowCaster(trunk);

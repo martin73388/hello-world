@@ -22,6 +22,8 @@ import { buildGarage } from './world/garage.js';
 import { plantPines } from './vegetation/pines.js';
 import { plantGrass } from './vegetation/grass.js';
 import { plantFlora } from './vegetation/flora.js';
+import { plantLitter } from './world/litter.js';
+import { plantUnderstory } from './world/understory.js';
 import { createRetro } from './retro.js';
 import { windClock, sunShared } from './vegetation/wind.js';
 import { buildSky } from './world/sky.js';
@@ -138,9 +140,13 @@ async function start() {
   const pines = plantPines(scene, shadows);
   // bouleaux en bosquets, souches, troncs couchés, rochers moussus, panneau
   const flora = plantFlora(scene, shadows);
+  // passe densité : la litière de feuilles mortes et l'étage moyen qui
+  // ferme les côtés — les deux modules lisent road.js eux-mêmes
+  const litter = plantLitter(scene);
+  const under = plantUnderstory(scene, shadows);
   // le tapis : herbe, fougères, buissons — se couchent dans les ornières
   const grass = plantGrass(scene, deform.state);
-  console.log('pins :', pines.count, '| flore :', flora.count);
+  console.log('pins :', pines.count, '| flore :', flora.count, '| litière :', litter.count, '| étage moyen :', under.count);
 
   // M4 : le mécano articulé remplace la capsule, le van attend sur la route
   const garage = buildGarage(scene, shadows);        // M7 : la thèse de la démo
