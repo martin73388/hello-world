@@ -51,12 +51,24 @@ restante**, tout commité/poussé avant la pause.
 Première lecture des trois cadrages de `screenshots/cible/`. Ce sont des
 constats d'image, pas encore des correctifs.
 
-- **Le contre-jour vire au néon.** Le tapis rétroéclairé sort en vert citron
-  fluorescent, uniforme, et occupe la moitié basse du cadre. C'est très
-  exactement le « risque néon vert sur les surfaces larges » que le PORTAGE 1.5
-  annonçait ; le réglage n'a pas été tenu parce qu'il a été jugé sur des
-  captures désaturées, où il paraissait sage. À reprendre en premier : c'est
-  une régression esthétique introduite par la tranche précédente.
+- **Le tapis rétroéclairé est très clair, et il tire au JAUNE.** Mesuré sur la
+  bande d'herbe du contre-jour (45–80 % de la hauteur) : 13 % des pixels
+  au-dessus de 200 de luminance, p99 à 230, et les pixels clairs tournent
+  autour de RGB 200/220/110. Le G-R n'y est que de **+8 à +26** alors que le
+  G-B est de +85 à +119 : au point le plus lumineux, le brin n'est pas vert, il
+  est jaune. C'est cohérent avec le terme, dont la teinte (0.78, 0.86, 0.30) est
+  déjà jaune et se trouve multipliée par 2,2 puis par la variance — mais ça va
+  contre la thèse G-R du PORTAGE, qui veut que le vert devance le rouge là où
+  la lumière traverse la feuille.
+  *Réserve honnête* : à l'œil et en vignette, j'avais écrit « néon fluorescent ».
+  La mesure ne le confirme pas — les teintes sont plausibles pour un
+  rétroéclairage. Ce qui est établi, c'est la clarté et la dérive vers le jaune ;
+  savoir si c'est trop est un arbitrage de DA, pas un constat. Ne pas toucher au
+  gain sans trancher ça d'abord, et sans un A/B chiffré sur le G-R.
+  À noter aussi : `grass.js` n'a jamais reçu le **lobe courbé** du PORTAGE 1.5
+  (il fait encore `dot(V, soleil)` pur, quand `wind.js` fait bien
+  `normalize(sun + N*0.6)`), ni la face abaxiale. Le 1.5 n'est donc qu'à moitié
+  porté côté tapis.
 - **Le sol est écrasé au noir à contre-jour.** Les 12 600 feuilles de litière
   sont invisibles — soit noyées sous le tapis, soit sans lumière. Le travail
   existe dans le code et ne se voit pas dans l'image : à vérifier avant d'en
