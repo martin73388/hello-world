@@ -322,6 +322,7 @@ async function start() {
     camYaw: 0, camPitch: 0.14, dist: 4.2, distTarget: 4.2,
     tx: -1.6, ty: GARAGE.y + 1.55, tz: 37.5,
     locked: false, drive: false, distOcc: 4.2,
+    lookHold: 0,          // délai de grâce du recentrage caméra au volant
   };
   let walkDist = 4.2, wheelAcc = 0, lightsManual = false;
   // « à bord » : le mécano marche DANS le van pendant qu'il roule. Sa
@@ -444,6 +445,9 @@ async function start() {
     // repère main gauche : yaw croissant = tourner à droite (l'inverse de Three)
     state.camYaw += e.movementX * 0.0022;
     state.camPitch = Math.min(1.25, Math.max(-0.4, state.camPitch + e.movementY * 0.0022));
+    // au volant, regarder autour de soi doit SUSPENDRE le recentrage — sinon la
+    // caméra reprend la main dans la seconde et on ne peut rien regarder
+    if (Math.abs(e.movementX) > 0) state.lookHold = 1.4;
   });
   addEventListener('wheel', (e) => {
     state.distTarget = Math.min(9, Math.max(1.6, state.distTarget + Math.sign(e.deltaY) * 0.5));
@@ -575,10 +579,25 @@ async function start() {
       shake = Math.max(shake, Math.min(0.05,
         Math.max(0, decel - 5) * 0.004 + Math.max(0, bumpV - 0.9) * 0.03));
       prevVanSpeed = speed; prevBodyY = van.st.bodyY;
-      // caméra chase : suit le cap du van avec du retard
+      // Caméra chase : elle revient derrière le van, mais LENTEMENT et jamais
+      // pendant qu'on regarde ailleurs. L'ancien réglage ramenait le cap à
+      // 1,1 + 0,22 × vitesse par seconde — soit plus de 5 par seconde à 20 m/s :
+      // la caméra se recollait derrière le van avant qu'on ait eu le temps de
+      // voir quoi que ce soit, et toute tentative de regarder sur le côté était
+      // annulée dans la seconde.
+      //
+      // Deux changements. Un délai de grâce après le dernier mouvement de
+      // souris (state.lookHold), pendant lequel le recentrage est nul, puis il
+      // revient en douceur. Et un taux quatre fois plus faible, à peine
+      // sensible à la vitesse et plafonné : le recentrage doit se sentir comme
+      // une dérive, pas comme un rappel élastique.
+      // lookHold passe sous zéro : sa partie négative mesure le temps écoulé
+      // depuis la fin du délai, et sert de rampe de retour sur 0,8 s.
+      state.lookHold = Math.max(-2, state.lookHold - dt);
+      const ease = state.lookHold > 0 ? 0 : Math.min(1, -state.lookHold / 0.8);
       const wantYaw = van.st.yaw + Math.PI;
       const dy = ((wantYaw - state.camYaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-      state.camYaw += dy * Math.min(1, (1.1 + speed * 0.22) * dt);
+      state.camYaw += dy * Math.min(1, Math.min(0.85, 0.28 + speed * 0.05) * ease * dt);
       state.camPitch = Math.max(0.1, state.camPitch);
       focX = van.st.x; focZ = van.st.z; focY = van.st.bodyY + 1.1;
       fvx = van.st.vx; fvz = van.st.vz;              // le regard suit la glisse

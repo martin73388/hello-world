@@ -353,6 +353,13 @@ function flowerTexture(scene, name, seed) {
 
 const R = 34;              // rayon du tapis autour du joueur (dense au près)
 const RESEED = 7;          // au-delà, on re-sème
+const CELL = 8;            // côté d'une cellule de semis, ancrée au MONDE
+// tampons du parcours de cellules — alloués une fois, jamais par re-semis
+const MAXCELL = Math.ceil((2 * R / CELL + 2) ** 2);
+const cellI = new Int32Array(MAXCELL);
+const cellJ = new Int32Array(MAXCELL);
+const cellD = new Float32Array(MAXCELL);
+const cellO = new Int32Array(MAXCELL);
 
 export function plantGrass(scene, deformState, opts = {}) {
   const N_GRASS = opts.grass ?? 15000;
@@ -443,6 +450,11 @@ export function plantGrass(scene, deformState, opts = {}) {
   const D = 0.6;                                    // portée des différences
   /** ±15 % sur un axe horizontal — le « bulk » du PORTAGE 1.3 */
   const BULK = (rnd) => 0.85 + rnd() * 0.3;
+  /** Budget d'une cellule : la part du disque qu'elle occupe. La somme sur les
+   * cellules du rayon retombe donc sur le budget total, à l'arrondi près. */
+  const quota = (n) => Math.max(1, Math.round(n * CELL * CELL / (Math.PI * R * R)));
+  const Q_GRASS = quota(N_GRASS), Q_FERN = quota(N_FERN), Q_BUSH = quota(N_BUSH);
+  const Q_TALL = quota(N_TALL), Q_REED = quota(N_REED), Q_FLOW = quota(N_FLOW);
   function writeM(buf, i, x, y, z, sx, sy, ry, conform = 0, sz = sx, gy = y) {
     const o = i * 16;
     let ux = 0, uy = 1, uz = 0;
@@ -467,14 +479,39 @@ export function plantGrass(scene, deformState, opts = {}) {
     buf[o + 12] = x; buf[o + 13] = y; buf[o + 14] = z; buf[o + 15] = 1;
   }
 
-  /** semis déterministe : la graine dérive de la cellule, donc une même
-   * zone repousse toujours identique quand on revient dessus */
-  function sow(cx, cz) {
-    const rnd = makeRnd(97 + Math.round(cx * 7.3) * 131 + Math.round(cz * 7.3) * 17 || 97);
-    let gi = 0, fi = 0, bi = 0;
-    for (let i = 0; i < N_GRASS * 2 && gi < N_GRASS; i++) {
-      const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * R;
-      const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+  /**
+   * Semis ancré AU SOL, pas au joueur.
+   *
+   * L'ancienne version tirait une graine unique de la position de re-semis et
+   * plaçait chaque plante en coordonnées polaires autour du joueur. Le
+   * commentaire promettait qu'« une même zone repousse toujours identique » —
+   * c'était faux : la graine bougeait avec le marcheur. Tous les sept mètres
+   * parcourus, les vingt-trois mille plantes étaient retirées au hasard et
+   * retombaient ailleurs. La prairie changeait sous les pieds, en continu.
+   *
+   * Le monde est maintenant découpé en cellules fixes de CELL mètres. Chaque
+   * cellule tire sa graine de ses propres coordonnées entières et sème chez
+   * elle. Un carré de sol donné produit donc toujours exactement la même
+   * végétation, quel que soit l'endroit d'où on le regarde ou le chemin par
+   * lequel on y arrive. Ce qui bouge en marchant, ce sont les cellules qui
+   * entrent et sortent du rayon — au bord du tapis, à 34 m, dans la brume.
+   *
+   * C'est aussi la structure dont le PORTAGE 2.5 (tuiles + LOD) a besoin, et
+   * celle qui rend le semis à queue lourde de 1.6 possible : un champ de
+   * densité se lit par position, pas par tirage.
+   */
+  function sowCell(i, j, ctr) {
+    // hachage entier des deux coordonnées de cellule : deux cellules voisines
+    // donnent des suites décorrélées, et la même cellule redonne la sienne
+    const seed = ((Math.imul(i, 73856093) ^ Math.imul(j, 19349663)) >>> 1) % 2147483647;
+    const rnd = makeRnd(seed || 97);
+    const x0 = i * CELL, z0 = j * CELL;
+    let n;
+
+    // herbe rase — la strate qui couvre le sol
+    n = 0;
+    for (let k = 0; k < Q_GRASS * 2 && n < Q_GRASS && ctr.g < N_GRASS; k++) {
+      const x = x0 + rnd() * CELL, z = z0 + rnd() * CELL;
       const rq = roadQuery(x, z);
       if (rq.dist < ROAD_HALF + 0.35) continue;                  // pas sur la chaussée
       if (Math.abs(x - GARAGE.x) < GARAGE.hw + 1 && z > GARAGE.z0 - 2 && z < GARAGE.z1) continue;
@@ -483,43 +520,42 @@ export function plantGrass(scene, deformState, opts = {}) {
       const lush = 0.6 + Math.min(1, rq.dist / 14) * 0.55;
       const s = (0.7 + rnd() * 0.6) * lush;
       const gy = groundHeight(x, z);
-      writeM(bufG, gi++, x, gy - 0.04, z, s * BULK(rnd), s * (0.75 + rnd() * 0.7),
+      writeM(bufG, ctr.g++, x, gy - 0.04, z, s * BULK(rnd), s * (0.75 + rnd() * 0.7),
         rnd() * 3.14, 0.9, s * BULK(rnd), gy);
+      n++;
     }
-    for (; gi < N_GRASS; gi++) writeM(bufG, gi, 0, -999, 0, 0, 0, 0);
 
-    for (let i = 0; i < N_FERN * 4 && fi < N_FERN; i++) {
-      const a = rnd() * Math.PI * 2, r = 4 + Math.sqrt(rnd()) * (R - 4);
-      const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+    // fougères — larges et basses, la masse sombre du premier plan
+    n = 0;
+    for (let k = 0; k < Q_FERN * 4 && n < Q_FERN && ctr.f < N_FERN; k++) {
+      const x = x0 + rnd() * CELL, z = z0 + rnd() * CELL;
       if (roadQuery(x, z).dist < ROAD_HALF + 2.2) continue;      // la fougère fuit la route
       if (inStream(x, z)) continue;
       const s = 0.7 + rnd() * 0.75;
       const gy = groundHeight(x, z);
-      writeM(bufF, fi++, x, gy - 0.05, z, s * BULK(rnd), s * (0.8 + rnd() * 0.5),
+      writeM(bufF, ctr.f++, x, gy - 0.05, z, s * BULK(rnd), s * (0.8 + rnd() * 0.5),
         rnd() * 3.14, 0.7, s * BULK(rnd), gy);
+      n++;
     }
-    for (; fi < N_FERN; fi++) writeM(bufF, fi, 0, -999, 0, 0, 0, 0);
 
-    // hautes tiges : en touffes, jamais uniformes — elles font la prairie
-    let ti = 0, ri = 0, wi = 0;
-    for (let i = 0; i < N_TALL * 3 && ti < N_TALL; i++) {
-      const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * R;
-      const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
-      const rq = roadQuery(x, z);
-      if (rq.dist < ROAD_HALF + 1.6) continue;
+    // hautes tiges : c'est la VARIÉTÉ de hauteur qui fait la prairie
+    n = 0;
+    for (let k = 0; k < Q_TALL * 3 && n < Q_TALL && ctr.t < N_TALL; k++) {
+      const x = x0 + rnd() * CELL, z = z0 + rnd() * CELL;
+      if (roadQuery(x, z).dist < ROAD_HALF + 1.6) continue;
       if (inStream(x, z)) continue;
       const s = 0.62 + rnd() * 0.75;
       const gy = groundHeight(x, z);
-      writeM(bufT, ti++, x, gy - 0.05, z, s * BULK(rnd), s * (0.75 + rnd() * 0.6),
+      writeM(bufT, ctr.t++, x, gy - 0.05, z, s * BULK(rnd), s * (0.75 + rnd() * 0.6),
         rnd() * 3.14, 0.85, s * BULK(rnd), gy);
+      n++;
     }
-    for (; ti < N_TALL; ti++) writeM(bufT, ti, 0, -999, 0, 0, 0, 0);
+
     // roseaux : seulement dans les creux, là où l'eau stagnerait
-    for (let i = 0; i < N_REED * 8 && ri < N_REED; i++) {
-      const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * R;
-      const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
-      const rq = roadQuery(x, z);
-      if (rq.dist < ROAD_HALF + 3) continue;
+    n = 0;
+    for (let k = 0; k < Q_REED * 8 && n < Q_REED && ctr.r < N_REED; k++) {
+      const x = x0 + rnd() * CELL, z = z0 + rnd() * CELL;
+      if (roadQuery(x, z).dist < ROAD_HALF + 3) continue;
       if (inStream(x, z)) continue;                              // le roseau borde l'eau, il n'y pousse pas
       const gy = groundHeight(x, z);
       // un creux local : le sol descend par rapport à ses voisins
@@ -529,39 +565,71 @@ export function plantGrass(scene, deformState, opts = {}) {
       const s = 0.7 + rnd() * 0.6;
       // le roseau est raide et pousse dans un creux : il se redresse plus que
       // l'herbe, sinon il se couche vers le fond de la cuvette
-      writeM(bufR, ri++, x, gy - 0.05, z, s * BULK(rnd), s * (0.8 + rnd() * 0.55),
+      writeM(bufR, ctr.r++, x, gy - 0.05, z, s * BULK(rnd), s * (0.8 + rnd() * 0.55),
         rnd() * 3.14, 0.45, s * BULK(rnd), gy);
+      n++;
     }
-    for (; ri < N_REED; ri++) writeM(bufR, ri, 0, -999, 0, 0, 0, 0);
-    // fleurs : en petites colonies, dans les zones ouvertes
-    for (let i = 0; i < N_FLOW * 4 && wi < N_FLOW; i++) {
-      const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * R;
-      const bx = cx + Math.cos(a) * r, bz = cz + Math.sin(a) * r;
-      const n = 3 + Math.floor(rnd() * 7);                        // la colonie
-      for (let k = 0; k < n && wi < N_FLOW; k++) {
+
+    // fleurs : en petites colonies, jamais dispersées une à une
+    n = 0;
+    for (let k = 0; k < Q_FLOW && n < Q_FLOW && ctr.w < N_FLOW; k++) {
+      const bx = x0 + rnd() * CELL, bz = z0 + rnd() * CELL;
+      const cn = 3 + Math.floor(rnd() * 7);                      // la colonie
+      for (let q = 0; q < cn && n < Q_FLOW && ctr.w < N_FLOW; q++) {
         const x = bx + (rnd() - 0.5) * 2.6, z = bz + (rnd() - 0.5) * 2.6;
         if (roadQuery(x, z).dist < ROAD_HALF + 1.2) continue;
         if (inStream(x, z)) continue;
         const s = 0.7 + rnd() * 0.6;
         const gy = groundHeight(x, z);
-        writeM(bufW, wi++, x, gy - 0.03, z, s * BULK(rnd), s,
+        writeM(bufW, ctr.w++, x, gy - 0.03, z, s * BULK(rnd), s,
           rnd() * 3.14, 0.8, s * BULK(rnd), gy);
+        n++;
       }
     }
-    for (; wi < N_FLOW; wi++) writeM(bufW, wi, 0, -999, 0, 0, 0, 0);
 
-    for (let i = 0; i < N_BUSH * 6 && bi < N_BUSH; i++) {
-      const a = rnd() * Math.PI * 2, r = 6 + Math.sqrt(rnd()) * (R - 6);
-      const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+    // buissons — ligneux, ils se redressent (PORTAGE 1.3 donne 0,5)
+    n = 0;
+    for (let k = 0; k < Q_BUSH * 6 && n < Q_BUSH && ctr.b < N_BUSH; k++) {
+      const x = x0 + rnd() * CELL, z = z0 + rnd() * CELL;
       if (roadQuery(x, z).dist < ROAD_HALF + 3.5) continue;
       if (inStream(x, z)) continue;
       const s = 0.55 + rnd() * 0.8;
       const gy = groundHeight(x, z);
-      // ligneux : il se redresse (PORTAGE 1.3 donne 0,5 au buisson)
-      writeM(bufB, bi++, x, gy - 0.35 * s, z, s * BULK(rnd), s * (0.6 + rnd() * 0.35),
+      writeM(bufB, ctr.b++, x, gy - 0.35 * s, z, s * BULK(rnd), s * (0.6 + rnd() * 0.35),
         rnd() * 3.14, 0.5, s * BULK(rnd), gy);
+      n++;
     }
-    for (; bi < N_BUSH; bi++) writeM(bufB, bi, 0, -999, 0, 0, 0, 0);
+  }
+
+  /**
+   * Parcourt les cellules du rayon, les plus proches d'abord, et range les
+   * emplacements restés vides hors du cadre. L'ordre compte : si un budget
+   * sature, ce sont les cellules LOINTAINES qui sautent, jamais celles qu'on a
+   * sous les yeux.
+   */
+  const ctr = { g: 0, f: 0, t: 0, r: 0, w: 0, b: 0 };
+  function sow(px, pz) {
+    ctr.g = 0; ctr.f = 0; ctr.t = 0; ctr.r = 0; ctr.w = 0; ctr.b = 0;
+    const i0 = Math.floor((px - R) / CELL), i1 = Math.floor((px + R) / CELL);
+    const j0 = Math.floor((pz - R) / CELL), j1 = Math.floor((pz + R) / CELL);
+    let nc = 0;
+    for (let i = i0; i <= i1 && nc < MAXCELL; i++) {
+      for (let j = j0; j <= j1 && nc < MAXCELL; j++) {
+        const dx = (i + 0.5) * CELL - px, dz = (j + 0.5) * CELL - pz;
+        const d2 = dx * dx + dz * dz;
+        if (d2 > R * R) continue;
+        cellI[nc] = i; cellJ[nc] = j; cellD[nc] = d2; cellO[nc] = nc; nc++;
+      }
+    }
+    const ord = cellO.subarray(0, nc);
+    ord.sort((a, b) => cellD[a] - cellD[b]);
+    for (let k = 0; k < nc; k++) sowCell(cellI[ord[k]], cellJ[ord[k]], ctr);
+    for (let i = ctr.g; i < N_GRASS; i++) writeM(bufG, i, 0, -999, 0, 0, 0, 0);
+    for (let i = ctr.f; i < N_FERN; i++) writeM(bufF, i, 0, -999, 0, 0, 0, 0);
+    for (let i = ctr.t; i < N_TALL; i++) writeM(bufT, i, 0, -999, 0, 0, 0, 0);
+    for (let i = ctr.r; i < N_REED; i++) writeM(bufR, i, 0, -999, 0, 0, 0, 0);
+    for (let i = ctr.w; i < N_FLOW; i++) writeM(bufW, i, 0, -999, 0, 0, 0, 0);
+    for (let i = ctr.b; i < N_BUSH; i++) writeM(bufB, i, 0, -999, 0, 0, 0, 0);
   }
 
   let cx = 0, cz = 20;
