@@ -46,6 +46,32 @@ restante**, tout commité/poussé avant la pause.
   Si les fûts semblent encore trop chauds sur la machine cible, la vraie
   réponse est la texture d'écorce bakée (PORTAGE Tier 3), pas un réglage.
 
+## Re-jugement sur les captures honnêtes (à traiter EN PREMIER)
+
+Première lecture des trois cadrages de `screenshots/cible/`. Ce sont des
+constats d'image, pas encore des correctifs.
+
+- **Le contre-jour vire au néon.** Le tapis rétroéclairé sort en vert citron
+  fluorescent, uniforme, et occupe la moitié basse du cadre. C'est très
+  exactement le « risque néon vert sur les surfaces larges » que le PORTAGE 1.5
+  annonçait ; le réglage n'a pas été tenu parce qu'il a été jugé sur des
+  captures désaturées, où il paraissait sage. À reprendre en premier : c'est
+  une régression esthétique introduite par la tranche précédente.
+- **Le sol est écrasé au noir à contre-jour.** Les 12 600 feuilles de litière
+  sont invisibles — soit noyées sous le tapis, soit sans lumière. Le travail
+  existe dans le code et ne se voit pas dans l'image : à vérifier avant d'en
+  ajouter.
+- **Les fûts sont des silhouettes pleines**, sans aucune modulation interne. En
+  contre-jour c'est défendable ; à confirmer que ce n'est pas le cas partout.
+- **Le ciel de couchant est une bande orange franche** avec un disque pâle
+  délavé. Crude — mais c'est du ressort du dôme (3.4 / raccord horizon), pas de
+  la densité.
+- **Le surplomb manque toujours au plein-jour** : le haut du cadre est ouvert
+  au centre, seuls les angles portent du feuillage. Confirme l'item resté au
+  plan.
+- **Le tapis lit comme un seul vert** au plein-jour — la teinte par instance du
+  tapis (PORTAGE 1.2, volet herbe) est bien le manque le plus visible.
+
 ## À faire, dans l'ordre du plan
 
 - **Tier 1 restant** : 1.1 airmass (weather.js — couleur/intensité de la
@@ -63,17 +89,32 @@ restante**, tout commité/poussé avant la pause.
 - **Ensuite** : PORTAGE Tier 2/3 (bake GPU, transmittance de canopée,
   volumétrique, grade) — voir PORTAGE.md.
 
-## Outillage
+**Ordre revu par la mesure (voir PERF.md).** À 23-30 ms par frame au quart de
+la résolution cible, dont ~11 ms d'ombres, le PORTAGE 2.5 (bucketing + LOD)
+n'est plus un prérequis théorique de la densité : c'est un prérequis mesuré.
+Toute hausse de densité (1.6, litière de 2.1) passe après lui. La passe
+d'ombres est le premier poste à attaquer, et de loin.
 
-- Serveur : `cd la-route && npm run dev` (port 5173 ; s'il affiche 5174,
-  ajuster les scripts de capture).
-- Captures : `scratchpad/cj2.js`. Usage :
-  `SCRATCH=$PWD SHOTS='[{"n":"x.png","t":0.42,"x":10,"z":-30,"yaw":1.2,"pitch":-0.5,"d":8}]' node cj2.js`
-  (~6 min par image en SwiftShader ; lancer en fond). Les trois cadrages
-  canoniques sont ceux de `src/ui/capture.js` (FRAMINGS) ; les « avant » de
-  la passe sont dans `scratchpad/avant/`.
-- Le jeu expose `window.__laroute` (state, weather.setTime/setWeather, …).
-- Références Valheim : `scratchpad/ref/valheim-01..10.jpg` (jamais commis).
+## Outillage (machine locale — plus de sandbox, plus de SwiftShader)
+
+- Serveur : `cd la-route && npm run dev`. Note le port annoncé : 5173 peut
+  déjà être pris par une instance laissée ouverte.
+- **Captures** : ouvrir la page dans Chrome et appeler `__laroute.capture.run()`
+  (ou F9). `run(false)` renvoie les data-URL au lieu de télécharger — c'est ce
+  qu'il faut pour les écrire ailleurs que dans le dossier de téléchargement.
+  Une série de trois prend quelques secondes, plus les ~20 s de warm-up WebGPU
+  au chargement. Les cadrages canoniques sont dans `src/ui/capture.js`
+  (FRAMINGS) ; l'« avant » de la passe est `screenshots/cible/`.
+- Pour déposer les captures sur le disque sans passer par le navigateur : un
+  petit serveur qui écrit ce qu'on lui POSTe suffit (la page fait
+  `fetch(url, {method:'POST', body: dataURL})`), CORS ouvert.
+- Comparaison chiffrée de deux séries : Python + PIL est présent. Les mesures
+  qui comptent sont saturation moyenne, 1er centile et étendue p01→p99 — c'est
+  ce triplet qui a révélé que les captures mentaient.
+- Le jeu expose `window.__laroute` (state, scene, engine, weather.setTime/
+  setWeather, capture, …).
+- Le référentiel `jungle-trail` n'est PAS sur cette machine ; PORTAGE.md en est
+  la distillation et fait foi. Les références Valheim ne sont pas commises.
 
 ## Tranche « machine cible » (session locale, MacBook M4)
 

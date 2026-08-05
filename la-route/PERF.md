@@ -16,6 +16,43 @@ joueur : MacBook M4, WebGPU/Metal — le brief visait une RTX, on juge sur le
 M4). La colonne « Mesuré » se remplit avec l'overlay F1 sur cette machine ;
 le SwiftShader de CI ne mesure rien d'utile.
 
+## Première mesure réelle sur la cible (MacBook Air M4, WebGPU)
+
+Prise au cadrage plein-jour, dehors, **en 1470 × 671** — soit un quart des
+pixels de la cible 1440p. Boucle de rendu arrêtée, `scene.render()` appelé en
+rafale et chronométré, médiane sur 24 frames.
+
+| Configuration | Coût par frame |
+| --- | --- |
+| Tout | **23 – 30 ms** |
+| Sans la passe d'ombres (renderList vidée) | **12 ms** |
+
+Deux choses à en tirer, et une seule est solide.
+
+**Solide** : la passe d'ombres pèse ~11 ms, soit près de la moitié de la
+frame, pour un budget écrit à 1,8 ms. Deux cascades qui re-soumettent 209
+casters de feuillage alpha-testé, c'est le poste numéro un — très loin devant
+tout le reste. C'est reproductible et le signal est énorme.
+
+**Pas solide** : l'attribution poste par poste. Masquer le tapis, les pins ou
+la litière sort des mesures non monotones (le retour au cas de base dérive de
+24 à 34 ms), donc la mesure dérive plus vite que l'effet cherché. Ces chiffres
+ne sont pas publiés ici parce qu'ils ne veulent rien dire. Il faut une vraie
+session de profilage, fenêtre au premier plan, avec l'overlay F1.
+
+**Conséquence sur le plan.** À 23-30 ms au quart de la résolution cible, on est
+déjà 2 à 3 fois au-dessus du budget de 11,1 ms. Le PORTAGE 2.5 (bucketing en
+tuiles + LOD) était classé « prérequis de la densité » sur un raisonnement ;
+c'est maintenant une mesure. **Toute hausse de densité (1.6, litière de 2.1)
+passe après 2.5**, sans quoi on triple le coût de soumission d'une frame déjà
+trois fois trop chère.
+
+Piège de mesure consigné : un onglet Chrome occulté suspend `requestAnimation-
+Frame` (zéro frame, et `getFps()` continue de renvoyer la dernière valeur —
+elle ment). Toute mesure passant par la boucle de rendu doit vérifier
+`document.visibilityState === 'visible'`, ou chronométrer `scene.render()`
+directement comme ci-dessus.
+
 Coûts M6/M7 à surveiller :
 - particules : pluie 1400 + flammes/braises/fumée ~370 + lucioles 70 +
   poussière 480 — toutes CPU, ~2 300 quads max simultanés ;
