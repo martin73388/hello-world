@@ -95,9 +95,11 @@ constats d'image, pas encore des correctifs.
   1.6 semis à queue lourde (3 octaves de clump, probabilité continue).
 - **Système 2, reste** : le SURPLOMB au-dessus de la route (bouleaux de
   lisière à couronne penchée — troncs hors chaussée, roadQuery fait foi).
-  La teinte par instance du TAPIS (grass.js) reste à faire : elle passe
-  par la machinerie de re-semis en 2 phases (buffer couleur à écrire dans
-  sow()), non trivial — voir PORTAGE 1.2.
+  ~~La teinte par instance du TAPIS~~ FAIT : les six strates ont leur buffer
+  'color' rempli par sowCell (possible depuis le semis par cellules ancrées
+  au sol — retours joueur de la session locale : semis stable, caméra du van
+  bornée au volume habitable, livrée du van par teinte de matériau, garage
+  exclu des six strates).
 - **Ensuite** : PORTAGE Tier 2/3 (bake GPU, transmittance de canopée,
   volumétrique, grade) — voir PORTAGE.md.
 
