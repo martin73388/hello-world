@@ -115,6 +115,11 @@ uniform float grTransl; uniform vec3 grSun; uniform vec3 grAmb;
         // du moment (le même que le décor) — constant, il faisait luire
         // l'herbe en plein milieu de la nuit.
         color.rgb += baseColor.rgb * vDiffuseColor.rgb * grAmb * 1.05;
+        // occlusion de contact (PORTAGE 1.4) : le pied du brin est enfoui
+        // dans le couvert, la pointe voit le ciel. grUp est déjà la hauteur
+        // le long du brin (luminance peinte pied sombre → pointe claire) —
+        // une seule multiplication, et le tapis cesse de flotter sur le sol.
+        color.rgb *= 0.58 + 0.72 * grUp;
 #endif
 `,
       };
