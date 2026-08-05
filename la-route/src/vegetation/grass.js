@@ -16,6 +16,8 @@ import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTextur
 import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import { MaterialPluginBase } from '@babylonjs/core/Materials/materialPluginBase.js';
 import { windClock, sunShared, hazeShared } from './wind.js';
+import { Matrix } from '@babylonjs/core/Maths/math.vector.js';
+import { addBentCard, cardAcc, accToMesh } from './bentCard.js';
 import { groundHeight, roadQuery, ROAD_HALF, GARAGE, FORD, fordShape } from '../terrain/road.js';
 
 /**
@@ -222,56 +224,70 @@ function bladeTexture(scene, name, blades, base, tip, seed) {
   return tex;
 }
 
-/**
- * Fronde de fougère : la strate large du sous-bois. Les fougères étaient
- * peintes avec la même recette que l'herbe — des brins fins — et se
- * confondaient donc avec le tapis. Dans la référence, ce sont de GRANDES
- * palmes découpées en folioles, presque horizontales, qui font une masse
- * sombre au premier plan. On peint donc un rachis arqué garni de folioles
- * décroissantes, plusieurs par carte.
- */
-function frondTexture(scene, name, seed) {
-  // PAS de mipmaps : même raison que les brins (des palettes vertes volantes).
-  // 128 et non 64 comme les brins : la fronde est faite d'aplats LARGES, et
-  // à un mètre de l'œil un texel de 64 devenait un pavé de dix pixels.
-  const S = 128;
-  const tex = new DynamicTexture(name, { width: S, height: S }, scene, false);
+
+/** fronde SEULE, peinte LE LONG de u (pied à gauche, pointe à droite) :
+ * rachis central et paires de folioles décroissantes. Elle habille la carte
+ * courbée de la rosette — l'arc n'est plus peint, il est dans la géométrie. */
+function frondCardTexture(scene, name, seed) {
+  // PAS de mipmaps : même règle que tout le tapis.
+  const W = 128, H = 64;
+  const tex = new DynamicTexture(name, { width: W, height: H }, scene, false);
   const g = tex.getContext();
-  g.clearRect(0, 0, S, S);
+  g.clearRect(0, 0, W, H);
   let s = seed;
   const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
-  for (let f = 0; f < 5; f++) {
-    // la fronde part du pied (bas du canvas) et s'arque vers l'extérieur
-    const x0 = 44 + rnd() * 40, side = f % 2 ? 1 : -1;
-    const len = 68 + rnd() * 40;
-    const spread = (0.55 + rnd() * 0.75) * side;
-    const steps = 16;
-    let px = x0, py = S;
-    for (let i = 1; i <= steps; i++) {
-      const t = i / steps;
-      // arc : monte vite au départ, retombe vers l'extérieur en bout
-      const nx = x0 + spread * len * t * t * 0.9;
-      const ny = S - len * (t * 1.12 - t * t * 0.26);
-      // les folioles, perpendiculaires au rachis, décroissantes vers la pointe
-      const dx = nx - px, dy = ny - py, L = Math.hypot(dx, dy) || 1;
-      const ux = -dy / L, uy = dx / L;
-      const fl = (7.6 + rnd() * 3.6) * (1 - t * 0.74);
-      g.fillStyle = t > 0.5 ? '#4c7420' : '#28430f';
-      for (let sg = -1; sg <= 1; sg += 2) {
-        g.beginPath();
-        g.ellipse(px + ux * sg * fl * 0.55, py + uy * sg * fl * 0.55,
-          fl, fl * 0.26, Math.atan2(uy * sg, ux * sg), 0, 7);
-        g.fill();
-      }
-      g.strokeStyle = '#1e3a0c'; g.lineWidth = 1.6;
-      g.beginPath(); g.moveTo(px, py); g.lineTo(nx, ny); g.stroke();
-      px = nx; py = ny;
+  const mid = H / 2;
+  g.strokeStyle = '#1e3a0c'; g.lineWidth = 2.2;
+  g.beginPath(); g.moveTo(2, mid); g.lineTo(W - 3, mid); g.stroke();
+  const n = 13;
+  for (let i = 0; i < n; i++) {
+    const t = (i + 0.5) / n;
+    const x = 4 + t * (W - 10);
+    const fl = (15 + rnd() * 6) * (1 - t * 0.72);       // foliole, décroît
+    const ang = 0.9 - t * 0.25;                          // se couche vers la pointe
+    g.fillStyle = t > 0.55 ? '#55801f' : '#2c4a12';
+    for (let sg = -1; sg <= 1; sg += 2) {
+      g.beginPath();
+      g.ellipse(x + Math.cos(ang) * 2, mid + sg * (fl * 0.52 + 1.5),
+        fl * 0.62, fl * 0.24, sg * ang * 0.55, 0, 7);
+      g.fill();
     }
   }
   tex.update();
   tex.hasAlpha = true;
   tex.updateSamplingMode(1);
   return tex;
+}
+
+/**
+ * Rosette de fougère : sept frondes en cartes COURBÉES qui partent du pied,
+ * montent, s'arquent et retombent — l'arc est dans la géométrie, la découpe
+ * en folioles dans l'alpha. C'est l'archétype de la référence : une masse
+ * presque horizontale qui ferme le premier plan.
+ */
+function fernGeometry(scene, name) {
+  const acc = cardAcc();
+  let s = 23;
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const N = 7;
+  for (let k = 0; k < N; k++) {
+    const yaw = (k / N) * Math.PI * 2 + (rnd() - 0.5) * 0.5;
+    const len = 0.62 + rnd() * 0.3;
+    const m = Matrix.RotationZ((rnd() - 0.5) * 0.2)
+      .multiply(Matrix.RotationX(-(0.52 + rnd() * 0.22)))   // l'attache vise le ciel
+      .multiply(Matrix.RotationY(yaw))
+      .multiply(Matrix.Translation(0, 0.05, 0));
+    addBentCard(acc, m, {
+      len, hw: 0.16 + rnd() * 0.05,
+      bend: 1.05 + rnd() * 0.35,                            // monte puis retombe
+      sag: 0.06, twist: (rnd() - 0.5) * 0.3,
+      cup: 0.3, relax: 0.5, roll: 0.08,
+      ripple: 0.08, tilt: (rnd() - 0.5) * 0.14,
+      asym: 0.05, nick: 0, phase: rnd() * 6.28,
+      steps: 3, nu: 2, uvSwap: true,
+    });
+  }
+  return accToMesh(scene, name, acc);
 }
 
 /** brins fleuris : tiges vertes surmontées de corolles claires */
@@ -354,11 +370,11 @@ export function plantGrass(scene, deformState, opts = {}) {
     flowerTexture(scene, 'flowerTex', 91));
   // la fougère est LARGE et basse : c'est elle qui fait la masse sombre du
   // premier plan, pas une touffe d'herbe de plus
-  const fern = tuftGeometry(scene, 'fernTuft', 0.72, 1.55, 3);
+  const fern = fernGeometry(scene, 'fernTuft');
   // translucidité modérée : la palme est LARGE, au réglage des brins fins
   // elle s'embrasait toute entière et flottait comme un néon vert
   mk('fern', fern, new Color3(1, 1, 1), 0.4,
-    frondTexture(scene, 'fernTex', 71), 0.5);
+    frondCardTexture(scene, 'fernTex', 71), 0.5);
   const bush = MeshBuilder.CreateSphere('bush', { diameter: 1.25, segments: 5 }, scene);
   bush.bakeCurrentTransformIntoVertices();
   mk('bush', bush, new Color3(0.19, 0.26, 0.13), 0.3);

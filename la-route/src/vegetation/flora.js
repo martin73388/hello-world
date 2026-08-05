@@ -19,6 +19,7 @@ import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import { Matrix, Quaternion, Vector3, Vector4 } from '@babylonjs/core/Maths/math.vector.js';
 import { height, roadQuery, samples, GARAGE } from '../terrain/road.js';
 import { WindPlugin } from './wind.js';
+import { addBentCard, cardAcc, accToMesh } from './bentCard.js';
 
 const MIN_ROAD = 8.0;              // même respiration que les pins (couronnes comprises)
 
@@ -276,27 +277,43 @@ export function plantFlora(scene, shadows) {
     { x: -0.55, y: 4.55, z: 0.28, r: 1.12, n: 10, s: 1.3 },
     { x: 0.45, y: 4.95, z: -0.32, r: 0.84, n: 8, s: 1.1 },
   ];
-  const leafCards = [];
-  const ctr = new Vector3();
+  /* Les cartes de la coque sont maintenant COURBÉES (bentCard) : posées
+   * tangentes à la coque, normale dehors, cuvette vers le centre — chaque
+   * carte accroche un highlight en bande au lieu de basculer d'un bloc. */
+  const leafAcc = cardAcc();
   for (const C of CLUMPS) {
-    ctr.set(C.x, C.y, C.z);
     for (let i = 0; i < C.n; i++) {
       // spirale de Fibonacci : une répartition régulière sans grille visible
       const yy = 1 - (i + 0.5) / C.n * 2;
       const rr = Math.sqrt(Math.max(0, 1 - yy * yy));
       const ph = i * 2.3999632;
       const rad = C.r * (0.62 + rnd() * 0.42);
-      const card = MeshBuilder.CreatePlane('flLeaf',
-        { width: C.s * (0.85 + rnd() * 0.4), height: C.s * (0.8 + rnd() * 0.4) }, scene);
-      card.position.set(C.x + Math.cos(ph) * rr * rad,
-        C.y + yy * rad * 0.82, C.z + Math.sin(ph) * rr * rad);
-      card.lookAt(ctr);                               // la normale regarde dehors
-      card.rotate(new Vector3(0, 0, 1), rnd() * Math.PI * 2);
-      leafCards.push(card);
+      const px = C.x + Math.cos(ph) * rr * rad;
+      const py = C.y + yy * rad * 0.82;
+      const pz = C.z + Math.sin(ph) * rr * rad;
+      // orienter la normale locale (+Y) vers l'extérieur de la grappe
+      const dx = px - C.x, dy = py - C.y, dz = pz - C.z;
+      const dl = Math.hypot(dx, dy, dz) || 1;
+      const th = Math.acos(Math.max(-1, Math.min(1, dy / dl)));
+      const phi = Math.atan2(dx / dl, dz / dl);
+      const len = C.s * (0.95 + rnd() * 0.4);
+      const m = Matrix.Translation(0, 0, -len * 0.5)  // centrer la carte
+        .multiply(Matrix.RotationZ(rnd() * Math.PI * 2))
+        .multiply(Matrix.RotationX(th))
+        .multiply(Matrix.RotationY(phi))
+        .multiply(Matrix.Translation(px, py, pz));
+      addBentCard(leafAcc, m, {
+        len, hw: C.s * (0.42 + rnd() * 0.2),
+        bend: 0.55 + rnd() * 0.3,                     // épouse la coque
+        sag: 0.04, twist: (rnd() - 0.5) * 0.3,
+        cup: 0.4, relax: 0.5, roll: 0.12,
+        ripple: 0.07, tilt: (rnd() - 0.5) * 0.16,
+        asym: 0.08, nick: 0, phase: rnd() * 6.28,
+        steps: 3, nu: 3,
+      });
     }
   }
-  const bLeaf = Mesh.MergeMeshes(leafCards, true, true);
-  bLeaf.name = 'flBirchLeaf';
+  const bLeaf = accToMesh(scene, 'flBirchLeaf', leafAcc);
   setup(bLeaf, leafM, true);
 
   const N_BIRCH = 420;

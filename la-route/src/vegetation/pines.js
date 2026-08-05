@@ -22,6 +22,8 @@ import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { height, roadQuery, GARAGE } from '../terrain/road.js';
 import { WindPlugin } from './wind.js';
+import { addBentCard, cardAcc, accToMesh } from './bentCard.js';
+import { Matrix as BMatrix } from '@babylonjs/core/Maths/math.vector.js';
 
 /** une brindille : la tige, puis les aiguilles en chevrons de part et d'autre */
 function twig(g, x0, y0, x1, y1, rnd, dark, light) {
@@ -106,7 +108,13 @@ export function plantPines(scene, shadows) {
   let ps = 3;
   const prnd = () => (ps = (ps * 16807) % 2147483647) / 2147483647;
 
-  const cards = [];
+  /* Chaque branche est maintenant une carte COURBÉE (bentCard) : elle part
+   * du tronc à l'horizontale, RETOMBE le long de sa longueur (le droop est
+   * dans la géométrie, plus seulement une rotation d'attache), et porte une
+   * légère cuvette vers le ciel — c'est elle qui accroche le highlight en
+   * bande quand le soleil rase. Toujours deux cartes par branche, roulées
+   * de part et d'autre, pour tenir la vue par la tranche. */
+  const acc = cardAcc();
   for (let w = 0; w < WHORLS.length; w++) {
     const L = WHORLS[w];
     const base = w * 1.399;                          // verticilles décalés
@@ -116,27 +124,29 @@ export function plantPines(scene, shadows) {
       const a = base + (k / L.n) * Math.PI * 2 + (prnd() - 0.5) * 0.5;
       const droop = L.droop + (prnd() - 0.5) * 0.16;
       const y = L.y + (prnd() - 0.5) * 0.28;
-      const off = len * 0.42;
-      // DEUX cartes croisées par branche, roulées de part et d'autre de
-      // l'horizontale : une carte plate seule disparaît quand on la regarde
-      // par la tranche, et l'arbre se volatilisait de trois quarts.
       for (let f = 0; f < 2; f++) {
-        const roll = (f ? 1 : -1) * (0.36 + prnd() * 0.16);
-        const c = MeshBuilder.CreatePlane('pb', { width: len, height: wid }, scene);
-        // à plat (normale vers le haut) PUIS roulée autour de l'axe de la
-        // branche — les deux tiennent dans la même rotation X, qu'on fige
-        c.rotation.x = Math.PI / 2 + roll;
-        c.bakeCurrentTransformIntoVertices();
-        // reste Ry * Rz : la retombée s'applique d'abord, le lacet ensuite
-        c.rotation.z = -droop;
-        c.rotation.y = a;
-        c.position.set(Math.cos(a) * off, y, -Math.sin(a) * off);
-        cards.push(c);
+        const roll = (f ? 1 : -1) * (0.3 + prnd() * 0.16);
+        // bentCard pousse vers +Z, À PLAT, normale +Y — pas de couchage à
+        // faire. RotationZ roule autour de l'axe de la branche, RotationX
+        // incline légèrement l'attache (le gros de la retombée est dans
+        // bend), RotationY oriente : +Z part vers (cos a, -sin a).
+        const m = BMatrix.RotationZ(roll)
+          .multiply(BMatrix.RotationX(0.28 * droop))
+          .multiply(BMatrix.RotationY(a + Math.PI / 2))
+          .multiply(BMatrix.Translation(Math.cos(a) * 0.06, y, -Math.sin(a) * 0.06));
+        addBentCard(acc, m, {
+          len, hw: wid * 0.5,
+          bend: 1.35 * droop + 0.18,                 // la retombée, DANS la carte
+          sag: 0.05, twist: (prnd() - 0.5) * 0.24,
+          cup: 0.3, relax: 0.55, roll: 0.1,
+          ripple: 0.05, tilt: (prnd() - 0.5) * 0.12,
+          asym: 0.05, nick: 0, phase: prnd() * 6.28,
+          steps: 3, nu: 3, uvSwap: true,
+        });
       }
     }
   }
-  const foliage = Mesh.MergeMeshes(cards, true, true);
-  foliage.name = 'pineFoliage';
+  const foliage = accToMesh(scene, 'pineFoliage', acc);
   const fmat = new StandardMaterial('pineMat', scene);
   fmat.diffuseColor = new Color3(0.72, 0.8, 0.7);
   fmat.specularColor = new Color3(0.02, 0.03, 0.02);
