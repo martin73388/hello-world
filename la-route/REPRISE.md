@@ -32,6 +32,16 @@ restante**, tout commité/poussé avant la pause.
    (grass.js, `color.rgb *= 0.58 + 0.72*grUp`). Capture de vérif :
    `scratchpad/occl-jour.png` (si absente, la refaire — voir plus bas).
 
+## Fait aussi (tranche « resume » n°1)
+
+- Tier 1 : 1.1 airmass (weather.js), 1.5 lobe courbé + variance + abaxial
+  (wind.js, grass.js), 1.3 stand/bulk (pins), 1.2 teinte par instance
+  (pins + houppiers bouleaux). Vérifié par captures t1-cj/t1-jour.
+- Système 2 : `world/litter.js` (12 600 feuilles mortes, 3 archétypes) et
+  `world/understory.js` (420 rosettes + 300 arbustes) — écrits par agents,
+  intégrés dans main.js après plantFlora. Vérification d2-* en cours au
+  moment de la mise à jour.
+
 ## À faire, dans l'ordre du plan
 
 - **Tier 1 restant** : 1.1 airmass (weather.js — couleur/intensité de la
@@ -41,12 +51,11 @@ restante**, tout commité/poussé avant la pause.
   placement ; 1.5 lobe de translucidité courbé par la normale + variance par
   instance + face abaxiale (wind.js/grass.js) — PRÉREQUIS avant tout grade ;
   1.6 semis à queue lourde (3 octaves de clump, probabilité continue).
-- **Système 2 du brief — densité** : litière de feuilles mortes
-  individuelles (petites cartes courbées très pliées, thin instances,
-  concentrées sous les arbres et en lisière) ; étage moyen qui ferme les
-  côtés (grandes feuilles en rosettes bentCard à 1,5–8 m du bord) ;
-  surplomb au-dessus de la route (bouleaux de lisière à couronne penchée —
-  les troncs restent hors chaussée, roadQuery fait foi).
+- **Système 2, reste** : le SURPLOMB au-dessus de la route (bouleaux de
+  lisière à couronne penchée — troncs hors chaussée, roadQuery fait foi).
+  La teinte par instance du TAPIS (grass.js) reste à faire : elle passe
+  par la machinerie de re-semis en 2 phases (buffer couleur à écrire dans
+  sow()), non trivial — voir PORTAGE 1.2.
 - **Ensuite** : PORTAGE Tier 2/3 (bake GPU, transmittance de canopée,
   volumétrique, grade) — voir PORTAGE.md.
 

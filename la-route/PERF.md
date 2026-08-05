@@ -52,6 +52,9 @@ Coûts M3 à surveiller (overlay F1 sur le M4) :
 | Faune | 2 chevreuils, 14 oiseaux, 5 chauves-souris en pools ; 4 systèmes de particules |
 | Brume étagée | un plugin fragment sur tous les matériaux du décor — 3 taps de plus, pas de passe |
 | Patine rétro | une passe plein écran de plus (quantification + tramage), débrayable |
+| Litière | 12 600 feuilles mortes en 3 maillages thin-instancés (~302 k tris), pas de shadow caster, aucun coût par frame |
+| Étage moyen | 420 rosettes + 300 arbustes (~162 k tris), 2 draw calls + 2 passes d'ombre, vent par plugin |
+| bentCard | +4 à +40 tris par carte selon l'archétype — payé en mémoire vertex, pas en draw calls |
 
 Le poste le plus lourd est le tapis d'herbe. Si le budget se tend sur la
 machine cible, les leviers dans l'ordre : nombre d'instances (`plantGrass`
