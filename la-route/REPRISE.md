@@ -39,8 +39,12 @@ restante**, tout commité/poussé avant la pause.
   (pins + houppiers bouleaux). Vérifié par captures t1-cj/t1-jour.
 - Système 2 : `world/litter.js` (12 600 feuilles mortes, 3 archétypes) et
   `world/understory.js` (420 rosettes + 300 arbustes) — écrits par agents,
-  intégrés dans main.js après plantFlora. Vérification d2-* en cours au
-  moment de la mise à jour.
+  intégrés dans main.js après plantFlora. VÉRIFIÉ sur d2-jour/midi/cj :
+  cadre fermé en haut et sur les côtés, plus de sol nu, trois plans nets.
+  Correctif : buffer de teinte séparé et quasi neutre pour les fûts de pin
+  (le partage avec le feuillage les peignait carotte) — vérifié d3-jour.
+  Si les fûts semblent encore trop chauds sur la machine cible, la vraie
+  réponse est la texture d'écorce bakée (PORTAGE Tier 3), pas un réglage.
 
 ## À faire, dans l'ordre du plan
 
