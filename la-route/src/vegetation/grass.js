@@ -73,6 +73,12 @@ uniform float grTransl; uniform vec3 grSun; uniform vec3 grAmb;
         // (la pointe est fine, elle transmet mieux que la base).
         CUSTOM_FRAGMENT_BEFORE_FRAGCOLOR: `
 #ifdef GRASS
+        // La caméra orbite derrière le joueur et se retrouve DANS le tapis
+        // dès qu'on baisse la vue ; une fronde de 1,55 m remplissait alors
+        // tout l'écran d'aplats verts. On évide donc une petite sphère autour
+        // de l'œil — on est déjà à l'intérieur, le trou ne se voit pas.
+        float grEye = length(vEyePosition.xyz - vPositionW);
+        if (grEye < 0.72) discard;
         vec3 grV = normalize(vEyePosition.xyz - vPositionW);
         float grBack = clamp(dot(grV, normalize(grSun)), 0.0, 1.0);
         // la texture du brin est peinte en dégradé pied sombre → pointe
@@ -205,8 +211,10 @@ function bladeTexture(scene, name, blades, base, tip, seed) {
  * décroissantes, plusieurs par carte.
  */
 function frondTexture(scene, name, seed) {
-  // PAS de mipmaps : même raison que les brins (des palettes vertes volantes)
-  const S = 64;
+  // PAS de mipmaps : même raison que les brins (des palettes vertes volantes).
+  // 128 et non 64 comme les brins : la fronde est faite d'aplats LARGES, et
+  // à un mètre de l'œil un texel de 64 devenait un pavé de dix pixels.
+  const S = 128;
   const tex = new DynamicTexture(name, { width: S, height: S }, scene, false);
   const g = tex.getContext();
   g.clearRect(0, 0, S, S);
@@ -214,10 +222,10 @@ function frondTexture(scene, name, seed) {
   const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
   for (let f = 0; f < 5; f++) {
     // la fronde part du pied (bas du canvas) et s'arque vers l'extérieur
-    const x0 = 22 + rnd() * 20, side = f % 2 ? 1 : -1;
-    const len = 34 + rnd() * 20;
+    const x0 = 44 + rnd() * 40, side = f % 2 ? 1 : -1;
+    const len = 68 + rnd() * 40;
     const spread = (0.55 + rnd() * 0.75) * side;
-    const steps = 11;
+    const steps = 16;
     let px = x0, py = S;
     for (let i = 1; i <= steps; i++) {
       const t = i / steps;
@@ -227,15 +235,15 @@ function frondTexture(scene, name, seed) {
       // les folioles, perpendiculaires au rachis, décroissantes vers la pointe
       const dx = nx - px, dy = ny - py, L = Math.hypot(dx, dy) || 1;
       const ux = -dy / L, uy = dx / L;
-      const fl = (5.2 + rnd() * 2.4) * (1 - t * 0.72);
+      const fl = (7.6 + rnd() * 3.6) * (1 - t * 0.74);
       g.fillStyle = t > 0.5 ? '#4c7420' : '#28430f';
       for (let sg = -1; sg <= 1; sg += 2) {
         g.beginPath();
         g.ellipse(px + ux * sg * fl * 0.55, py + uy * sg * fl * 0.55,
-          fl, fl * 0.34, Math.atan2(uy * sg, ux * sg), 0, 7);
+          fl, fl * 0.26, Math.atan2(uy * sg, ux * sg), 0, 7);
         g.fill();
       }
-      g.strokeStyle = '#1e3a0c'; g.lineWidth = 1.1;
+      g.strokeStyle = '#1e3a0c'; g.lineWidth = 1.6;
       g.beginPath(); g.moveTo(px, py); g.lineTo(nx, ny); g.stroke();
       px = nx; py = ny;
     }
@@ -288,7 +296,7 @@ export function plantGrass(scene, deformState, opts = {}) {
   const N_FERN = opts.ferns ?? 1500;
   const N_BUSH = opts.bushes ?? 240;
 
-  const mk = (name, mesh, color, strength, tex) => {
+  const mk = (name, mesh, color, strength, tex, transl) => {
     const mat = new StandardMaterial(name + 'M', scene);
     mat.diffuseColor = color;
     mat.specularColor = new Color3(0.02, 0.03, 0.02);
@@ -301,7 +309,7 @@ export function plantGrass(scene, deformState, opts = {}) {
       mat.needAlphaTesting = () => true;
       mat.needAlphaBlending = () => false;
     }
-    new GrassPlugin(mat, deformState, { strength });
+    new GrassPlugin(mat, deformState, { strength, transl });
     mesh.material = mat;
     mesh.receiveShadows = true;
     mesh.alwaysSelectAsActiveMesh = true;                        // suit le joueur
@@ -327,8 +335,10 @@ export function plantGrass(scene, deformState, opts = {}) {
   // la fougère est LARGE et basse : c'est elle qui fait la masse sombre du
   // premier plan, pas une touffe d'herbe de plus
   const fern = tuftGeometry(scene, 'fernTuft', 0.72, 1.55, 3);
+  // translucidité modérée : la palme est LARGE, au réglage des brins fins
+  // elle s'embrasait toute entière et flottait comme un néon vert
   mk('fern', fern, new Color3(1, 1, 1), 0.4,
-    frondTexture(scene, 'fernTex', 71));
+    frondTexture(scene, 'fernTex', 71), 0.5);
   const bush = MeshBuilder.CreateSphere('bush', { diameter: 1.25, segments: 5 }, scene);
   bush.bakeCurrentTransformIntoVertices();
   mk('bush', bush, new Color3(0.19, 0.26, 0.13), 0.3);

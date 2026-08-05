@@ -16,7 +16,69 @@ import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js'
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js';
 import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
+import { MaterialPluginBase } from '@babylonjs/core/Materials/materialPluginBase.js';
+import { sunShared } from '../vegetation/wind.js';
 import '@babylonjs/core/Meshes/thinInstanceMesh.js';
+
+/**
+ * Éclairage de nuage en impostor : le volume est SIMULÉ dans le fragment au
+ * lieu d'être peint une fois pour toutes. On ré-échantillonne l'alpha du
+ * cumulus décalé VERS LE SOLEIL, en trois pas de plus en plus longs : la
+ * somme approxime l'épaisseur de matière traversée par la lumière avant
+ * d'atteindre ce fragment. Beaucoup de matière → ventre sombre ; peu →
+ * bord allumé. C'est la recette classique des nuages en cartes, et elle
+ * donne ce que la silhouette peinte ne pouvait pas : l'ombrage TOURNE avec
+ * le soleil au fil de la journée, et le bord tourné vers lui s'embrase au
+ * couchant sans qu'on ait à repeindre quoi que ce soit.
+ * Aucun sampler à déclarer : on réutilise celui de l'opacité, déjà lié.
+ */
+class CloudPlugin extends MaterialPluginBase {
+  constructor(material) {
+    super(material, 'Cloud', 220, { CLOUD: false });
+    this.sunU = 0; this.sunV = 1;
+    this.dens = 2.6;
+    this.shade = [0.42, 0.47, 0.60];
+    this.rim = [0.3, 0.26, 0.2];
+    this._enable(true);
+  }
+  getClassName() { return 'CloudPlugin'; }
+  prepareDefines(defines) { defines.CLOUD = true; }
+  getUniforms() {
+    return {
+      ubo: [
+        { name: 'clSunUV', size: 2, type: 'vec2' },
+        { name: 'clDens', size: 1, type: 'float' },
+        { name: 'clShade', size: 3, type: 'vec3' },
+        { name: 'clRim', size: 3, type: 'vec3' },
+      ],
+      fragment: `#ifdef CLOUD
+uniform vec2 clSunUV; uniform float clDens; uniform vec3 clShade; uniform vec3 clRim;
+#endif`,
+    };
+  }
+  bindForSubMesh(ubo) {
+    ubo.updateFloat2('clSunUV', this.sunU, this.sunV);
+    ubo.updateFloat('clDens', this.dens);
+    ubo.updateFloat3('clShade', this.shade[0], this.shade[1], this.shade[2]);
+    ubo.updateFloat3('clRim', this.rim[0], this.rim[1], this.rim[2]);
+  }
+  getCustomCode(shaderType) {
+    if (shaderType !== 'fragment') return null;
+    return {
+      CUSTOM_FRAGMENT_BEFORE_FRAGCOLOR: `
+#if defined(CLOUD) && defined(OPACITY)
+        vec2 clStep = clSunUV * 0.05;
+        float clT = texture2D(opacitySampler, vOpacityUV + clStep).a * 0.5
+                  + texture2D(opacitySampler, vOpacityUV + clStep * 2.3).a * 0.32
+                  + texture2D(opacitySampler, vOpacityUV + clStep * 4.4).a * 0.18;
+        float clLit = exp(-clT * clDens);
+        color.rgb *= mix(clShade, vec3(1.0), clLit);
+        color.rgb += clRim * pow(clLit, 3.0);
+#endif
+`,
+    };
+  }
+}
 
 const TW = 256, TH = 128;
 
@@ -92,6 +154,7 @@ export function buildClouds(scene) {
     plane.alwaysSelectAsActiveMesh = true;           // suit le joueur : pas de culling
     plane.alphaIndex = 5 + k;                        // derrière tout le reste
     plane.receiveShadows = false;
+    mat.cloudLight = new CloudPlugin(mat);           // le volume, pas la peinture
     const count = state.filter((c) => c.kind === k).length;
     banks.push({ plane, mat, buf: new Float32Array(count * 16), idx: [] });
     mats.push(mat);
@@ -117,11 +180,30 @@ export function buildClouds(scene) {
     tint.b = 0.34 + day * (0.56 + high * 0.44 - 0.34);
     const vis = 0.55 + 0.45 * cloudy;
     // les cartes font toujours face à la caméra (billboard sur l'axe Y)
-    Quaternion.RotationYawPitchRollToRef(camYaw + Math.PI, 0, 0, q);
+    const yaw = camYaw + Math.PI;
+    Quaternion.RotationYawPitchRollToRef(yaw, 0, 0, q);
+    // direction du soleil PROJETÉE dans l'espace UV de la carte : le +x local
+    // d'un billboard de lacet `yaw` pointe vers (cos yaw, 0, −sin yaw), et le
+    // +v est simplement la verticale. sunShared va DU soleil vers la scène,
+    // on la retourne pour viser la lumière.
+    const sx = -sunShared.x * Math.cos(yaw) + sunShared.z * Math.sin(yaw);
+    const sy = -sunShared.y;
+    const sl = Math.hypot(sx, sy) || 1;
+    // le ventre s'assombrit quand le soleil est haut, le nuage s'embrase au ras
+    const graze = 1 - Math.min(1, Math.max(0, (sunY - 0.02) / 0.5));
 
     for (const b of banks) {
       b.mat.emissiveColor.copyFrom(tint);
       b.mat.alpha = vis;
+      const cl = b.mat.cloudLight;
+      cl.sunU = sx / sl; cl.sunV = sy / sl;
+      cl.dens = 2.2 + 1.6 * day;
+      cl.shade[0] = 0.40 + 0.16 * graze;
+      cl.shade[1] = 0.45 + 0.10 * graze;
+      cl.shade[2] = 0.60 - 0.06 * graze;
+      cl.rim[0] = (0.10 + 0.42 * graze) * day;
+      cl.rim[1] = (0.09 + 0.26 * graze) * day;
+      cl.rim[2] = (0.10 + 0.10 * graze) * day;
       for (let j = 0; j < b.idx.length; j++) {
         const c = state[b.idx[j]];
         c.ang += c.drift * dt;                       // la nappe tourne au vent
