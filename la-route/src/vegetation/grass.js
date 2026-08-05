@@ -16,7 +16,23 @@ import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTextur
 import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import { MaterialPluginBase } from '@babylonjs/core/Materials/materialPluginBase.js';
 import { windClock, sunShared, hazeShared } from './wind.js';
-import { groundHeight, roadQuery, ROAD_HALF, GARAGE, FORD } from '../terrain/road.js';
+import { groundHeight, roadQuery, ROAD_HALF, GARAGE, FORD, fordShape } from '../terrain/road.js';
+
+/**
+ * Dans le lit du ruisseau ? L'herbe n'y pousse pas. FORD était importé ici
+ * depuis le début et n'a jamais servi : le tapis se semait donc EN TRAVERS
+ * du gué, et les touffes debout sous la nappe translucide faisaient des
+ * paquets bleus à bords francs de part et d'autre du courant. La marge
+ * évite aussi les brins qui percent la surface au ras de la berge.
+ */
+function inStream(x, z) {
+  const dx = x - FORD.x, dz = z - FORD.z;
+  const along = dx * FORD.nx + dz * FORD.nz;
+  if (Math.abs(along) > FORD.halfLen) return false;
+  const sh = fordShape(along / FORD.halfLen);
+  const across = dx * FORD.tx + dz * FORD.tz - sh.wob;
+  return Math.abs(across) < sh.half + 0.55;
+}
 
 /**
  * Vent + couchage : un seul plugin pour le tapis. L'amplitude croît avec la
@@ -378,6 +394,7 @@ export function plantGrass(scene, deformState, opts = {}) {
       const rq = roadQuery(x, z);
       if (rq.dist < ROAD_HALF + 0.35) continue;                  // pas sur la chaussée
       if (Math.abs(x - GARAGE.x) < GARAGE.hw + 1 && z > GARAGE.z0 - 2 && z < GARAGE.z1) continue;
+      if (inStream(x, z)) continue;
       // plus rase sur le talus, plus haute dans le sous-bois
       const lush = 0.6 + Math.min(1, rq.dist / 14) * 0.55;
       const s = (0.7 + rnd() * 0.6) * lush;
@@ -389,6 +406,7 @@ export function plantGrass(scene, deformState, opts = {}) {
       const a = rnd() * Math.PI * 2, r = 4 + Math.sqrt(rnd()) * (R - 4);
       const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
       if (roadQuery(x, z).dist < ROAD_HALF + 2.2) continue;      // la fougère fuit la route
+      if (inStream(x, z)) continue;
       const s = 0.7 + rnd() * 0.75;
       writeM(bufF, fi++, x, groundHeight(x, z) - 0.05, z, s, s * (0.8 + rnd() * 0.5), rnd() * 3.14);
     }
@@ -401,6 +419,7 @@ export function plantGrass(scene, deformState, opts = {}) {
       const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
       const rq = roadQuery(x, z);
       if (rq.dist < ROAD_HALF + 1.6) continue;
+      if (inStream(x, z)) continue;
       const s = 0.62 + rnd() * 0.75;
       writeM(bufT, ti++, x, groundHeight(x, z) - 0.05, z, s, s * (0.75 + rnd() * 0.6), rnd() * 3.14);
     }
@@ -411,6 +430,7 @@ export function plantGrass(scene, deformState, opts = {}) {
       const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
       const rq = roadQuery(x, z);
       if (rq.dist < ROAD_HALF + 3) continue;
+      if (inStream(x, z)) continue;                              // le roseau borde l'eau, il n'y pousse pas
       const gy = groundHeight(x, z);
       // un creux local : le sol descend par rapport à ses voisins
       const low = (groundHeight(x + 3, z) + groundHeight(x - 3, z)
@@ -428,6 +448,7 @@ export function plantGrass(scene, deformState, opts = {}) {
       for (let k = 0; k < n && wi < N_FLOW; k++) {
         const x = bx + (rnd() - 0.5) * 2.6, z = bz + (rnd() - 0.5) * 2.6;
         if (roadQuery(x, z).dist < ROAD_HALF + 1.2) continue;
+        if (inStream(x, z)) continue;
         const s = 0.7 + rnd() * 0.6;
         writeM(bufW, wi++, x, groundHeight(x, z) - 0.03, z, s, s, rnd() * 3.14);
       }
@@ -438,6 +459,7 @@ export function plantGrass(scene, deformState, opts = {}) {
       const a = rnd() * Math.PI * 2, r = 6 + Math.sqrt(rnd()) * (R - 6);
       const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
       if (roadQuery(x, z).dist < ROAD_HALF + 3.5) continue;
+      if (inStream(x, z)) continue;
       const s = 0.55 + rnd() * 0.8;
       writeM(bufB, bi++, x, groundHeight(x, z) - 0.35 * s, z, s, s * (0.6 + rnd() * 0.35), rnd() * 3.14);
     }

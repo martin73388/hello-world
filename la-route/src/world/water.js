@@ -16,6 +16,7 @@ import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { ParticleSystem } from '@babylonjs/core/Particles/particleSystem.js';
 import { FresnelParameters } from '@babylonjs/core/Materials/fresnelParameters.js';
+import { hazeShared } from '../vegetation/wind.js';
 import '@babylonjs/core/Meshes/thinInstanceMesh.js';
 import { height, FORD, fordShape } from '../terrain/road.js';
 
@@ -118,7 +119,10 @@ export function buildWater(scene, refs = {}) {
    * la verticale, exactement ce que fait l'œil sur une eau calme. */
   const mat = new StandardMaterial('waterM', scene);
   mat.diffuseColor = new Color3(0.06, 0.13, 0.14);    // fond d'eau sombre
-  mat.specularColor = new Color3(0.7, 0.75, 0.8);     // le soleil s'y allume
+  // spéculaire SERRÉ : à 0,7 la nappe entière prenait le lustre du ciel
+  // hémisphérique et lisait comme un ruban de peinture cyan posé sur l'herbe.
+  // On ne garde que la tache de soleil.
+  mat.specularColor = new Color3(0.22, 0.24, 0.26);
   mat.specularPower = 220;
   mat.emissiveColor = new Color3(0.2, 0.31, 0.43);    // teinte de ciel, mutée
   mat.alpha = 0.9;
@@ -284,10 +288,29 @@ export function buildWater(scene, refs = {}) {
     rip2.vOffset -= dt * 0.21;
     rip2.uOffset -= dt * 0.026;
     if (sunY !== undefined) {
-      // l'eau reflète le ciel du moment : sombre la nuit, bleue à midi
       const d = Math.min(1, Math.max(0, (sunY + 0.08) / 0.3));
-      skyTint.copyFromFloats(0.03 + d * 0.17, 0.05 + d * 0.26, 0.09 + d * 0.34);
+      // L'eau reflète LE CIEL DU MOMENT, pas un bleu de convention. La rampe
+      // précédente allait du noir au bleu quelle que soit l'heure : au
+      // couchant, la nappe restait grise sous un ciel orange. On prend donc
+      // la couleur de brume, que la boucle vient de caler sur le brouillard
+      // du moment — elle vire à l'ocre en même temps que le ciel.
+      const k = 0.11 + d * 0.30;
+      // ... et au SOLEIL RASANT elle vire au chaud. La couleur de brume reste
+      // bleu-gris au couchant (c'est le fond de vallée, pas le ciel) ; sans ce
+      // biais, la nappe restait grise sous un ciel écarlate.
+      const warm = 1 - Math.min(1, Math.max(0, sunY / 0.35));
+      skyTint.copyFromFloats(
+        hazeShared.r * k * (1 + 0.85 * warm),
+        hazeShared.g * k * (1 + 0.22 * warm),
+        hazeShared.b * k * (1 - 0.38 * warm));
       mat.emissiveColor.copyFrom(skyTint);
+      // écume et rides prennent la même lumière : blanches sous un ciel bleu,
+      // dorées au couchant
+      const ke = 0.55 + d * 0.45;
+      fmat.emissiveColor.copyFromFloats(hazeShared.r * ke * (1 + 0.5 * warm),
+        hazeShared.g * ke * (1 + 0.12 * warm), hazeShared.b * ke * (1 - 0.3 * warm));
+      rmat.emissiveColor.copyFromFloats(hazeShared.r * ke * 0.8 * (1 + 0.5 * warm),
+        hazeShared.g * ke * 0.8, hazeShared.b * ke * 0.8 * (1 - 0.3 * warm));
       fmat.alpha = 0.16 + d * 0.3;
       rmat.alpha = 0.1 + d * 0.24;
     }
