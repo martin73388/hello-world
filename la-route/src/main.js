@@ -789,7 +789,7 @@ async function start() {
   addEventListener('resize', () => engine.resize());
 
   // F9 : les trois captures 1440p de référence, cadrées à l'identique
-  const capture = installCapture(engine, scene, camera, state, weather, setHint);
+  const capture = installCapture(engine, scene, state, weather, setHint);
 
   // poignées de développement (cadrage des captures d'itération)
   window.__laroute = { state, scene, engine, deform, van, driver, weather, fire, horn,

@@ -227,6 +227,49 @@ précédente, toutes en amont du premier pixel.
   fois chaud. Les chiffres de PERF.md se mesurent fenêtre au premier plan —
   Chrome bride un onglet occulté à 30 fps, ce qui invalide toute mesure prise
   en pilotage automatique.
+- WebGL et WebGPU rendent la MÊME image : au même cadrage, les deux séries de
+  captures sont identiques à moins de 6 code values de moyenne absolue (l'écart
+  restant est la phase du vent et du re-semis, pas le moteur). Le chemin `?gl`
+  reste donc un outil de dev honnête.
+
+## Le mode capture mesurait autre chose que l'écran
+
+Découvert en prenant les premières captures sur la machine cible, et c'est le
+correctif le plus lourd de conséquences de la session : **F9 ne rendait pas
+l'image du jeu**.
+
+`Tools.CreateScreenshotUsingRenderTarget` re-rend la scène dans une cible hors
+écran via `camera.outputRenderTarget`, et ce chemin ne fait pas passer l'image
+par la chaîne de post accrochée à la caméra. Les captures sortaient donc en
+couleur brute : sans ACES, sans saturation, sans lift bleu, sans quantification
+rétro. Mesuré au cadrage plein-jour, même frame :
+
+| | écran | capture RTT |
+|---|---|---|
+| moyenne RVB | 80/104/67 | 159/165/165 |
+| 1er centile | 30 | 139 |
+| étendue (p01→p99) | 154 | 41 |
+| saturation moyenne | 51 | 7 |
+
+Une bouillie grise sans ombres, là où l'écran montre une forêt verte
+contrastée. La conséquence dépasse le bug : **toutes les vérifications « par
+capture » des passes précédentes ont jugé cette bouillie** — y compris les
+critiques confiées à des agents qui ne voyaient QUE l'image rendue, dispositif
+dont c'était précisément la raison d'être. Le critère du PORTAGE 3.2 (« 1er
+percentile de la frame entre 3 et 8 code values ») était inatteignable par
+construction : la capture partait à 139.
+
+Le mode capture copie désormais le back buffer réel — tampon de rendu
+redimensionné en 1440p, quelques frames pour que les passes de post se
+recalent, puis recopie du canvas tel qu'il est présenté. Ce que la capture
+montre est ce que le joueur voit. Sur les trois cadrages : saturation 46→55,
+1er centile 22→30, étendue 131→193.
+
+Les trois captures de référence de la machine cible sont dans
+`screenshots/cible/` — ce sont les premières images honnêtes du projet, et
+l'« avant » réel de la passe densité.
+
+## Passe « d'après référence » (silhouettes et lumière)
 
 ## Passe « d'après référence » (silhouettes et lumière)
 

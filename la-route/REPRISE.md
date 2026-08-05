@@ -75,6 +75,31 @@ restante**, tout commité/poussé avant la pause.
 - Le jeu expose `window.__laroute` (state, weather.setTime/setWeather, …).
 - Références Valheim : `scratchpad/ref/valheim-01..10.jpg` (jamais commis).
 
+## Tranche « machine cible » (session locale, MacBook M4)
+
+La session tourne désormais SUR la machine cible, plus en sandbox : Chrome +
+WebGPU réel, rendu à pleine vitesse. Deux choses en découlent.
+
+1. **Le chemin WebGPU n'avait jamais démarré.** Quatre pannes en série, toutes
+   avant le premier pixel (greffes de prototype WebGL-seulement, plugins GLSL
+   refusés sur matériau WGSL, `@stride` sur les tableaux d'uniformes,
+   `textureSample` en flot non uniforme). Corrigé et vérifié : 361
+   sous-maillages compilés, image identique au chemin `?gl`.
+2. **Le mode capture mesurait autre chose que l'écran.** Le chemin RTT
+   n'appliquait pas la chaîne de post : toutes les captures de vérification des
+   passes précédentes jugeaient une bouillie grise désaturée. Voir DECISIONS,
+   section dédiée. F9 copie maintenant le back buffer.
+
+**Conséquence sur ce qui précède** : les validations « vérifié par captures »
+de la passe densité (bentCard, Tier 1, litière, étage moyen) ont été prononcées
+sur des images fausses. Le travail lui-même n'est pas invalidé — le code est
+sain, il tourne — mais son JUGEMENT esthétique est à refaire sur les nouvelles
+captures. C'est le premier chantier de la reprise, avant d'ajouter quoi que ce
+soit.
+
+Nouvel « avant » de référence : `screenshots/cible/cible-{plein-jour,midi,
+contre-jour}-1440p.png`.
+
 ## Pièges connus (ne pas retomber dedans)
 
 - **WGSL — tableaux d'uniformes** : un `uniform vec4 x[16]` ressort de la

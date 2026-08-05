@@ -1,22 +1,40 @@
 /**
  * Mode capture — F9 sort les trois images de référence en 1440p.
  *
- * Pourquoi ça existe : le rendu de développement est du WebGL logiciel, plus
- * terne et moins net que la cible WebGPU. Juger la direction artistique
- * suppose donc des captures prises sur la machine du joueur — et pour que
- * deux séries soient comparables, il faut que le CADRAGE soit rigoureusement
- * le même : même heure, même météo, même position, même cap, même distance.
- * Refaire ça à la main donne trois images qu'on ne peut pas superposer.
+ * Pourquoi ça existe : pour que deux séries soient comparables, il faut que le
+ * CADRAGE soit rigoureusement le même — même heure, même météo, même position,
+ * même cap, même distance. Refaire ça à la main donne trois images qu'on ne
+ * peut pas superposer. F9 pose donc la scène trois fois — plein jour, midi,
+ * contre-jour — et rend chaque image en 2560 × 1440 quelle que soit la taille
+ * de la fenêtre. Les fichiers tombent dans le dossier de téléchargement sous
+ * `laroute-<cadrage>-1440p.png`.
  *
- * F9 pose donc la scène trois fois — plein jour, midi, contre-jour — et rend
- * chaque image en 2560 × 1440 quelle que soit la taille de la fenêtre, via
- * une cible de rendu dédiée. Les fichiers tombent dans le dossier de
- * téléchargement sous `laroute-<cadrage>-1440p.png`.
+ * POURQUOI ON NE PASSE PLUS PAR CreateScreenshotUsingRenderTarget
+ *
+ * C'était l'implémentation d'origine, et elle mentait. Cette fonction re-rend
+ * la scène dans une cible hors écran via `camera.outputRenderTarget`, et ce
+ * chemin-là ne fait PAS passer l'image par la chaîne de post accrochée à la
+ * caméra. On récupérait la couleur brute : sans ACES, sans saturation, sans
+ * lift, sans quantification rétro — l'étalonnage entier manquait.
+ *
+ * Mesuré au même cadrage, sur la machine cible :
+ *
+ *                écran        capture RTT
+ *   moyenne      80/104/67    159/165/165
+ *   1er centile  30           139
+ *   étendue      154          41
+ *   saturation   51           7
+ *
+ * La capture rendait une bouillie grise là où l'écran montre une forêt verte
+ * contrastée. Toutes les vérifications « par capture » des passes précédentes
+ * — y compris celles soumises à des agents critiques qui ne voyaient QUE
+ * l'image — ont jugé cette bouillie.
+ *
+ * On copie donc le back buffer réel : on redimensionne le tampon de rendu en
+ * 1440p, on laisse les passes de post se recaler, et on recopie le canvas tel
+ * qu'il est présenté. Ce que la capture montre est ce que le joueur voit —
+ * seule propriété qui rende une capture utilisable comme preuve.
  */
-import { Tools } from '@babylonjs/core/Misc/tools.js';
-// effet de bord : c'est ce module qui greffe CreateScreenshotUsingRenderTarget
-// sur Tools. Sans lui, Babylon lève « ScreenshotTools needs to be imported ».
-import '@babylonjs/core/Misc/screenshotTools.js';
 
 /** Les trois cadrages. Toute modification casse la comparabilité des séries
  * déjà prises : on ajoute, on ne change pas. */
@@ -32,7 +50,7 @@ const W = 2560, H = 1440;
  * @param download  false pour récupérer les data-URL au lieu de télécharger
  *                  (c'est ce que fait le test de bout en bout)
  */
-export function installCapture(engine, scene, camera, state, weather, setHint) {
+export function installCapture(engine, scene, state, weather, setHint) {
   let busy = false;
 
   /** attend N frames rendues : le tapis d'herbe se re-sème en deux phases et
@@ -44,10 +62,29 @@ export function installCapture(engine, scene, camera, state, weather, setHint) {
     });
   });
 
-  const shot = () => new Promise((res) => {
-    Tools.CreateScreenshotUsingRenderTarget(engine, camera, { width: W, height: H },
-      (data) => res(data), 'image/png', 1, true);
-  });
+  /**
+   * Rend une frame en 1440p et recopie le back buffer.
+   * Le canvas garde sa taille CSS (100 %) : seul le tampon de rendu change,
+   * donc la fenêtre ne bouge pas à l'écran pendant la série.
+   */
+  const shot = async () => {
+    const rc = engine.getRenderingCanvas();
+    engine.setSize(W, H, true);
+    // les passes de post recréent leurs cibles à la taille du moteur : il leur
+    // faut quelques frames avant que la chaîne entière soit en 1440p
+    await frames(8);
+    const data = await new Promise((res) => {
+      engine.onEndFrameObservable.addOnce(() => {
+        const out = document.createElement('canvas');
+        out.width = W; out.height = H;
+        out.getContext('2d').drawImage(rc, 0, 0);
+        res(out.toDataURL('image/png'));
+      });
+    });
+    engine.resize(true);                 // retour à la taille de la fenêtre
+    await frames(2);
+    return data;
+  };
 
   async function run(download = true) {
     if (busy) return [];
