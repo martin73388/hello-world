@@ -185,3 +185,38 @@ Chaque écart au brief, en une ligne, avec sa raison.
   Réseau bloqué = aucun shader ne compile. L'échec est désormais explicite
   (écran de diagnostic dédié) au lieu d'un écran noir, et tout shader qui
   échoue à compiler est signalé à l'écran plutôt que dégradé en silence.
+
+## Passe « d'après référence » (silhouettes et lumière)
+
+Cette passe-là n'est pas partie d'une idée mais de dix captures de la
+référence, regardées une par une. Ce qu'elles ont appris :
+
+- Un conifère n'est PAS un cône. C'est un fût NU sur ses deux premiers
+  tiers — c'est ce vide qui fait la forêt-colonnade et qui laisse passer
+  les rais — surmonté de branches INDIVIDUELLES qui rayonnent et
+  retombent. La silhouette est ajourée : on voit à travers l'arbre. D'où
+  des cartes de branche découpées dans l'alpha, deux croisées par branche
+  (une carte plate seule disparaît vue par la tranche).
+- Un houppier de feuillu n'est pas un volume non plus. Les icosaèdres
+  pleins lisaient comme des cailloux verts facettés. Une coque de cartes
+  de feuilles à bord déchiqueté, réparties en spirale de Fibonacci à
+  rayons irréguliers, coûte le même budget et laisse passer la lumière.
+- Ce qui fait le contre-jour n'est pas l'intensité du soleil, c'est le
+  BASCULEMENT DE TEINTE : dans la référence, la moitié de l'image tournée
+  vers le soleil est orangée et l'autre franchement bleue. La brume prend
+  donc la couleur de la lumière qui la traverse, modulée par l'angle entre
+  le regard et le soleil. Elle suit l'arc solaire toute seule.
+- Corollaire découvert par ce contre-jour : le plancher de ciel diffus
+  ajoutait `baseColor * ambiante`, or baseColor est la texture SEULE
+  (blanche sans texture). Tout ce qui n'est pas texturé recevait du bleu
+  de ciel PUR — les troncs viraient au mauve au lieu de rester des
+  silhouettes. Il faut passer par vDiffuseColor.
+- Le volume d'un nuage se CALCULE, il ne se peint pas : ré-échantillonner
+  l'alpha de la carte décalée vers le soleil approxime l'épaisseur
+  traversée. L'ombrage tourne alors avec la journée. Peint, il restait
+  figé du même côté à toute heure.
+- La fougère est une strate à part, large et basse, pas une touffe
+  d'herbe de plus. Peinte avec la recette des brins fins, elle se
+  confondait avec le tapis.
+- Le sol du sous-bois est vert-terre, pas kaki : un kaki vire au sable en
+  plein jour et fait des plaques nues entre les touffes.

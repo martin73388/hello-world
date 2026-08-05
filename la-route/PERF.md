@@ -42,9 +42,10 @@ Coûts M3 à surveiller (overlay F1 sur le M4) :
 
 | Système | Coût à surveiller |
 | --- | --- |
-| Tapis d'herbe | ~22 000 instances sur 5 maillages, re-semées en 2 phases tous les 7 m ; alpha-test (pas de tri), pas de mipmaps |
-| Bouleaux et repères | thin instances, construits une fois puis figés |
-| Nuages | 26 cartes en billboard, matrices recomposées chaque frame (négligeable) |
+| Tapis d'herbe | ~23 000 instances sur 5 maillages, re-semées en 2 phases tous les 7 m ; alpha-test (pas de tri), pas de mipmaps |
+| Pins | 1 900 instances × 78 cartes de branche = ~150 k quads alpha-testés. Le poste tient parce que les cartes sont minuscules au-delà de 40 m ; s'il faut couper, retirer un verticille sur deux au-dessus de 8 m dans `WHORLS` |
+| Bouleaux et repères | thin instances, construits une fois puis figés ; houppier = 31 cartes alpha-testées par arbre sur 420 arbres |
+| Nuages | 26 cartes en billboard, matrices recomposées chaque frame ; +3 taps de texture par fragment pour l'ombrage volumétrique — coût de fill, pas de draw |
 | Crêtes | 3 cylindres texturés, aucune mise à jour de géométrie |
 | Rais de lumière | 16 quads additifs, inactifs hors lumière rasante — coût nul à midi et la nuit |
 | Gué | nappe + écume + rides (3 passes transparentes), 260 galets et 46 nénuphars en thin instances |
