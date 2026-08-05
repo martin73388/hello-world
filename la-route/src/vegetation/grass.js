@@ -431,6 +431,13 @@ export function plantGrass(scene, deformState, opts = {}) {
   const bufT = new Float32Array(N_TALL * 16);
   const bufR = new Float32Array(N_REED * 16);
   const bufW = new Float32Array(N_FLOW * 16);
+  // les teintes par instance (PORTAGE 1.2) — remplies par sowCell avec les matrices
+  const colG = new Float32Array(N_GRASS * 4);
+  const colF = new Float32Array(N_FERN * 4);
+  const colB = new Float32Array(N_BUSH * 4);
+  const colT = new Float32Array(N_TALL * 4);
+  const colR = new Float32Array(N_REED * 4);
+  const colW = new Float32Array(N_FLOW * 4);
 
   /**
    * Écrit une matrice TRS à plat, colonne-major (PORTAGE 1.3 : stand + bulk).
@@ -457,6 +464,24 @@ export function plantGrass(scene, deformState, opts = {}) {
   const D = 0.6;                                    // portée des différences
   /** ±15 % sur un axe horizontal — le « bulk » du PORTAGE 1.3 */
   const BULK = (rnd) => 0.85 + rnd() * 0.3;
+  /**
+   * Teinte par instance (PORTAGE 1.2, volet tapis) — la réponse au « tapis
+   * d'un seul vert » des captures plein-jour. Valeur ±23 % autour de la
+   * moyenne, chroma quasi neutre (la couleur de l'espèce vient de sa texture,
+   * la teinte ne fait que la MODULER), et ~1/9 des individus vire au chaud :
+   * jaunissant au-delà de 0,84, sec au-delà de 0,93. Même machinerie que les
+   * pins (buffer thin-instance 'color'), éprouvée sur WebGPU.
+   */
+  const tint = (buf, i, rnd, shade) => {
+    const v = (0.60 + rnd() * 0.46) * shade;
+    const age = rnd();
+    let r = v, g = v, b = v;
+    if (age > 0.93) { r = 0.50 + v * 0.30; g = 0.40 + v * 0.24; b = 0.24 + v * 0.12; }
+    else if (age > 0.84) { r = v * 1.14; g = v * 1.02; b = v * 0.70; }
+    const o = i * 4;
+    buf[o] = r; buf[o + 1] = g; buf[o + 2] = b; buf[o + 3] = 1;
+  };
+
   /** Budget d'une cellule : la part du disque qu'elle occupe. La somme sur les
    * cellules du rayon retombe donc sur le budget total, à l'arrondi près. */
   const quota = (n) => Math.max(1, Math.round(n * CELL * CELL / (Math.PI * R * R)));
@@ -526,8 +551,10 @@ export function plantGrass(scene, deformState, opts = {}) {
       const lush = 0.6 + Math.min(1, rq.dist / 14) * 0.55;
       const s = (0.7 + rnd() * 0.6) * lush;
       const gy = groundHeight(x, z);
-      writeM(bufG, ctr.g++, x, gy - 0.04, z, s * BULK(rnd), s * (0.75 + rnd() * 0.7),
+      const gi = ctr.g++;
+      writeM(bufG, gi, x, gy - 0.04, z, s * BULK(rnd), s * (0.75 + rnd() * 0.7),
         rnd() * 3.14, 0.9, s * BULK(rnd), gy);
+      tint(colG, gi, rnd, 1.0);
       n++;
     }
 
@@ -539,8 +566,10 @@ export function plantGrass(scene, deformState, opts = {}) {
       if (inStream(x, z) || inGarage(x, z)) continue;
       const s = 0.7 + rnd() * 0.75;
       const gy = groundHeight(x, z);
-      writeM(bufF, ctr.f++, x, gy - 0.05, z, s * BULK(rnd), s * (0.8 + rnd() * 0.5),
+      const fi = ctr.f++;
+      writeM(bufF, fi, x, gy - 0.05, z, s * BULK(rnd), s * (0.8 + rnd() * 0.5),
         rnd() * 3.14, 0.7, s * BULK(rnd), gy);
+      tint(colF, fi, rnd, 0.85);          // la fougère reste la masse sombre
       n++;
     }
 
@@ -552,8 +581,10 @@ export function plantGrass(scene, deformState, opts = {}) {
       if (inStream(x, z) || inGarage(x, z)) continue;
       const s = 0.62 + rnd() * 0.75;
       const gy = groundHeight(x, z);
-      writeM(bufT, ctr.t++, x, gy - 0.05, z, s * BULK(rnd), s * (0.75 + rnd() * 0.6),
+      const ti = ctr.t++;
+      writeM(bufT, ti, x, gy - 0.05, z, s * BULK(rnd), s * (0.75 + rnd() * 0.6),
         rnd() * 3.14, 0.85, s * BULK(rnd), gy);
+      tint(colT, ti, rnd, 0.97);
       n++;
     }
 
@@ -571,8 +602,10 @@ export function plantGrass(scene, deformState, opts = {}) {
       const s = 0.7 + rnd() * 0.6;
       // le roseau est raide et pousse dans un creux : il se redresse plus que
       // l'herbe, sinon il se couche vers le fond de la cuvette
-      writeM(bufR, ctr.r++, x, gy - 0.05, z, s * BULK(rnd), s * (0.8 + rnd() * 0.55),
+      const ri = ctr.r++;
+      writeM(bufR, ri, x, gy - 0.05, z, s * BULK(rnd), s * (0.8 + rnd() * 0.55),
         rnd() * 3.14, 0.45, s * BULK(rnd), gy);
+      tint(colR, ri, rnd, 0.9);
       n++;
     }
 
@@ -587,8 +620,10 @@ export function plantGrass(scene, deformState, opts = {}) {
         if (inStream(x, z) || inGarage(x, z)) continue;
         const s = 0.7 + rnd() * 0.6;
         const gy = groundHeight(x, z);
-        writeM(bufW, ctr.w++, x, gy - 0.03, z, s * BULK(rnd), s,
+        const wi = ctr.w++;
+        writeM(bufW, wi, x, gy - 0.03, z, s * BULK(rnd), s,
           rnd() * 3.14, 0.8, s * BULK(rnd), gy);
+        tint(colW, wi, rnd, 1.0);
         n++;
       }
     }
@@ -601,8 +636,10 @@ export function plantGrass(scene, deformState, opts = {}) {
       if (inStream(x, z) || inGarage(x, z)) continue;
       const s = 0.55 + rnd() * 0.8;
       const gy = groundHeight(x, z);
-      writeM(bufB, ctr.b++, x, gy - 0.35 * s, z, s * BULK(rnd), s * (0.6 + rnd() * 0.35),
+      const bi = ctr.b++;
+      writeM(bufB, bi, x, gy - 0.35 * s, z, s * BULK(rnd), s * (0.6 + rnd() * 0.35),
         rnd() * 3.14, 0.5, s * BULK(rnd), gy);
+      tint(colB, bi, rnd, 0.8);           // ligneux, plus sombre
       n++;
     }
   }
@@ -646,6 +683,12 @@ export function plantGrass(scene, deformState, opts = {}) {
   tall.thinInstanceSetBuffer('matrix', bufT, 16, false);
   reed.thinInstanceSetBuffer('matrix', bufR, 16, false);
   flower.thinInstanceSetBuffer('matrix', bufW, 16, false);
+  grass.thinInstanceSetBuffer('color', colG, 4, false);
+  fern.thinInstanceSetBuffer('color', colF, 4, false);
+  bush.thinInstanceSetBuffer('color', colB, 4, false);
+  tall.thinInstanceSetBuffer('color', colT, 4, false);
+  reed.thinInstanceSetBuffer('color', colR, 4, false);
+  flower.thinInstanceSetBuffer('color', colW, 4, false);
 
   // re-semis en 2 phases (CPU lourd, upload léger) — étalé sur 2 frames
   let phase = 0, tx = 0, tz = 0;
@@ -655,12 +698,12 @@ export function plantGrass(scene, deformState, opts = {}) {
       return;
     }
     if (phase === 1) { sow(tx, tz); phase = 2; return; }
-    grass.thinInstanceBufferUpdated('matrix');
-    fern.thinInstanceBufferUpdated('matrix');
-    bush.thinInstanceBufferUpdated('matrix');
-    tall.thinInstanceBufferUpdated('matrix');
-    reed.thinInstanceBufferUpdated('matrix');
-    flower.thinInstanceBufferUpdated('matrix');
+    grass.thinInstanceBufferUpdated('matrix'); grass.thinInstanceBufferUpdated('color');
+    fern.thinInstanceBufferUpdated('matrix'); fern.thinInstanceBufferUpdated('color');
+    bush.thinInstanceBufferUpdated('matrix'); bush.thinInstanceBufferUpdated('color');
+    tall.thinInstanceBufferUpdated('matrix'); tall.thinInstanceBufferUpdated('color');
+    reed.thinInstanceBufferUpdated('matrix'); reed.thinInstanceBufferUpdated('color');
+    flower.thinInstanceBufferUpdated('matrix'); flower.thinInstanceBufferUpdated('color');
     cx = tx; cz = tz; phase = 0;
   }
 
