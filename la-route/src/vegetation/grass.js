@@ -80,7 +80,7 @@ uniform float grTransl; uniform vec3 grSun; uniform vec3 grAmb;
         // TRAMÉE et non un fondu alpha : on est en découpe franche, un
         // fondu imposerait un tri de transparence sur 23 000 instances.
         float grEye = length(vEyePosition.xyz - vPositionW);
-        float grFade = smoothstep(0.85, 2.3, grEye);
+        float grFade = smoothstep(0.7, 1.55, grEye);   // bande courte : le moucheté ne doit pas gagner l'image
         float grDith = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
         if (grDith > grFade) discard;
         vec3 grV = normalize(vEyePosition.xyz - vPositionW);

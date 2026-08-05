@@ -56,6 +56,14 @@ export function buildShafts(scene, trunks, groundHeight) {
   mat.emissiveColor = new Color3(1, 0.88, 0.62);
   mat.alphaMode = 1;                                 // ADDITIF : de la lumière
   mat.alpha = 0;
+  // fogEnabled=false : c'est le drapeau que applyHaze() lit pour NE PAS
+  // greffer la brume sur ce matériau. Sans lui, le plugin de brume se posait
+  // sur un matériau à `disableLighting` — donc sans vPositionW déclaré — le
+  // shader ne compilait pas et le maillage n'était JAMAIS dessiné. Les rais
+  // existaient, se plaçaient, s'allumaient dans la bonne fenêtre solaire, et
+  // ne s'affichaient pas. `plane.applyFog` ne suffit pas : il porte sur le
+  // maillage, applyHaze() inspecte les MATÉRIAUX.
+  mat.fogEnabled = false;
   plane.material = mat;
   plane.applyFog = false;
   plane.isPickable = false;
@@ -70,9 +78,12 @@ export function buildShafts(scene, trunks, groundHeight) {
   const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
   const slots = [];
   for (let i = 0; i < N; i++) {
-    slots.push({ ox: 0, oz: 0, w: 1.6 + rnd() * 3.4, h: 9 + rnd() * 7, ph: rnd() * 6.3, live: false });
+    // hauteur calée sur la CANOPÉE, qui est montée à 12 m avec les nouveaux
+    // pins : des lames de 9 m ne descendaient plus du feuillage, elles
+    // flottaient à mi-tronc
+    slots.push({ ox: 0, oz: 0, w: 2.0 + rnd() * 4.2, h: 15 + rnd() * 10, ph: rnd() * 6.3, live: false });
   }
-  let reseed = 1e9;
+  let reseed = 1e9, seedX = 1e9, seedZ = 1e9;
 
   const q = new Quaternion(), sc = new Vector3(), tr = new Vector3(), m = new Matrix();
 
@@ -90,14 +101,17 @@ export function buildShafts(scene, trunks, groundHeight) {
     if (d < -Math.PI) d += Math.PI * 2;
     const facing = Math.max(0, Math.min(1, (1.5 - Math.abs(d)) / 0.9));
     const amt = graze * facing * clear;
-    mat.alpha = amt * 0.4;
+    mat.alpha = amt * 0.5;
     if (amt <= 0.002) return;                        // rien à animer
 
-    // les rais se replacent quand le joueur s'est déplacé : ils s'accrochent
-    // à des troncs proches, comme si la lumière passait derrière eux
+    // Les rais s'accrochent à des troncs proches, comme si la lumière passait
+    // derrière eux. Le déclencheur est le DÉPLACEMENT, pas seulement un
+    // minuteur : sur un minuteur de 2,5 s de temps simulé, il suffisait de
+    // marcher un peu pour que les lames restent plantées 80 m en arrière,
+    // hors champ — les rais existaient et ne se voyaient jamais.
     reseed += dt;
-    if (reseed > 2.5) {
-      reseed = 0;
+    if (reseed > 2.5 || Math.hypot(px - seedX, pz - seedZ) > 6) {
+      reseed = 0; seedX = px; seedZ = pz;
       let k = 0;
       for (let i = 0; i < trunks.length && k < N; i += 7) {
         const t = trunks[i];
@@ -119,7 +133,8 @@ export function buildShafts(scene, trunks, groundHeight) {
         // largeur qui respire : la poussière bouge dans le faisceau
         const br = 0.82 + 0.18 * Math.sin(c.ph + performance.now() * 0.0004);
         sc.set(c.w * br, c.h, 1);
-        tr.set(c.ox, groundHeight(c.ox, c.oz) + c.h * 0.42, c.oz);
+        // le pied de la lame reste au sol, le sommet monte dans le feuillage
+        tr.set(c.ox, groundHeight(c.ox, c.oz) + c.h * 0.46, c.oz);
       }
       Matrix.ComposeToRef(sc, q, tr, m);
       m.copyToArray(buf, i * 16);
@@ -127,5 +142,5 @@ export function buildShafts(scene, trunks, groundHeight) {
     plane.thinInstanceBufferUpdated('matrix');
   }
 
-  return { update };
+  return { update, slots };            // slots exposés : diagnostic depuis la console
 }
