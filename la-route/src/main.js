@@ -28,6 +28,7 @@ import { buildSky } from './world/sky.js';
 import { buildClouds } from './world/clouds.js';
 import { buildRidges } from './world/ridges.js';
 import { buildShafts } from './world/shafts.js';
+import { installCapture } from './ui/capture.js';
 import { buildWater } from './world/water.js';
 import { applyHaze } from './world/haze.js';
 import { hazeShared } from './vegetation/wind.js';
@@ -759,8 +760,11 @@ async function start() {
 
   addEventListener('resize', () => engine.resize());
 
+  // F9 : les trois captures 1440p de référence, cadrées à l'identique
+  const capture = installCapture(engine, scene, camera, state, weather, setHint);
+
   // poignées de développement (cadrage des captures d'itération)
   window.__laroute = { state, scene, engine, deform, van, driver, weather, fire, horn,
     garage, post, retro, grass, clouds, shafts, water, flora, cabin, ridges, wild,
-    isAboard: () => aboard, localPos: lp };
+    capture, isAboard: () => aboard, localPos: lp };
 }

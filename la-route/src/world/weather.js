@@ -378,11 +378,18 @@ export function createWeather(scene, refs) {
 
   /** ouvre une transition vers un état : la position courante devient le
    * point de départ, donc changer d'avis en cours de route ne saute jamais */
-  function startTo(name) {
-    if (!W[name] || name === toName) return;
+  function startTo(name, instant) {
+    if (!W[name]) return;
+    if (name === toName && !instant) return;
     for (let i = 0; i < WKEYS.length; i++) from[WKEYS[i]] = cur[WKEYS[i]];
     toName = name;
-    wp = 0;
+    wp = instant ? 1 : 0;
+    // `instant` sert au mode capture : une transition de météo dure une
+    // vingtaine de secondes, on ne peut pas cadrer une image dessus
+    if (instant) {
+      const to = W[name];
+      for (let i = 0; i < WKEYS.length; i++) cur[WKEYS[i]] = to[WKEYS[i]];
+    }
     dwell = DWELL_MIN + rnd() * DWELL_SPAN;
   }
 
