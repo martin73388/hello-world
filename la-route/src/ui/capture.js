@@ -34,6 +34,15 @@
  * 1440p, on laisse les passes de post se recaler, et on recopie le canvas tel
  * qu'il est présenté. Ce que la capture montre est ce que le joueur voit —
  * seule propriété qui rende une capture utilisable comme preuve.
+ *
+ * CONTREPARTIE ASSUMÉE : copier le back buffer exige que l'onglet soit VISIBLE.
+ * Masqué, il n'est pas composité, et `drawImage` sur le canvas rend du noir
+ * uniforme — une image de 76 ko au lieu de 5 Mo, moyenne (0,0,0). Le chemin
+ * hors écran, lui, marchait sans fenêtre au premier plan : il était donc
+ * scriptable en aveugle, ce qui explique sans doute qu'on ne se soit jamais
+ * demandé ce qu'il rendait vraiment. On préfère une capture vraie qui exige
+ * une fenêtre à une capture commode qui ment. Vérifier `document.visibility-
+ * State === 'visible'` avant de conclure quoi que ce soit d'une série.
  */
 
 /** Les trois cadrages. Toute modification casse la comparabilité des séries

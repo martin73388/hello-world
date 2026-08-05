@@ -111,6 +111,13 @@ d'ombres est le premier poste à attaquer, et de loin.
 
 - Serveur : `cd la-route && npm run dev`. Note le port annoncé : 5173 peut
   déjà être pris par une instance laissée ouverte.
+- **La fenêtre doit être VISIBLE pour capturer.** Onglet masqué : rAF est
+  suspendu (zéro frame) et le canvas se lit noir — une capture de 76 ko,
+  moyenne (0,0,0). Si la boucle est arrêtée, on peut la piloter à la main
+  (`en._activeRenderLoops.slice()` puis appeler les callbacks en boucle : elles
+  font la mise à jour du jeu ET le rendu), mais ça ne rend PAS le canvas
+  lisible — seule la visibilité le fait. Toujours vérifier
+  `document.visibilityState` avant de conclure d'une série.
 - **Captures** : ouvrir la page dans Chrome et appeler `__laroute.capture.run()`
   (ou F9). `run(false)` renvoie les data-URL au lieu de télécharger — c'est ce
   qu'il faut pour les écrire ailleurs que dans le dossier de téléchargement.
