@@ -22,12 +22,16 @@ function paintTexture(scene) {
   const g = tex.getContext();
   let seed = 41;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  g.fillStyle = '#d9cfb4'; g.fillRect(0, 0, 512, 232);          // crème patinée
-  g.fillStyle = '#8a4530'; g.fillRect(0, 232, 512, 280);        // rouge brique
-  g.fillStyle = '#c8c2b2'; g.fillRect(0, 226, 512, 12);         // jonc chromé
+  // Tôle peinte NEUTRE, sans bande de couleur : la livrée deux tons se fait par
+  // la teinte du matériau, pas par la texture. Peinte ici, elle se répétait sur
+  // chaque caisson — CreateBox plaque l'image entière sur chaque face, si bien
+  // qu'en remontant le flanc on lisait rouge, crème, rouge, crème, et que les
+  // faces avant et arrière l'étiraient autrement que les flancs. Le van avait
+  // l'air d'être deux véhicules superposés.
+  g.fillStyle = '#efe9dd'; g.fillRect(0, 0, 512, 512);
   for (let i = 0; i < 260; i++) {                               // usure, poussière
     const y = rnd() * 512;
-    g.fillStyle = y > 232 ? 'rgba(60,26,16,.25)' : 'rgba(120,110,88,.22)';
+    g.fillStyle = 'rgba(96,88,74,.20)';
     g.fillRect(rnd() * 512, y, 2 + rnd() * 9, 1 + rnd() * 3);
   }
   for (const x of [96, 236, 380]) {                             // joints de panneaux
@@ -64,10 +68,21 @@ export function buildVan(scene, shadows, ground) {
   body.parent = root;
 
   /* ---- matériaux ---- */
-  const paint = new StandardMaterial('vanPaintM', scene);
-  paint.diffuseTexture = paintTexture(scene);
-  paint.specularColor = new Color3(0.32, 0.3, 0.26);            // vernis fatigué
-  paint.specularPower = 42;
+  // Une seule tôle, deux teintes : la livrée d'un camping-car se lit en bandes
+  // horizontales franches, et c'est la TEINTE du matériau qui les porte. La
+  // texture reste neutre et partagée, donc le grain et les joints de panneaux
+  // sont continus d'un caisson à l'autre.
+  const paintTex = paintTexture(scene);
+  const mkPaint = (name, r, g, b) => {
+    const m = new StandardMaterial(name, scene);
+    m.diffuseTexture = paintTex;
+    m.diffuseColor = new Color3(r, g, b);
+    m.specularColor = new Color3(0.32, 0.3, 0.26);              // vernis fatigué
+    m.specularPower = 42;
+    return m;
+  };
+  const paintLo = mkPaint('vanPaintLo', 0.54, 0.27, 0.19);      // rouge brique
+  const paintHi = mkPaint('vanPaintHi', 0.85, 0.81, 0.71);      // crème patinée
   const chrome = new StandardMaterial('vanChrome', scene);
   chrome.diffuseColor = new Color3(0.38, 0.4, 0.44);
   chrome.specularColor = new Color3(0.95, 0.95, 0.98);
@@ -98,9 +113,27 @@ export function buildVan(scene, shadows, ground) {
   };
 
   /* ---- caisse ---- */
-  box('vLower', 2.0, 1.02, 5.2, 0, 1.04, 0, paint);
-  box('vUpper', 1.96, 0.95, 5.2, 0, 2.02, 0, paint);
-  box('vRoof', 1.84, 0.1, 5.02, 0, 2.54, 0, paint);
+  // La caisse est faite de trois caissons empilés, et la peinture est une
+  // livrée DEUX TONS : crème en haut, jonc chromé, rouge brique en bas. Or
+  // CreateBox plaque la texture entière sur CHAQUE face — chaque caisson
+  // recevait donc son propre exemplaire de la livrée. En remontant le flanc on
+  // lisait rouge, crème, rouge, crème : la ligne de séparation apparaissait
+  // deux fois, aux mauvais endroits, et les faces avant et arrière l'étiraient
+  // autrement que les flancs. Le van avait l'air d'être deux véhicules
+  // superposés.
+  //
+  // On recale donc la coordonnée V de chaque sommet sur sa HAUTEUR RÉELLE dans
+  // le véhicule. La livrée fait alors le tour de la caisse d'un seul tenant,
+  // et le jonc chromé est une ligne continue à la bonne hauteur. U n'est pas
+  // touché : le grain et les joints de panneaux restent à leur échelle.
+  box('vLower', 2.0, 1.02, 5.2, 0, 1.04, 0, paintLo);
+  box('vUpper', 1.96, 0.95, 5.2, 0, 2.02, 0, paintHi);
+  box('vRoof', 1.84, 0.1, 5.02, 0, 2.54, 0, paintHi);
+  // Jonc chromé à la jonction des deux teintes. Il n'est pas décoratif : les
+  // deux caissons ont la MÊME profondeur et le même centre en z, donc leurs
+  // faces avant et arrière sont rigoureusement coplanaires et se disputaient le
+  // pixel. Le jonc déborde de deux centimètres tout autour et couvre la couture.
+  box('vTrim', 2.04, 0.07, 5.24, 0, 1.55, 0, chrome);
   box('vBumpF', 2.06, 0.17, 0.14, 0, 0.62, 2.66, chrome);
   box('vBumpR', 2.06, 0.17, 0.14, 0, 0.62, -2.66, chrome);
   // vitres : pare-brise, portes cabine, flanc arrière, portes arrière
