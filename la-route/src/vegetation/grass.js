@@ -73,12 +73,16 @@ uniform float grTransl; uniform vec3 grSun; uniform vec3 grAmb;
         // (la pointe est fine, elle transmet mieux que la base).
         CUSTOM_FRAGMENT_BEFORE_FRAGCOLOR: `
 #ifdef GRASS
-        // La caméra orbite derrière le joueur et se retrouve DANS le tapis
-        // dès qu'on baisse la vue ; une fronde de 1,55 m remplissait alors
-        // tout l'écran d'aplats verts. On évide donc une petite sphère autour
-        // de l'œil — on est déjà à l'intérieur, le trou ne se voit pas.
+        // La caméra orbite derrière le joueur et traverse le tapis : une
+        // touffe à un mètre de l'œil barre la moitié de l'écran d'un aplat
+        // vert, et ce sont les captures 1440p qui l'ont rendu criant. On
+        // FOND donc le tapis à l'approche de l'œil. La dissolution est
+        // TRAMÉE et non un fondu alpha : on est en découpe franche, un
+        // fondu imposerait un tri de transparence sur 23 000 instances.
         float grEye = length(vEyePosition.xyz - vPositionW);
-        if (grEye < 0.72) discard;
+        float grFade = smoothstep(0.85, 2.3, grEye);
+        float grDith = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+        if (grDith > grFade) discard;
         vec3 grV = normalize(vEyePosition.xyz - vPositionW);
         float grBack = clamp(dot(grV, normalize(grSun)), 0.0, 1.0);
         // la texture du brin est peinte en dégradé pied sombre → pointe
