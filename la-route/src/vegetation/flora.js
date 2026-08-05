@@ -348,6 +348,25 @@ export function plantFlora(scene, shadows) {
   const birchBuf = upload(birchMats);
   bTrunk.thinInstanceSetBuffer('matrix', birchBuf, 16, true);
   bLeaf.thinInstanceSetBuffer('matrix', birchBuf, 16, true);
+  // teinte par instance (PORTAGE 1.2), feuillage seulement : valeur ±20 %
+  // et ~1/9 des houppiers qui jaunit — l'écorce blanche, elle, reste
+  // blanche. C'est la variance qui casse le « mur de bosquet » uniforme.
+  {
+    let cs2 = 1409;
+    const crnd = () => (cs2 = (cs2 * 16807) % 2147483647) / 2147483647;
+    const bufC = new Float32Array(birchMats.length * 4);
+    for (let i = 0; i < birchMats.length; i++) {
+      const v = 0.76 + crnd() * 0.4;
+      let r = v * (1 + (crnd() - 0.5) * 0.1), g = v, b = v * (1 + (crnd() - 0.5) * 0.06);
+      const age = crnd();
+      if (age > 0.89) {                              // jaunissement d'automne précoce
+        const t2 = (age - 0.89) * 6;
+        r = r * (1 - t2) + 1.05 * t2; g = g * (1 - t2) + 0.88 * t2; b = b * (1 - t2) + 0.34 * t2;
+      }
+      bufC[i * 4] = r; bufC[i * 4 + 1] = g; bufC[i * 4 + 2] = b; bufC[i * 4 + 3] = 1;
+    }
+    bLeaf.thinInstanceSetBuffer('color', bufC, 4, true);
+  }
 
   /* ================= 2. SOUCHES ================= */
   // cylindre bas, coupé net : faceUV[0] et [2] (les deux fonds) piochent la

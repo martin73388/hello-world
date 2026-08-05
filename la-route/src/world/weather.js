@@ -443,13 +443,20 @@ export function createWeather(scene, refs) {
       sun.intensity = 0.8 * moonAmt * (1 - 0.7 * cur.cloud);   // pleine lune
     } else {
       sun.direction.copyFromFloats(-se, -sy, -sn);
-      // rasant = rouge-orangé, zénith = blanc chaud, en deux paliers
-      const gold = sstep(0.02, 0.30, sy);
-      const high = sstep(0.28, 0.62, sy);
-      sun.diffuse.copyFromFloats(1,
-        lerp(lerp(0.40, 0.74, gold), 0.95, high),
-        lerp(lerp(0.17, 0.44, gold), 0.86, high));
-      sun.intensity = sunAmt * (1.05 + 1.45 * sstep(0.02, 0.55, sy)) * cur.sun;
+      // Couleur par EXTINCTION atmosphérique (PORTAGE 1.1), plus par
+      // paliers keyframés : masse d'air de Kasten-Young, puis
+      // exp(-β·airmass) par canal, normalisé au canal max — le rasant
+      // rougit PARCE QUE le bleu s'éteint, pas parce qu'on l'a décidé.
+      // Les palettes chaudes restent au DÔME ; ici on retire toute teinte
+      // décidée à la main pour ne pas compter le rougissement deux fois.
+      const hDeg = Math.max(0, Math.asin(Math.min(1, sy)) * 57.2958);
+      const am = Math.min(38, 1 / (sy + 0.50572 * Math.pow(6.07995 + hDeg, -1.6364)));
+      let cr = Math.exp(-0.19 * am), cg = Math.exp(-0.42 * am), cb = Math.exp(-0.95 * am);
+      const cm = Math.max(cr, Math.max(cg, cb));
+      sun.diffuse.copyFromFloats(cr / cm, cg / cm, cb / cm);
+      // même plafond qu'avant (≈2,5 à midi) mais en loi y^0.8 : la montée
+      // du matin est plus franche, le plateau de midi inchangé
+      sun.intensity = sunAmt * (1.05 + 1.45 * Math.min(1, Math.pow(sy / 0.55, 0.8))) * cur.sun;
     }
 
     /* ---- barycentre nuit / entre-deux / jour ---- */

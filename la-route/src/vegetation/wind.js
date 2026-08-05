@@ -96,9 +96,23 @@ uniform float wTransl; uniform vec3 wSunDir;
 #ifdef WIND
           if (wTransl > 0.0) {
             vec3 wV = normalize(vEyePosition.xyz - vPositionW);   // fragment -> œil
-            float wBack = clamp(dot(wV, normalize(wSunDir)), 0.0, 1.0);
-            float wRim = 1.0 - abs(dot(normalize(vNormalW), wV));
-            color.rgb += vec3(0.62, 0.55, 0.22) * pow(wBack, 3.0) * (0.35 + 0.65 * wRim) * wTransl;
+            vec3 wN = normalize(vNormalW);
+            // lobe COURBÉ par la normale (PORTAGE 1.5) : une feuille vue de
+            // profil transmet encore — le dot(V, soleil) pur l'éteignait net
+            vec3 wHs = normalize(normalize(wSunDir) + wN * 0.6);
+            float wBack = clamp(dot(wV, wHs), 0.0, 1.0);
+            float wRim = 1.0 - abs(dot(wN, wV));
+            // variance par plante : sans elle, la canopée rétroéclairée est
+            // UNE lueur uniforme au lieu de mille feuilles inégales
+            float wVar = 0.55 + 0.9 * fract(sin(dot(floor(vPositionW.xz * 0.45), vec2(37.719, 61.313))) * 43758.5453);
+            color.rgb += vec3(0.62, 0.55, 0.22) * pow(wBack, 3.0) * (0.35 + 0.65 * wRim) * wTransl * wVar;
+          }
+          // face abaxiale : le dessous d'une feuille est mat, plus pâle et
+          // plus gris que le dessus — vu en contre-plongée, un feuillage
+          // dont les deux faces sont identiques lit comme du carton peint
+          if (!gl_FrontFacing) {
+            color.rgb = mix(color.rgb,
+              vec3(dot(color.rgb, vec3(0.35, 0.5, 0.15))) * vec3(0.84, 0.96, 0.8), 0.3);
           }
 #endif
 `,

@@ -188,8 +188,18 @@ export function plantPines(scene, shadows) {
     if (Math.abs(x - GARAGE.x) < GARAGE.hw + 5 && z > GARAGE.z0 - 8 && z < GARAGE.z1 + 5) continue;
     const s = 0.62 + rnd() * 0.55;                   // ~7 à 14 m : on lève la tête
     const y = height(x, z) - 0.08;
-    Quaternion.RotationYawPitchRollToRef(rnd() * Math.PI * 2, (rnd() - 0.5) * 0.05, (rnd() - 0.5) * 0.05, q);
-    sc.set(s, s * (0.88 + rnd() * 0.34), s);
+    // stand() (PORTAGE 1.3) : l'arbre se conforme UN PEU à la pente (15 %)
+    // — un pin pousse vers le ciel, mais un pin de talus n'est pas
+    // parfaitement vertical non plus
+    const dhx = height(x + 0.5, z) - height(x - 0.5, z);
+    const dhz = height(x, z + 0.5) - height(x, z - 0.5);
+    const conform = 0.15;
+    Quaternion.RotationYawPitchRollToRef(rnd() * Math.PI * 2,
+      Math.atan(dhz) * conform + (rnd() - 0.5) * 0.05,
+      -Math.atan(dhx) * conform + (rnd() - 0.5) * 0.05, q);
+    // bulk() : échelle non uniforme par axe — deux voisins de même variante
+    // n'ont plus le même rapport hauteur/largeur
+    sc.set(s * (0.9 + rnd() * 0.2), s * (0.88 + rnd() * 0.34), s * (0.9 + rnd() * 0.2));
     tr.set(x, y, z);
     const m = Matrix.Compose(sc, q, tr);
     mats.push(m);
@@ -199,6 +209,24 @@ export function plantPines(scene, shadows) {
   for (let i = 0; i < mats.length; i++) mats[i].copyToArray(buf, i * 16);
   foliage.thinInstanceSetBuffer('matrix', buf, 16, true);
   trunk.thinInstanceSetBuffer('matrix', buf, 16, true);
+  // teinte par instance (PORTAGE 1.2) : valeur ±20 %, chroma presque neutre,
+  // et ~1/9 des arbres vire au roux (sénescence) — c'est la fin du mur vert
+  // uniforme. Le tronc partage le buffer : un arbre mourant chauffe entier.
+  let cs = 977;
+  const crnd = () => (cs = (cs * 16807) % 2147483647) / 2147483647;
+  const bufC = new Float32Array(mats.length * 4);
+  for (let i = 0; i < mats.length; i++) {
+    const v = 0.74 + crnd() * 0.42;
+    let r = v * (1 + (crnd() - 0.5) * 0.08), g = v, b = v * (1 + (crnd() - 0.5) * 0.08);
+    const age = crnd();
+    if (age > 0.89) {                                // le roux : aiguilles mortes
+      const t2 = (age - 0.89) * 6;
+      r = r * (1 - t2) + 1.0 * t2; g = g * (1 - t2) + 0.62 * t2; b = b * (1 - t2) + 0.3 * t2;
+    }
+    bufC[i * 4] = r; bufC[i * 4 + 1] = g; bufC[i * 4 + 2] = b; bufC[i * 4 + 3] = 1;
+  }
+  foliage.thinInstanceSetBuffer('color', bufC, 4, true);
+  trunk.thinInstanceSetBuffer('color', bufC, 4, true);
   foliage.receiveShadows = true;
   shadows.addShadowCaster(foliage);
   shadows.addShadowCaster(trunk);

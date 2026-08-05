@@ -107,8 +107,11 @@ uniform float grTransl; uniform vec3 grSun; uniform vec3 grAmb;
         // claire : sa luminance EST la hauteur le long du brin, et c'est
         // la pointe, fine, qui transmet le mieux la lumière
         float grUp = dot(baseColor.rgb, vec3(0.33, 0.5, 0.17));
+        // variance par touffe (PORTAGE 1.5) : le contre-jour n'est pas une
+        // nappe égale, chaque touffe transmet différemment
+        float grVar = 0.6 + 0.8 * fract(sin(dot(floor(vPositionW.xz * 0.9), vec2(37.719, 61.313))) * 43758.5453);
         color.rgb += vec3(0.78, 0.86, 0.30) * pow(grBack, 2.2)
-                   * (0.25 + 1.5 * grUp) * grTransl * baseColor.rgb * 2.2;
+                   * (0.25 + 1.5 * grUp) * grTransl * baseColor.rgb * 2.2 * grVar;
         // plancher d'éclairage : la carte a une normale VERTICALE, donc au
         // soleil rasant N·L tombe à zéro et le brin devient noir. Une herbe
         // réelle capte toujours un peu de ciel. Le plancher SUIT l'ambiante
