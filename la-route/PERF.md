@@ -1,4 +1,12 @@
-# PERF — budget de frame (cible 90 fps = 11,1 ms)
+# PERF — budget de frame (cible 40 fps = 25 ms)
+
+> **Cible revue par le joueur : 40 fps suffisent, 90 n'étaient pas nécessaires.**
+> Le budget passe donc de 11,1 à 25 ms, et la scène mesurée à 25,3 ms est
+> *déjà* au niveau. Ce qui était un déficit d'un facteur deux à trois devient
+> une marge à défendre : on peut dépenser sur l'image, à condition de mesurer
+> chaque dépense. Les leviers connus et chiffrés — 6,3 ms sur le feuillage des
+> ombres, 3,8 ms sur le MSAA — restent disponibles pour financer ce qu'on
+> ajoutera.
 
 | Système        | Budget | Mesuré |
 | -------------- | ------ | ------ |

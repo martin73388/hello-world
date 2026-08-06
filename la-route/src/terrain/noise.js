@@ -47,6 +47,60 @@ export function ridged(x, z, octaves, lac, gain) {
   return sum / norm;
 }
 
+/**
+ * Le TRACÉ, points de contrôle. Il vit ici et non dans road.js parce que le
+ * terrain en a besoin AVANT la route : c'est lui qui définit l'axe du fond de
+ * vallée, donc l'endroit où les montagnes ne se lèvent pas. road.js l'importe
+ * pour en faire sa spline — une seule source, sinon la route finirait par
+ * grimper le flanc qu'on aura creusé pour elle.
+ */
+export const CTRL = [
+  [0, 60], [0, 30], [0, 0], [-9, -35], [7, -70], [26, -105],
+  [8, -140], [-22, -175], [-34, -215], [-30, -255], [-30, -290],
+];
+
+/**
+ * Abscisse du fond de vallée à la cote z. Interpolation linéaire sur les points
+ * de contrôle, pas de spline : on cherche un AXE, pas un tracé au centimètre,
+ * et cette fonction est appelée des dizaines de milliers de fois par
+ * remplissage de patch. Onze points parcourus au pire, sans allocation.
+ */
+export function valleyAxisX(z) {
+  if (z >= CTRL[0][1]) return CTRL[0][0];
+  const last = CTRL[CTRL.length - 1];
+  if (z <= last[1]) return last[0];
+  for (let i = 0; i < CTRL.length - 1; i++) {
+    const a = CTRL[i], b = CTRL[i + 1];
+    if (z <= a[1] && z >= b[1]) {
+      const t = (a[1] - z) / (a[1] - b[1]);
+      return a[0] + (b[0] - a[0]) * t;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Les PRAIRIES. Renvoie 0 sous couvert, 1 en pleine clairière.
+ *
+ * Une forêt uniforme n'a pas d'échelle : sans trouée, l'œil ne voit jamais plus
+ * loin que trente mètres et le relief qu'on vient de sculpter reste invisible.
+ * Les clairières ne sont donc pas un ornement — ce sont elles qui donnent à
+ * voir la montagne, et qui font que la forêt redevient un lieu quand on y
+ * rentre.
+ *
+ * Bruit basse fréquence sur 120 m, seuillé haut. Le seuil est MESURÉ, pas
+ * deviné : à cette échelle le fBm du projet ne s'étale pas de 0 à 1 mais de
+ * 0,07 à 0,44, médiane 0,27 — le lissage bilinéaire ramène tout vers le
+ * milieu. Un seuil posé à 0,52 « au jugé » n'ouvrait donc RIEN du tout, ce que
+ * le premier relevé a montré immédiatement. À 0,27 sur une largeur de 0,10, un
+ * cinquième du sol s'ouvre dont la moitié en pleine clairière, en taches larges
+ * et molles avec une bordure d'une quarantaine de mètres.
+ */
+export function clearing(x, z) {
+  const n = fbm(x / 120 + 5.1, z / 120 - 2.7, 2, 2.1, 0.5);
+  return smooth(Math.min(1, Math.max(0, (n - 0.27) / 0.10)));
+}
+
 // vent dominant : les formes moyennes et fines s'étirent le long de cet axe
 const WIND = { x: 0.85, z: 0.53 };
 
@@ -75,6 +129,27 @@ const WIND = { x: 0.85, z: 0.53 };
  * ses déblais-remblais se creuseront d'autant.
  */
 export function baseHeight(x, z) {
+  /* ---- LES MONTAGNES ----
+   * Une montagne posée n'importe où rendrait la route impraticable : elle
+   * l'escaladerait, puisqu'elle échantillonne ce terrain. On construit donc une
+   * VALLÉE — un fond plat le long de l'axe du tracé, des flancs qui montent
+   * au-delà. La route reste au fond, le relief se lève autour d'elle, et c'est
+   * la même chose vue de la route ou vue d'en haut.
+   *
+   * Le fond fait 52 m de demi-largeur, de quoi loger la chaussée, ses talus,
+   * les prairies et le ruisseau. Les flancs montent ensuite sur 140 m jusqu'à
+   * 62 m de haut : à cette pente moyenne (24°) on peut encore y grimper, et
+   * elle suffit à ce que la crête sorte du couvert et ferme l'horizon.
+   *
+   * Le relief des flancs n'est PAS un simple profil lissé : il est modulé par
+   * le bruit à crêtes, à amplitude proportionnelle à la montée. Une pente
+   * uniforme lit comme un talus de remblai ; ce sont les ravines et les épaules
+   * qui la font lire comme une montagne. Au fond de vallée le terme s'annule,
+   * donc la prairie reste une prairie. */
+  const dAxe = Math.abs(x - valleyAxisX(z));
+  const flanc = smooth(Math.min(1, Math.max(0, (dAxe - 52) / 140)));
+  const mont = flanc * 62
+    + flanc * (ridged(x / 78 - 4.2, z / 78 + 9.6, 3, 2.1, 0.5) - 0.42) * 34;
   // grandes ondulations de vallée
   const broad = (fbm(x / 95, z / 95, 3, 2.1, 0.5) - 0.5) * 16;
   // croupes et vallons : les lignes de partage du terrain
@@ -87,5 +162,5 @@ export function baseHeight(x, z) {
   // litière fine
   const fine = (fbm(x / 5.5, z / 5.5, 2, 2.3, 0.5) - 0.5) * 0.9;
   // la vallée s'incline doucement vers le nord (la route descend)
-  return broad + crest + medium + hum + fine - z * 0.012;
+  return mont + broad + crest + medium + hum + fine - z * 0.012;
 }

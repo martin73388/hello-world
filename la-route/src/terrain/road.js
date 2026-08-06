@@ -3,12 +3,7 @@
  * long du tracé, et requête « distance au tracé » utilisée pour sculpter le
  * terrain (déblai/remblai) et écarter les arbres.
  */
-import { baseHeight } from './noise.js';
-
-const CTRL = [
-  [0, 60], [0, 30], [0, 0], [-9, -35], [7, -70], [26, -105],
-  [8, -140], [-22, -175], [-34, -215], [-30, -255], [-30, -290],
-];
+import { baseHeight, CTRL } from './noise.js';
 
 function catmull(p0, p1, p2, p3, t) {
   const t2 = t * t, t3 = t2 * t;

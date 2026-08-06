@@ -21,6 +21,7 @@ import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTextur
 import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { height, roadQuery, GARAGE } from '../terrain/road.js';
+import { clearing } from '../terrain/noise.js';
 import { WindPlugin } from './wind.js';
 import { addBentCard, cardAcc, accToMesh } from './bentCard.js';
 import { Matrix as BMatrix } from '@babylonjs/core/Maths/math.vector.js';
@@ -186,6 +187,14 @@ export function plantPines(scene, shadows) {
     if (rq.dist < 8.0) continue;                     // la route respire — et les
     // couronnes (jusqu'à ~3 m de rayon) ne surplombent jamais la chaussée
     if (Math.abs(x - GARAGE.x) < GARAGE.hw + 5 && z > GARAGE.z0 - 8 && z < GARAGE.z1 + 5) continue;
+    /* Les PRAIRIES. Une forêt uniforme n'a pas d'échelle : sans trouée, l'œil
+     * ne porte jamais à plus de trente mètres et la montagne qu'on vient de
+     * lever reste invisible. Le champ de clairière ne rejette pas franchement —
+     * il donne une PROBABILITÉ de survie à l'arbre, ce qui produit des lisières
+     * qui s'éclaircissent sur quarante mètres au lieu d'une ligne de coupe.
+     * Quelques arbres survivent en pleine prairie : ce sont eux qui donnent
+     * l'échelle du pré, et sans eux la clairière lit comme un terrain vague. */
+    if (rnd() < clearing(x, z) * 0.93) continue;
     const s = 0.62 + rnd() * 0.55;                   // ~7 à 14 m : on lève la tête
     const y = height(x, z) - 0.08;
     // stand() (PORTAGE 1.3) : l'arbre se conforme UN PEU à la pente (15 %)
