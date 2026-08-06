@@ -535,7 +535,7 @@ async function start() {
       const nearPad = Math.abs(van.st.x - GARAGE.x) < GARAGE.hw + 3
         && van.st.z > GARAGE.z0 - 7 && van.st.z < GARAGE.z1 + 3;
       const offroad = !nearPad && roadQuery(van.st.x, van.st.z).dist > ROAD_HALF + 0.5;
-      van.update(dt, { throttle: iz, steer: ix, offroad, mist: weather.rainEase() }, vanBlocked);
+      van.update(dt, { throttle: iz, steer: ix, offroad, mist: weather.rainEase(), night: weather.nightFactor() }, vanBlocked);
       // les pneus creusent hors chaussée — sillons continus (pas de 0,24 m)
       wheelAcc += Math.abs(van.st.speed) * dt;
       if (wheelAcc > 0.24 && Math.abs(van.st.speed) > 0.4) {
@@ -600,7 +600,7 @@ async function start() {
        * les collisions contre le mobilier en local, PUIS on repasse en
        * monde. Le van peut rouler pendant ce temps : le sol bouge sous les
        * pieds sans que la marche ait besoin de le savoir. */
-      van.update(dt, { throttle: 0, steer: 0, offroad: false, mist: weather.rainEase() }, vanBlocked);
+      van.update(dt, { throttle: 0, steer: 0, offroad: false, mist: weather.rainEase(), night: weather.nightFactor() }, vanBlocked);
       dust.plumes[0].emitRate = 0; dust.plumes[1].emitRate = 0;
       const il = Math.hypot(ix, iz);
       if (il > 0) {
@@ -699,7 +699,7 @@ async function start() {
       }
       deform.update(dt, state.px, state.pz);
       terrain.patchTick(state.px, state.pz);
-      van.update(dt, { throttle: 0, steer: 0, offroad: false, mist: weather.rainEase() }, vanBlocked);
+      van.update(dt, { throttle: 0, steer: 0, offroad: false, mist: weather.rainEase(), night: weather.nightFactor() }, vanBlocked);
       dust.plumes[0].emitRate = 0; dust.plumes[1].emitRate = 0;
       // L'escalier du van porte le marcheur : sans ça les deux marches ne
       // seraient que du décor, on les traverserait au ras du sol avant de se

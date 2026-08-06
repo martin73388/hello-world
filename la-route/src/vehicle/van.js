@@ -102,6 +102,64 @@ function rearTexture(scene) {
   return tex;
 }
 
+/**
+ * Le combiné, en DEUX toiles jumelles. Une seule, montée en emissiveTexture,
+ * ferait luire le fond du cadran autant que les chiffres et le combiné
+ * deviendrait une plaque grise : la seconde est un POCHOIR — fond noir pur,
+ * seuls les traits sont peints, donc hors des traits rien n'émet. C'est
+ * exactement ce que fait un cadran rétro-éclairé.
+ *
+ * Pourquoi aucune lumière : le pire cas du projet est déjà mesuré à huit
+ * lumières actives pour un plafond de six. Une PointLight de tableau de bord
+ * n'AJOUTERAIT pas de la lumière, elle en évincerait — et ce sont les phares
+ * qui sauteraient.
+ *
+ * 512 × 192 px pour 0,40 × 0,14 m, soit 0,78 mm par pixel : le lettrage à 20 px
+ * fait 15 mm, lu à 65 cm. Sous 12 px la passe rétro (quantification + tramage)
+ * transforme les chiffres en bouillie — c'est la borne basse.
+ */
+function comboTexture(scene, glow) {
+  const tex = new DynamicTexture(glow ? 'vComboG' : 'vCombo',
+    { width: 512, height: 192 }, scene, true);
+  const g = tex.getContext();
+  let s = 6151;
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  g.fillStyle = glow ? '#000000' : '#1a1c1f'; g.fillRect(0, 0, 512, 192);
+  if (!glow) {                                        // grain de bakélite
+    for (let i = 0; i < 300; i++) {
+      g.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,.045)' : 'rgba(0,0,0,.24)';
+      g.fillRect(rnd() * 512, rnd() * 192, 1 + rnd() * 2, 1 + rnd() * 2);
+    }
+  }
+  g.strokeStyle = glow ? '#7fe0b4' : '#cfc7b2'; g.lineWidth = 2;
+  const dial = (cx, cy, r, n) => {
+    g.beginPath(); g.arc(cx, cy, r, 0, 7); g.stroke();
+    for (let i = 0; i <= n; i++) {
+      const a = 2.618 + (i / n) * 4.189;              // 240° de balayage
+      const l = i % 2 ? r * 0.1 : r * 0.2;
+      g.beginPath();
+      g.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+      g.lineTo(cx + Math.cos(a) * (r - l), cy + Math.sin(a) * (r - l));
+      g.stroke();
+    }
+  };
+  dial(150, 96, 74, 12); dial(346, 60, 34, 6); dial(346, 132, 34, 6);
+  g.fillStyle = glow ? '#7fe0b4' : '#e6ddc6';
+  g.font = '700 20px Georgia, serif'; g.textAlign = 'center';
+  for (let i = 0; i <= 4; i++) {                      // 0 à 60, plein cadran
+    const a = 2.618 + (i / 4) * 4.189;
+    g.fillText(String(i * 15), 150 + Math.cos(a) * 50, 96 + Math.sin(a) * 50 + 7);
+  }
+  g.font = '700 13px system-ui'; g.fillStyle = glow ? '#e8a33c' : '#b9ae95';
+  g.fillText('km/h', 150, 156); g.fillText('TEMP', 346, 22); g.fillText('ESS', 346, 176);
+  if (!glow) {                                        // le reflet est PEINT
+    g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 9;
+    g.beginPath(); g.moveTo(40, 190); g.lineTo(190, 2); g.stroke();
+  }
+  tex.update();
+  return tex;
+}
+
 export function buildVan(scene, shadows, ground) {
   const root = new TransformNode('vanRoot', scene);
   const body = new TransformNode('vanBody', scene);
@@ -134,7 +192,17 @@ export function buildVan(scene, shadows, ground) {
   glass.diffuseColor = new Color3(0.3, 0.42, 0.46);
   glass.specularColor = new Color3(1, 1, 1);
   glass.specularPower = 128;
-  glass.alpha = 0.38;
+  /* À 0,38 la teinte propre de la vitre pesait 38 % sur une scène déjà sombre
+   * le soir, et le pare-brise se lisait comme une dalle — supportable tant
+   * qu'il n'y avait rien derrière. À 0,26 il en passe 74 %, le point où la
+   * cabine reste lisible du dehors sans que la vitre cesse d'être une vitre.
+   * L'émissif n'est pas une lueur : c'est le PLANCHER de reflet de ciel,
+   * invisible de jour, mais il empêche le verre de tomber à zéro quand aucune
+   * lumière ne l'atteint. backFaceCulling reste VRAI : chaque vitre est une
+   * BOÎTE, elle présente toujours une face — le désactiver mélangerait ses deux
+   * faces et Babylon ne trie pas les faces à l'intérieur d'un maillage. */
+  glass.alpha = GLASS_A;
+  glass.emissiveColor = new Color3(0.03, 0.04, 0.05);
   const inn = new StandardMaterial('vanInn', scene);
   inn.diffuseColor = new Color3(0.3, 0.24, 0.18);
   inn.specularColor = new Color3(0.03, 0.03, 0.03);
@@ -168,7 +236,12 @@ export function buildVan(scene, shadows, ground) {
   // et le jonc chromé matérialise la ligne de séparation à la bonne hauteur.
   const vLower = box('vLower', 2.0, 1.02, 5.2, 0, 1.04, 0, paintLo);
   const vUpper = box('vUpper', 1.96, 0.95, 5.2, 0, 2.02, 0, paintHi);
-  box('vRoof', 1.84, 0.1, 5.02, 0, 2.54, 0, paintHi);
+  /* Le pavillon passe de 1,84 × 5,02 à 1,98 × 5,18. Ce n'est pas esthétique :
+   * les panneaux de flanc sont arasés à 2,485 et aboutés à ±2,580, et sans
+   * débord il resterait une rainure de dix millimètres sur toute la longueur.
+   * À ±0,990 il coiffe tout — une gouttière, ce qu'un fourgon a. INTERDIT de le
+   * porter à 1,96 : ses flancs tomberaient PILE sur ceux de vUpper. */
+  box('vRoof', 1.98, 0.1, 5.18, 0, 2.54, 0, paintHi);
 
   /**
    * Les caissons de caisse sont des boîtes PLEINES, et la cellule habitable les
@@ -219,14 +292,63 @@ export function buildVan(scene, shadows, ground) {
   const BZ0 = BAY_Z0, BZ1 = BAY_Z1, BTOP = 2.30, LT = 0.02;
   dropFace(vLower, -1, 0, 0);
   dropFace(vUpper, -1, 0, 0);
+  /* Les cinq vitres du van étaient des autocollants : collées sur des faces de
+   * caisson jamais percées. Le doublage, lui, est évidé depuis toujours autour
+   * de la ceinture — on regardait par un trou du contreplaqué pour tomber sur
+   * la tôle. La baie coulissante est la seule ouverture réelle du véhicule ; on
+   * applique aux trois autres faces la recette qu'elle a écrite. */
+  dropFace(vUpper, 1, 0, 0);            // flanc droit : deux vitres aveugles
+  dropFace(vUpper, 0, 0, 1);            // le nez
+  dropFace(vUpper, 0, 0, -1);           // la lunette
   // bas de caisse, de part et d'autre de la baie
   box('vFlkLoR', LT, 1.02, BZ0 + 2.6, -1.0 + LT / 2, 1.04, (-2.6 + BZ0) / 2, paintLo);
   box('vFlkLoF', LT, 1.02, 2.6 - BZ1, -1.0 + LT / 2, 1.04, (BZ1 + 2.6) / 2, paintLo);
   // haut de caisse, idem, plus le linteau au-dessus de l'ouverture
-  box('vFlkHiR', LT, 0.95, BZ0 + 2.6, -0.98 + LT / 2, 2.02, (-2.6 + BZ0) / 2, paintHi);
-  box('vFlkHiF', LT, 0.95, 2.6 - BZ1, -0.98 + LT / 2, 2.02, (BZ1 + 2.6) / 2, paintHi);
-  box('vFlkHiT', LT, 2.495 - BTOP, BZ1 - BZ0, -0.98 + LT / 2,
-    (BTOP + 2.495) / 2, (BZ0 + BZ1) / 2, paintHi);
+  /* Les panneaux hauts butaient sur ±2,600 et 2,495 — les plans d'about et de
+   * dessus des caissons — avec la MÊME normale : trois bagarres de pixels le
+   * long des arêtes, déjà présentes, et percer le flanc droit les aurait
+   * dupliquées. Les faces avant et arrière de vUpper étant déposées, on peut
+   * roder de 20 mm : les panneaux de nez et de cul referment le coin, et le
+   * pavillon élargi coiffe l'arase. On ne touche PAS aux panneaux bas : leur
+   * face avant est coplanaire avec celle de vLower, qui existe toujours, et les
+   * rogner ouvrirait un tunnel puisque la face -x de vLower, elle, est déposée. */
+  const HZ = 2.58, HTOP = 2.485;                          // about et arase
+  const SY0 = BELT_Y0 - SKIN_M, SY1 = BELT_Y1 + SKIN_M;   // 1,850 / 2,310
+  const SZ0 = CABW_Z0 - SKIN_M, SZ1 = CABW_Z1 + SKIN_M;   // 1,240 / 2,350
+  const HX = -0.98 + LT / 2, RX = 0.98 - LT / 2;          // ∓0,970
+  const SBH = SY0 - 1.545, STH = HTOP - SY1, SWH = SY1 - SY0;
+  const SBY = (1.545 + SY0) / 2, STY = (SY1 + HTOP) / 2, SWY = (SY0 + SY1) / 2;
+  // flanc gauche arrière + linteau de baie
+  box('vFlkHiR', LT, HTOP - 1.545, HZ + BZ0, HX, (1.545 + HTOP) / 2, (-HZ + BZ0) / 2, paintHi);
+  box('vFlkHiT', LT, HTOP - BTOP, BZ1 - BZ0, HX, (BTOP + HTOP) / 2, (BZ0 + BZ1) / 2, paintHi);
+  // flanc gauche avant : recoupé en quatre pour ouvrir la vitre du conducteur
+  box('vFlkHiFb', LT, SBH, HZ - BZ1, HX, SBY, (BZ1 + HZ) / 2, paintHi);
+  box('vFlkHiFh', LT, STH, HZ - BZ1, HX, STY, (BZ1 + HZ) / 2, paintHi);
+  box('vFlkHiFr', LT, SWH, SZ0 - BZ1, HX, SWY, (BZ1 + SZ0) / 2, paintHi);
+  box('vFlkHiFa', LT, SWH, HZ - SZ1, HX, SWY, (SZ1 + HZ) / 2, paintHi);
+  // flanc droit : deux trous d'un coup, la custode de cellule et la vitre de
+  // cabine. Derrière la custode, le doublage a SON trou depuis toujours — il
+  // donnait sur de la tôle.
+  box('vFlkRb', LT, SBH, HZ * 2, RX, SBY, 0, paintHi);
+  box('vFlkRh', LT, STH, HZ * 2, RX, STY, 0, paintHi);
+  box('vFlkRr', LT, SWH, (CUST_Z0 - SKIN_M) + HZ, RX, SWY, (-HZ + CUST_Z0 - SKIN_M) / 2, paintHi);
+  box('vFlkRm', LT, SWH, SZ0 - (CUST_Z1 + SKIN_M), RX, SWY, (CUST_Z1 + SKIN_M + SZ0) / 2, paintHi);
+  box('vFlkRa', LT, SWH, HZ - SZ1, RX, SWY, (SZ1 + HZ) / 2, paintHi);
+  /* Le nez et le cul. Les panneaux démarrent à 1,545 comme vUpper, ce qui remet
+   * cinq millimètres de tôle sur le plan 2,600 déjà occupé par la face avant de
+   * vLower, même normale. On l'assume : le jonc vTrimF couvre exactement cette
+   * couture. Démarrer plus haut aurait supprimé la coplanarité mais ouvert un
+   * trou d'épingle au coin, que rien ne bouche. */
+  const NZ = 2.59, CZ2 = -2.59, WSX = 0.85;
+  box('vNezB', 1.96, SY0 - 1.545, LT, 0, (1.545 + SY0) / 2, NZ, paintHi);
+  box('vNezH', 1.96, 2.495 - SY1, LT, 0, (SY1 + 2.495) / 2, NZ, paintHi);
+  box('vNezG', 0.98 - WSX, SWH, LT, -(0.98 + WSX) / 2, SWY, NZ, paintHi);
+  box('vNezD', 0.98 - WSX, SWH, LT, (0.98 + WSX) / 2, SWY, NZ, paintHi);
+  const LX = LUN_X + SKIN_M, LY0 = LUN_Y0 - SKIN_M, LY1 = LUN_Y1 + SKIN_M;
+  box('vCulB', 1.96, LY0 - 1.545, LT, 0, (1.545 + LY0) / 2, CZ2, paintHi);
+  box('vCulH', 1.96, 2.495 - LY1, LT, 0, (LY1 + 2.495) / 2, CZ2, paintHi);
+  box('vCulG', 0.98 - LX, LY1 - LY0, LT, -(0.98 + LX) / 2, (LY0 + LY1) / 2, CZ2, paintHi);
+  box('vCulD', 0.98 - LX, LY1 - LY0, LT, (0.98 + LX) / 2, (LY0 + LY1) / 2, CZ2, paintHi);
   // montants et seuil : la baie a un encadrement, sinon la tranche de la tôle
   // se lit comme une découpe au cutter
   box('vBaieMr', 0.05, BTOP - 0.53, 0.05, -1.01, (0.53 + BTOP) / 2, BZ0 + 0.025, chrome);
@@ -255,11 +377,22 @@ export function buildVan(scene, shadows, ground) {
   box('vTrimB', 2.02, TH2, 0.04, 0, TY, -2.615, chrome);
   box('vBumpF', 2.06, 0.17, 0.14, 0, 0.62, 2.66, chrome);
   box('vBumpR', 2.06, 0.17, 0.14, 0, 0.62, -2.66, chrome);
-  // vitres : pare-brise, portes cabine, flanc arrière, portes arrière
-  const ws = box('vWs', 1.68, 0.62, 0.02, 0, 2.12, 2.615, glass);
+  /* LE PARE-BRISE. Il était posé sur la tôle pleine, incliné autour de son
+   * centre : bord bas quatre à cinq centimètres EN SAILLIE de la peau, bord
+   * haut ENTERRÉ derrière elle, le plan du vitrage croisant la tôle à 2,270. Du
+   * dehors on n'en voyait que la moitié basse, en relief sur de la peinture.
+   * Il vit maintenant dans l'embrasure du pare-feu : ses quatre arêtes sont
+   * enterrées dans le doublage, aucune tranche visible, et une surface tournée
+   * de 0,1 rad ne peut plus être coplanaire avec quoi que ce soit d'aligné. */
+  const ws = box('vWs', 1.74, 0.50, 0.014, 0, 2.08, 2.545, glass);
   ws.rotation.x = -0.1;
-  box('vWinL', 0.02, 0.5, 0.78, -0.992, 2.1, 1.62, glass);
-  box('vWinR', 0.02, 0.5, 0.78, 0.992, 2.1, 1.62, glass);
+  // Les vitres latérales gardent leur plan d'origine, deux millimètres en
+  // saillie de la peau : c'est le montage de la maison. Elles recouvrent
+  // l'ouverture de tôle de 20 mm sur les quatre côtés — sans ce recouvrement un
+  // rasant de quinze degrés découvre la tranche et le ciel passe par la fente.
+  const GY = (BELT_Y0 + BELT_Y1) / 2, GH = SY1 - SY0 + 0.04;
+  box('vWinL', 0.02, GH, SZ1 - SZ0 + 0.04, -0.992, GY, (SZ0 + SZ1) / 2, glass);
+  box('vWinR', 0.02, GH, SZ1 - SZ0 + 0.04, 0.992, GY, (SZ0 + SZ1) / 2, glass);
   // Pas de custode à gauche : l'emplacement est occupé par la BAIE
   // COULISSANTE. La vitre qui s'y trouvait appartenait à la caisse et non à la
   // portière — donc elle ne coulissait pas avec elle : portière fermée elle
@@ -267,8 +400,18 @@ export function buildVan(scene, shadows, ground) {
   // sortait plus sombre que le droit), et portière ouverte elle restait
   // suspendue en travers de l'ouverture, un mètre de verre en plein passage.
   // La portière a sa propre vitre, viPorteVitre.
-  box('vWinR2', 0.02, 0.44, 1.0, 0.992, 2.08, -0.4, glass);
-  box('vWinB', 1.3, 0.4, 0.02, 0, 2.12, -2.615, glass);
+  box('vWinR2', 0.02, GH, CUST_Z1 - CUST_Z0 + 0.06, 0.992, GY, (CUST_Z0 + CUST_Z1) / 2, glass);
+  box('vWinB', LX * 2 + 0.04, LY1 - LY0 + 0.04, 0.018, 0, (LY0 + LY1) / 2, -2.61, glass);
+  /* L'encadrement chromé du pare-brise, même geste que l'encadrement de la
+   * baie : sans lui, la tranche d'une tôle de 20 mm se lit comme un coup de
+   * cutter. Traverses sur toute la longueur et montants qui les CHEVAUCHENT :
+   * deux baguettes de même section qui s'aboutent à l'angle partagent leurs
+   * faces sur un carré de 30 mm, même normale — quatre coins de bagarre par
+   * fenêtre. En les faisant s'interpénétrer, plus aucune face commune. */
+  box('vWsRailB', 1.76, 0.03, 0.03, 0, SY0, 2.605, chrome);
+  box('vWsRailH', 1.76, 0.03, 0.03, 0, SY1, 2.605, chrome);
+  box('vWsMtG', 0.03, SY1 - SY0 + 0.04, 0.03, -WSX, SWY, 2.605, chrome);
+  box('vWsMtD', 0.03, SY1 - SY0 + 0.04, 0.03, WSX, SWY, 2.605, chrome);
   // lettrage arrière
   // face avant d'un plan Babylon = -z : à l'arrière, elle regarde déjà dehors
   const rp = MeshBuilder.CreatePlane('vSign', { width: 1.5, height: 0.75 }, scene);
@@ -318,6 +461,28 @@ export function buildVan(scene, shadows, ground) {
   box('vSeatLb', 0.55, 0.6, 0.13, -0.52, 1.66, 1.44, inn);
   box('vSeatR', 0.55, 0.14, 0.55, 0.52, 1.32, 1.7, inn);
   box('vSeatRb', 0.55, 0.6, 0.13, 0.52, 1.66, 1.44, inn);
+  /* L'assise est à 1,250 pour un plancher de cabine à 0,520 : les sièges
+   * planaient à 73 cm. Personne ne pouvait le voir tant que la cabine n'avait
+   * pas de sol. On ne PEUT pas les descendre — la baie de pare-brise commence à
+   * 1,860 et l'œil du conducteur tombe à 2,120 : il regarde par le milieu du
+   * pare-brise. Un poste avancé s'assoit haut, sur une embase. */
+  box('vSeatSocL', 0.60, 0.75, 0.60, -0.52, 0.88, 1.70, dark);
+  box('vSeatSocR', 0.60, 0.75, 0.60, 0.52, 0.88, 1.70, dark);
+  /* Le capot moteur. Sa cote n'est pas choisie, elle est LUE sur le mécano :
+   * cuisse à -1,35 rad puis tibia à 0 posent la semelle à 0,853. Le dessus du
+   * capot est donc à 0,850, trois millimètres sous ses talons. C'est aussi la
+   * raison pour laquelle il n'y avait pas de pédales : à 33 cm au-dessus du
+   * plancher, elles n'auraient rien eu à toucher. */
+  box('vCapot', 1.88, 0.35, 0.56, 0, 0.675, 2.18, dark);
+  const pedals = [];
+  for (const [nm, px, pw] of [['E', -0.68, 0.08], ['F', -0.52, 0.08], ['A', -0.36, 0.06]]) {
+    const piv = new TransformNode('vPed' + nm, scene);
+    piv.parent = body; piv.position.set(px, 0.85, 2.13); piv.rotation.x = -0.40;
+    const p = MeshBuilder.CreateBox('vPed' + nm + 'M',
+      { width: pw, height: 0.13, depth: 0.018 }, scene);
+    p.position.y = 0.065; p.material = dark; p.parent = piv; meshes.push(p);
+    pedals.push(piv);
+  }
   // vBed et vKitch ont été RETIRÉS : c'étaient les silhouettes que van.js
   // posait à l'époque où la cellule n'était qu'un décor vu par les vitres.
   // Depuis que vanInterior.js meuble pour de vrai, elles traversaient le
@@ -327,9 +492,67 @@ export function buildVan(scene, shadows, ground) {
   // baie coulissante, donc vu en permanence. La cabine, elle, garde ses
   // sièges et son tablier : vanInterior ne modélise rien en avant de la
   // cloison.
-  const wheelT = MeshBuilder.CreateTorus('vWheelT', { diameter: 0.4, thickness: 0.045, tessellation: 18 }, scene);
-  wheelT.position.set(-0.52, 1.78, 2.12); wheelT.rotation.x = Math.PI / 2 - 0.5;
-  wheelT.material = dark; wheelT.parent = body; meshes.push(wheelT);
+  /* C'était un tore nu : pas de moyeu, pas de branches, et surtout il ne
+   * tournait pas quand on braquait. Un volant fixe pendant qu'on prend un
+   * virage est le seul défaut qu'un joueur voit en une seconde. Deux nœuds
+   * emboîtés : vVolPiv porte l'inclinaison de colonne — inchangée, elle est
+   * calée sur la pose des mains du mécano — et vVolTurn ne reçoit QUE
+   * rotation.y. Rapport 9,0 pour un braquage borné à ±0,52 rad : une tour et
+   * demie de butée à butée, ce qui se lit franchement sans ressembler à une
+   * borne d'arcade. Trois branches et pas quatre : c'est la marque de l'époque. */
+  const volPiv = new TransformNode('vVolPiv', scene);
+  volPiv.parent = body;
+  volPiv.position.set(-0.52, 1.78, 2.12);
+  volPiv.rotation.x = Math.PI / 2 - 0.5;
+  const volTurn = new TransformNode('vVolTurn', scene);
+  volTurn.parent = volPiv;
+  const rim = MeshBuilder.CreateTorus('vWheelT', { diameter: 0.4, thickness: 0.045, tessellation: 18 }, scene);
+  rim.material = dark; rim.parent = volTurn; meshes.push(rim);
+  const hubM = MeshBuilder.CreateCylinder('vWheelH', { diameter: 0.1, height: 0.05, tessellation: 12 }, scene);
+  hubM.position.y = -0.02; hubM.material = dark; hubM.parent = volTurn; meshes.push(hubM);
+  for (let i = 0; i < 3; i++) {
+    const a = i * 2.0944 + 1.5708;
+    const sp = box('vWheelS' + i, 0.2, 0.012, 0.026,
+      Math.cos(a) * 0.1, 0, Math.sin(a) * 0.1, dark);
+    sp.parent = volTurn; sp.rotation.y = -a;
+  }
+
+  /* Le combiné, calé sur la ligne de vue. Œil du conducteur assis à y 2,120,
+   * cadran à 1,760 en z 2,280 : le rayon passe 31 mm SOUS le sommet de jante,
+   * donc on lit les cadrans PAR l'ouverture du volant. C'est ce cadrage-là, et
+   * lui seul, qui donne envie d'aller s'asseoir. Le boîtier est enterré de
+   * 10 mm dans la planche et son sommet reste sous la ligne de ceinture : vu du
+   * dehors il ne mange pas le pare-brise. */
+  const combM = new StandardMaterial('vComboM', scene);
+  combM.diffuseTexture = comboTexture(scene, false);
+  combM.emissiveTexture = comboTexture(scene, true);
+  combM.specularColor = new Color3(0.1, 0.1, 0.12);
+  combM.emissiveColor = new Color3(0, 0, 0);
+  box('vCombBoit', 0.42, 0.16, 0.10, -0.52, 1.76, 2.33, dark);
+  const comb = MeshBuilder.CreatePlane('vCombFace', { width: 0.4, height: 0.14 }, scene);
+  comb.position.set(-0.52, 1.76, 2.2785);             // face avant d'un plan = -z
+  comb.material = combM; comb.parent = body; meshes.push(comb);
+  /* Trois aiguilles, trois affectations de rotation.z par frame. Le compteur est
+   * calé sur la borne RÉELLE de la vitesse (12,5 m/s) et le cadran gradué
+   * jusqu'à 60 : l'aiguille tape les trois quarts quand le van tape sa butée,
+   * ce qui est la vérité du véhicule. La température monte par un passe-bas —
+   * une vingtaine de secondes de route pour arriver à mi-cadran — et c'est le
+   * seul cadran qui bouge quand on ne fait rien. */
+  const aigM = new StandardMaterial('vAigM', scene);
+  aigM.diffuseColor = new Color3(0.78, 0.16, 0.12);
+  aigM.emissiveColor = new Color3(0, 0, 0);
+  const needle = (nm, len, cx, cy) => {
+    const piv = new TransformNode(nm, scene);
+    piv.parent = body; piv.position.set(-0.52 + cx, 1.76 + cy, 2.276);
+    const n = MeshBuilder.CreateBox(nm + 'M',
+      { width: 0.004, height: len, depth: 0.003 }, scene);
+    n.position.y = len / 2; n.material = aigM; n.parent = piv; meshes.push(n);
+    return piv;
+  };
+  const aigVit = needle('vAigVit', 0.056, -0.0328, 0);
+  const aigTmp = needle('vAigTmp', 0.026, 0.1031, 0.0263);
+  const aigEss = needle('vAigEss', 0.026, 0.1031, -0.0263);
+  let tempE = 0, accP = 0, frP = 0;
   /* ---- phares : vraies SpotLights + cônes de brume (interaction 1) ---- */
   const beams = [];
   const coneMat = new StandardMaterial('vBeamM', scene);
@@ -391,7 +614,17 @@ export function buildVan(scene, shadows, ground) {
     wheels.push({ hub, spin, wx, wz, steer, y: 0 });
   }
 
-  for (const m of meshes) { shadows.addShadowCaster(m); m.receiveShadows = true; }
+  /* La carte d'ombre ne connaît que la profondeur : un matériau en alpha
+   * blending y est écrit PLEIN. Les six vitres projetaient donc des dalles
+   * noires opaques — un pare-brise posant plein soleil une barre d'ombre
+   * franche sur le tablier et les sièges, exactement là où la lumière devrait
+   * entrer. La réception reste vraie : c'est l'ombre des troncs qui balaie le
+   * pare-brise quand on roule. Le test porte sur le MATÉRIAU et non sur une
+   * liste de noms — toute vitre ajoutée plus tard sera exclue d'office. */
+  for (const m of meshes) {
+    if (m.material !== glass) shadows.addShadowCaster(m);
+    m.receiveShadows = true;
+  }
 
   /* ---- dynamique ---- */
   const st = {
@@ -483,6 +716,28 @@ export function buildVan(scene, shadows, ground) {
     /* phares : montée/descente en fondu, cônes gonflés par la brume/pluie.
      * Les spots éteints sont DÉSACTIVÉS : ils ne comptent plus dans le
      * quota de lumières simultanées des matériaux. */
+    /* Poste de conduite. Le débord de lueur sur la jante et la planche se fait
+     * en donnant quelques pour cent d'émissif jade aux matériaux qui n'existent
+     * QUE dans la cabine : c'est la seule façon d'obtenir un halo sans une
+     * lumière, et ça coûte deux copyFromFloats. Le facteur retient le maximum
+     * des phares et d'une fraction de la nuit — les instruments s'allument avec
+     * les feux, c'est le même rhéostat que sur une voiture de 1970, mais ils
+     * gardent la nuit un fond de veilleuse qui suffit à les trouver. */
+    const gl = Math.max(litFrac, (input.night || 0) * 0.4);
+    combM.emissiveColor.copyFromFloats(gl, gl, gl);
+    aigM.emissiveColor.copyFromFloats(gl * 0.55, gl * 0.12, gl * 0.09);
+    volTurn.rotation.y = -st.steerA * 9.0;
+    aigVit.rotation.z = 2.094 - Math.min(1, Math.abs(st.speed) / 16.67) * 4.189;
+    tempE += (Math.min(1, Math.abs(st.speed) / 6) - tempE) * 0.25 * dt;
+    aigTmp.rotation.z = 0.6 - tempE * 1.2;
+    aigEss.rotation.z = 0.6 - (1 - (st.odo % 1200) / 1200) * 1.2;
+    /* L'accélérateur qui descend quand on appuie, vu DEPUIS LE SALON par le
+     * portique ouvert, est la scène qui répond mot pour mot à « le vaisseau
+     * qu'on visite et qu'on peut piloter ». Deux interpolations par frame. */
+    accP += (Math.max(0, input.throttle) - accP) * Math.min(1, 14 * dt);
+    frP += (Math.max(0, -input.throttle) - frP) * Math.min(1, 14 * dt);
+    pedals[2].rotation.x = -0.40 - accP * 0.24;
+    pedals[1].rotation.x = -0.40 - frP * 0.26;
     litFrac += ((litOn ? 1 : 0) - litFrac) * Math.min(1, 2.6 * dt);
     const beamsOn = litFrac > 0.01;
     for (const s of beams) {
