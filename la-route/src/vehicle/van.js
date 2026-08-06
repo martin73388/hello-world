@@ -25,6 +25,38 @@ const WHEEL_R = 0.37, TRACK = 0.85, WHEELBASE = 3.2, CLEAR = 0.42;
  */
 export const BAY_Z0 = -0.95, BAY_Z1 = 0.35;
 
+/**
+ * La LIGNE DE CEINTURE du véhicule, unique. Elle existait déjà en quatre
+ * exemplaires — linteau de baie, haut de vitre de portière, custode de
+ * cellule — mais les vitres de cabine étaient à côté de la plaque. Sur le
+ * flanc gauche, la vitre de portière et celle du conducteur sont à 1,70 m
+ * l'une de l'autre : un centimètre de décalage entre elles se voit.
+ */
+export const BELT_Y0 = 1.86, BELT_Y1 = 2.30;
+/** Baie de vitre de CABINE. Elle démarre à 1,25 et non au ras de la baie
+ *  coulissante (0,35) pour que le montant du portique reste derrière 90 cm de
+ *  tôle pleine : un montant intérieur qu'on voit du dehors à travers sa propre
+ *  fenêtre fait décor, pas véhicule. */
+export const CABW_Z0 = 1.25, CABW_Z1 = 2.34;
+/** Custode de CELLULE : les cotes étaient écrites dans vanInterior alors que
+ *  c'est ici qu'on perce la tôle. Même leçon que BAY_Z0. */
+export const CUST_Z0 = -0.90, CUST_Z1 = 0.10;
+/** Lunette arrière : le doublage de fond a TOUJOURS eu son trou alors que la
+ *  tôle derrière était pleine. */
+export const LUN_X = 0.65, LUN_Y0 = 1.92, LUN_Y1 = 2.32;
+/**
+ * La tôle est percée DIX MILLIMÈTRES plus large que le doublage. Sans ce jeu,
+ * l'appui de tôle et l'appui de doublage sont coplanaires, de MÊME normale, et
+ * se recouvrent sur 10 mm : une bande de pixels qui clignote sur tout le tour
+ * de chaque fenêtre. En perçant la tôle plus large, c'est le doublage qu'on
+ * voit dans l'embrasure — ce qui est aussi ce qu'on veut lire.
+ */
+export const SKIN_M = 0.01;
+/** Un seul verre pour tout le véhicule : van.js et vanInterior en avaient deux,
+ *  à 0,38 et 0,34, et depuis la refonte ils se retrouvent côte à côte sur le
+ *  même flanc. */
+export const GLASS_A = 0.26;
+
 function paintTexture(scene) {
   const tex = new DynamicTexture('vanPaint', 512, scene, true);
   const g = tex.getContext();
@@ -272,7 +304,16 @@ export function buildVan(scene, shadows, ground) {
   jc.material.specularColor = new Color3(0.08, 0.08, 0.08);
   box('vStrap', 0.44, 0.03, 0.5, 0.3, 2.96, -1.1, dark);
   /* ---- intérieur visible ---- */
-  box('vDash', 1.8, 0.15, 0.5, 0, 1.72, 2.28, inn);
+  /* Le tablier était une dalle unique de 1,8 × 0,15 × 0,5 qui flottait — rien
+   * dessous, rien derrière — et qui allait jusqu'à z 2,53, c'est-à-dire au
+   * milieu du pare-feu qu'on vient de poser. Un tableau de bord de fourgon,
+   * c'est deux pièces : une PLANCHE horizontale sur laquelle traîne ce qu'on y
+   * pose, une JOUE verticale qui porte les commandes. Les deux s'enterrent de
+   * 40 mm dans le pare-feu : jamais de face coplanaire avec 2,420. La planche
+   * s'arrête à 2,25 et non 2,03 parce que le bas de jante du volant descend à
+   * 1,6045 en z 2,216 — à 2,03 la dalle le traversait. */
+  box('vDashPlan', 1.88, 0.06, 0.21, 0, 1.66, 2.355, dark);
+  box('vDashJoue', 1.88, 0.34, 0.06, 0, 1.48, 2.43, dark);
   box('vSeatL', 0.55, 0.14, 0.55, -0.52, 1.32, 1.7, inn);
   box('vSeatLb', 0.55, 0.6, 0.13, -0.52, 1.66, 1.44, inn);
   box('vSeatR', 0.55, 0.14, 0.55, 0.52, 1.32, 1.7, inn);

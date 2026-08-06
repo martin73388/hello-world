@@ -357,14 +357,6 @@ async function start() {
     if (!!text !== hintShown) { hintShown = !!text; hint.style.display = text ? 'block' : 'none'; }
   };
 
-  // porte conducteur (côté gauche de la cabine) — scratch réutilisé
-  const doorOut = { x: 0, z: 0 };
-  const doorWorld = () => {
-    const c = Math.cos(van.st.yaw), s = Math.sin(van.st.yaw);
-    doorOut.x = van.st.x - 1.35 * c + 1.6 * s;
-    doorOut.z = van.st.z + 1.35 * s + 1.6 * c;
-    return doorOut;
-  };
   // touches 1-5 : la grammaire commune — tout s'installe et se retire en fondu
   addEventListener('keydown', (e) => {
     if (e.repeat) return;
@@ -402,7 +394,7 @@ async function start() {
     }
     // --- à bord, à pied : s'asseoir au volant, sinon manœuvrer la portière ---
     if (aboard) {
-      if (Math.hypot(lp.x - cabin.seatLocal.x, lp.z - cabin.seatLocal.z) < 1.0) {
+      if (cabin.atSeat(lp.x, lp.z)) {
         aboard = false; state.drive = true;
         driver.setSeated(true, van.body);
         state.distTarget = 8.4;
@@ -647,7 +639,7 @@ async function start() {
       fvx = 0; fvz = 0;
       // l'indice vit dans CETTE branche aussi, sinon il reste figé sur le
       // dernier texte affiché dehors
-      const atSeat = Math.hypot(lp.x - cabin.seatLocal.x, lp.z - cabin.seatLocal.z) < 1.0;
+      const atSeat = cabin.atSeat(lp.x, lp.z);
       setHint(atSeat ? 'E — prendre le volant'
         : (Math.abs(van.st.speed) <= 0.6 ? 'E — descendre' : ''));
     } else {
@@ -723,7 +715,7 @@ async function start() {
       focX = state.px; focZ = state.pz; focY = state.py + 1.55;
       fvx = state.vx; fvz = state.vz;
       if (aboard) {
-        const nearSeat = Math.hypot(lp.x - cabin.seatLocal.x, lp.z - cabin.seatLocal.z) < 1.0;
+        const nearSeat = cabin.atSeat(lp.x, lp.z);
         setHint(nearSeat ? 'E — prendre le volant'
           : (cabin.doorFrac() > 0.5 ? 'E — fermer la portière' : 'E — ouvrir la portière'));
       } else {

@@ -21,7 +21,8 @@ import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { PointLight } from '@babylonjs/core/Lights/pointLight.js';
 import { windClock } from '../vegetation/wind.js';
-import { BAY_Z0, BAY_Z1 } from './van.js';
+import { BAY_Z0, BAY_Z1, BELT_Y0, BELT_Y1, CABW_Z0, CABW_Z1,
+  CUST_Z0, CUST_Z1, LUN_X, LUN_Y0, LUN_Y1, GLASS_A } from './van.js';
 
 /* ---- géométrie de la cellule (tout en local, y = 0 au niveau de bodyY) ----
  * La caisse de van.js : vLower 0,53→1,55 et vUpper 1,545→2,495. Le plancher se
@@ -49,9 +50,21 @@ const TH = 0.05;                         // épaisseur du doublage
  * différence.
  */
 const TH_F = 0.02;
-// Le passage fait 0,80 m : un marcheur de 0,32 m de rayon en réclame 0,64, et
-// il doit rester du jeu pour ne pas râper la cloison à chaque franchissement.
-const PASS_X0 = -0.10, PASS_X1 = 0.70;   // passage vers la cabine
+/**
+ * Le NEZ HABITABLE. 2,42 était écrit en dur à trois endroits — plancher de
+ * cabine, collider de tablier, butée avant de camLimit. Trois copies du même
+ * nombre dans le même fichier, c'est exactement ce que van.js dénonce en
+ * exportant BAY_Z0 ; un centimètre d'écart et la caméra traverse le pare-feu.
+ */
+const Z_FRONT = 2.42;
+/** Épaisseur du pare-feu. 160 mm et non 40 : c'est cette épaisseur QUI EST
+ *  l'embrasure du pare-brise. Une vitre inclinée de 0,10 rad traverse 64 mm de
+ *  z entre son bord bas et son bord haut ; un cadre mince ne peut pas l'avaler,
+ *  un tableau de baie de 160 mm l'avale entièrement — et c'est lui qui donne
+ *  aux montants avant la présence qui manquait au poste de conduite. */
+const CAB_TH = 0.16;
+/** Demi-largeur de la baie de pare-brise, côté doublage. */
+const WS_X = 0.84;
 // Les cotes de la baie viennent de van.js, qui perce le trou dans la tôle :
 // une seule source, sinon la portière et l'ouverture divergent.
 const DOOR_Z0 = BAY_Z0, DOOR_Z1 = BAY_Z1;   // baie coulissante (1,30 m)
@@ -260,8 +273,8 @@ export function buildVanInterior(scene, shadows, vanBody, vanState) {
   // que van.js vient de retirer. Depuis, le regard traverse le van et sort sur
   // le terrain, de l'intérieur comme du dehors par le pare-brise. On aboute
   // franchement à viSol en z = 1,00 : normales opposées, aucun plan partagé.
-  box('viSolCabine', HW * 2, 0.04, 2.42 - Z_BULK,
-    0, FLOOR_Y - 0.02, (Z_BULK + 2.42) / 2, dark);
+  box('viSolCabine', HW * 2, 0.04, Z_FRONT - Z_BULK,
+    0, FLOOR_Y - 0.02, (Z_BULK + Z_FRONT) / 2, dark);
   box('viPlafond', HW * 2, 0.04, CD, 0, CEIL_Y + 0.02, CZ, formica);
   // flanc gauche : coupé par la baie coulissante, pleine hauteur
   box('viFlancGar', TH_F, CEIL_Y - FLOOR_Y, DOOR_Z0 - Z_BACK,
@@ -269,27 +282,86 @@ export function buildVanInterior(scene, shadows, vanBody, vanState) {
   box('viFlancGav', TH_F, CEIL_Y - FLOOR_Y, Z_BULK - DOOR_Z1,
     -HW - TH_F / 2, (FLOOR_Y + CEIL_Y) / 2, (DOOR_Z1 + Z_BULK) / 2, wood);
   // flanc droit : évidé autour de la vitre de custode (vWinR2 de van.js)
-  const WY0 = 1.86, WY1 = 2.30, WZ0 = -0.90, WZ1 = 0.10;
+  // mêmes cotes que la tôle percée par van.js — alias, pas copies
+  const WY0 = BELT_Y0, WY1 = BELT_Y1, WZ0 = CUST_Z0, WZ1 = CUST_Z1;
   box('viFlancDb', TH_F, WY0 - FLOOR_Y, CD, HW + TH_F / 2, (FLOOR_Y + WY0) / 2, CZ, wood);
   box('viFlancDh', TH_F, CEIL_Y - WY1, CD, HW + TH_F / 2, (WY1 + CEIL_Y) / 2, CZ, wood);
   box('viFlancDar', TH_F, WY1 - WY0, WZ0 - Z_BACK,
     HW + TH_F / 2, (WY0 + WY1) / 2, (Z_BACK + WZ0) / 2, wood);
   box('viFlancDav', TH_F, WY1 - WY0, Z_BULK - WZ1,
     HW + TH_F / 2, (WY0 + WY1) / 2, (WZ1 + Z_BULK) / 2, wood);
+
+  /* ---- LA CABINE : elle n'avait AUCUNE surface tournée vers l'intérieur ----
+   * van.js retire la face -x des deux caissons et le dessus de vLower ; les
+   * faces qui restent — flanc droit à 1,000 et 0,980, nez à 2,600, pavillon à
+   * 2,495 — sont vues DE DOS depuis l'habitacle et éliminées par le culling.
+   * La cellule s'en sortait par son doublage ; la cabine n'avait que son
+   * plancher. Assis au volant, le regard sortait par la droite, par le nez et
+   * par le pavillon : c'est mot pour mot « on voit à travers les murs du van
+   * sur la partie avant conducteur ».
+   *
+   * On ne fait que PROLONGER le doublage sur ses plans déjà arbitrés : 0,950
+   * dedans (= HW, donc colliders et camLimit sont déjà justes), 0,970 dehors,
+   * soit dix millimètres sous vUpper et trente sous vLower. Coplanaire avec le
+   * doublage de cellule mais DISJOINT en z — elle s'arrête à 1,00, la cabine y
+   * commence : le même montage que viSol / viSolCabine. */
+  const CB_D = Z_FRONT - Z_BULK, CB_C = (Z_BULK + Z_FRONT) / 2;
+  const CB_H = BELT_Y1 - BELT_Y0, CB_Y = (BELT_Y0 + BELT_Y1) / 2;
+  for (const [tag, sgn] of [['G', -1], ['D', 1]]) {
+    const sx = sgn * (HW + TH_F / 2);
+    box('viCab' + tag + 'b', TH_F, BELT_Y0 - FLOOR_Y, CB_D, sx, (FLOOR_Y + BELT_Y0) / 2, CB_C, wood);
+    box('viCab' + tag + 'h', TH_F, CEIL_Y - BELT_Y1, CB_D, sx, (BELT_Y1 + CEIL_Y) / 2, CB_C, wood);
+    box('viCab' + tag + 'r', TH_F, CB_H, CABW_Z0 - Z_BULK, sx, CB_Y, (Z_BULK + CABW_Z0) / 2, wood);
+    box('viCab' + tag + 'a', TH_F, CB_H, Z_FRONT - CABW_Z1, sx, CB_Y, (CABW_Z1 + Z_FRONT) / 2, wood);
+  }
+  /* Le plafond de cabine. C'est le DESSOUS DE vROOF qui en tenait lieu — la
+   * seule face extérieure du van promue à un rôle intérieur, en tôle peinte,
+   * avec 512 px étirés sur 1,84 × 5,02 m. Et vRoof ne fait que 1,84 de large
+   * pour une caisse de 1,96 : il restait six centimètres de ciel de chaque côté
+   * sur toute la longueur. On prolonge le plafond au même plan que celui de la
+   * cellule : ligne continue du fond au pare-brise, gouttières bouchées. */
+  box('viPlafCabine', HW * 2, 0.04, CB_D, 0, CEIL_Y + 0.02, CB_C, formica);
+  /* Le PARE-FEU, et la baie de pare-brise. Entre le plancher et le bas du
+   * tablier, rien ne fermait le nez : assis au volant on regardait ses pieds et
+   * on voyait la route passer dessous, avec le dos des phares et le pare-chocs
+   * qui flottaient dedans. Sa face visible est le plan 2,420 : celui du
+   * collider de tablier, de l'arête du plancher de cabine et de la butée avant
+   * de camLimit — la tôle vue et la tôle sentie tombent enfin au même endroit. */
+  box('viNezB', HW * 2, BELT_Y0 - FLOOR_Y, CAB_TH, 0, (FLOOR_Y + BELT_Y0) / 2, Z_FRONT + CAB_TH / 2, dark);
+  box('viNezH', HW * 2, CEIL_Y - BELT_Y1, CAB_TH, 0, (BELT_Y1 + CEIL_Y) / 2, Z_FRONT + CAB_TH / 2, dark);
+  box('viNezG', HW - WS_X, CB_H, CAB_TH, -(HW + WS_X) / 2, CB_Y, Z_FRONT + CAB_TH / 2, dark);
+  box('viNezD', HW - WS_X, CB_H, CAB_TH, (HW + WS_X) / 2, CB_Y, Z_FRONT + CAB_TH / 2, dark);
   // paroi arrière : évidée autour de la lunette (vWinB), on la voit du lit
-  const BY0 = 1.92, BY1 = 2.32, BX = 0.65;
+  const BY0 = LUN_Y0, BY1 = LUN_Y1, BX = LUN_X;
   box('viFondb', HW * 2, BY0 - FLOOR_Y, TH, 0, (FLOOR_Y + BY0) / 2, Z_BACK - TH / 2, wood);
   box('viFondh', HW * 2, CEIL_Y - BY1, TH, 0, (BY1 + CEIL_Y) / 2, Z_BACK - TH / 2, wood);
   box('viFondg', HW - BX, BY1 - BY0, TH, -(HW + BX) / 2, (BY0 + BY1) / 2, Z_BACK - TH / 2, wood);
   box('viFondd', HW - BX, BY1 - BY0, TH, (HW + BX) / 2, (BY0 + BY1) / 2, Z_BACK - TH / 2, wood);
-  // cloison de séparation : deux joues + un linteau, le passage reste franc
-  const PASS_TOP = 2.02;
-  box('viCloisonG', PASS_X0 + HW, PASS_TOP - FLOOR_Y, TH,
-    (-HW + PASS_X0) / 2, (FLOOR_Y + PASS_TOP) / 2, Z_BULK + TH / 2, wood);
-  box('viCloisonD', HW - PASS_X1, PASS_TOP - FLOOR_Y, TH,
-    (PASS_X1 + HW) / 2, (FLOOR_Y + PASS_TOP) / 2, Z_BULK + TH / 2, wood);
-  box('viLinteau', HW * 2, CEIL_Y - PASS_TOP, TH,
-    0, (PASS_TOP + CEIL_Y) / 2, Z_BULK + TH / 2, wood);
+  /* ---- LE PORTIQUE : ce qui reste quand une cloison tombe ----
+   * On ne remplace pas un mur par un autre mur, mais on ne fait pas non plus
+   * disparaître 1,90 m de section transversale d'une caisse : ce qui reste,
+   * c'est l'anneau. Deux montants, et RIEN AU-DESSUS — j'avais dessiné un
+   * linteau, puis mesuré le mécano : 1,7625 m debout, donc crâne à 2,2825 pour
+   * un plafond à 2,370. Il reste 87 mm. Toute traverse dans l'axe se plante
+   * dans la tête à chaque franchissement, et on franchit ce passage vingt fois
+   * par partie.
+   *
+   * Les montants ne sont pas décoratifs : ils recouvrent la tranche à z = 1,00
+   * du doublage, du plafond et du plancher — trois joints bout-à-bout. Ils
+   * ENJAMBENT le plan 1,00 au lieu de s'y aboutir, sinon une fente laisserait
+   * voir le ciel à travers le dos de vUpper ; et ils PÉNÈTRENT le doublage de
+   * 10 mm, car c'est l'interpénétration qui évite la dispute de pixel, jamais
+   * l'affleurement.
+   *
+   * Passage utile : 0,24 m de bande marchable hier, 1,16 m aujourd'hui. */
+  box('viMontantG', 0.10, 1.89, 0.08, -0.910, 1.445, Z_BULK, wood);
+  box('viMontantD', 0.10, 1.89, 0.08, 0.910, 1.445, Z_BULK, wood);
+  /* La poignée de montant, à droite parce que le siège conducteur est à gauche :
+   * on entre en pivotant autour d'elle. Le module anime déjà le roulis, la
+   * barre en est la justification. Un cylindre n'est jamais coplanaire. */
+  cyl('viPoignee', 0.034, 0.62, 0.845, 1.62, Z_BULK, metal, 8);
+  box('viPoigneeE1', 0.05, 0.035, 0.035, 0.875, 1.34, Z_BULK, metal);
+  box('viPoigneeE2', 0.05, 0.035, 0.035, 0.875, 1.90, Z_BULK, metal);
   // le doublage épouse la caisse de van.js, déjà projetée dans les cascades :
   // le refaire caster doublerait la silhouette pour zéro pixel d'ombre
   const NO_CAST = meshes.length;
@@ -502,16 +574,27 @@ export function buildVanInterior(scene, shadows, vanBody, vanState) {
     { x0: -1.02, x1: -HW, z0: DOOR_Z1, z1: Z_BULK + TH },         // flanc gauche avant
     { x0: HW, x1: 1.02, z0: Z_BACK, z1: Z_BULK + TH },            // flanc droit
     { x0: -1.02, x1: 1.02, z0: Z_BACK - TH, z1: Z_BACK },         // paroi arrière
-    { x0: -1.02, x1: PASS_X0, z0: Z_BULK, z1: Z_BULK + TH },      // cloison, joue gauche
-    { x0: PASS_X1, x1: 1.02, z0: Z_BULK, z1: Z_BULK + TH },       // cloison, joue droite
+    // Un passage n'est pas une absence de collider, c'est un rétrécissement : on
+    // SENT l'encadrement en le frôlant au lieu de traverser un plan libre.
+    // Bande marchable (r = 0,28) : 1,16 m contre 0,24 hier. Le compte d'AABB ne
+    // bouge pas, resolve() garde son coût.
+    { x0: -1.02, x1: -0.86, z0: 0.96, z1: 1.04 },                 // montant gauche
+    { x0: 0.86, x1: 1.02, z0: 0.96, z1: 1.04 },                   // montant droit
     { x0: -1.10, x1: -HW, z0: DOOR_Z0, z1: DOOR_Z1, door: true }, // la portière close
     { x0: -HW, x1: HW, z0: Z_BACK, z1: BED_Z1 },                  // couchette
     { x0: KX0, x1: HW, z0: KZ0, z1: KZ1 },                        // kitchenette
     { x0: -HW, x1: LX1, z0: 0.05, z1: TAB_Z1 },                   // table pliante
     { x0: -HW, x1: LX1, z0: TAB_Z1, z1: Z_BULK },                 // banquette
-    { x0: -1.05, x1: -1.0, z0: Z_BULK, z1: 2.5 },                 // flanc cabine gauche
-    { x0: 1.0, x1: 1.05, z0: Z_BULK, z1: 2.5 },                   // flanc cabine droit
-    { x0: -1.05, x1: 1.05, z0: 2.42, z1: 2.5 },                   // tablier sous pare-brise
+    // Ces trois-là étaient écrits contre la TÔLE (1,000) à l'époque où la
+    // cabine n'avait pas de paroi ; ceux de cellule le sont contre le plan
+    // habitable (0,950). Avec un doublage désormais à 0,950, resolve()
+    // repoussait le centre du marcheur à 0,720 : son cercle enfonçait l'épaule
+    // de 50 mm dans la paroi qu'on vient de poser. Alignés sur HW, ils
+    // affleurent. La butée avant descend à 2,00 : le tablier commence à 2,25
+    // et on le traversait jusqu'à la ceinture.
+    { x0: -1.02, x1: -HW, z0: Z_BULK, z1: Z_FRONT },              // flanc cabine gauche
+    { x0: HW, x1: 1.02, z0: Z_BULK, z1: Z_FRONT },                // flanc cabine droit
+    { x0: -1.02, x1: 1.02, z0: 2.00, z1: Z_FRONT },               // tablier + pare-feu
   ];
 
   /* ---- conversions monde ↔ local (scratchs fournis par l'appelant) ---- */
@@ -623,6 +706,22 @@ export function buildVanInterior(scene, shadows, vanBody, vanState) {
     return null;                                      // au sol, devant le van
   }
 
+  /**
+   * Est-on au poste de conduite ? Le test vivait dans main.js, écrit trois fois,
+   * sous la forme d'un rayon de 1,00 m autour du siège — un disque qui atteint
+   * z = 0,70, soit trente centimètres DERRIÈRE l'ancienne cloison. Il n'a
+   * jamais gêné parce que la cloison rendait cette zone inatteignable ; sans
+   * elle, E téléporterait au volant depuis le salon, debout près de la table.
+   * On ferme donc par la couture et on resserre à 0,80 m : depuis le couloir
+   * la distance vaut 0,52, l'accès reste franc. Carré comparé au carré, pas de
+   * racine par frame.
+   */
+  function atSeat(lx, lz) {
+    if (lz <= Z_BULK) return false;
+    const dx = lx - SEAT.x, dz = lz - SEAT.z;
+    return dx * dx + dz * dz < 0.64;
+  }
+
   /** le seuil de la portière, en monde — le point où l'on monte et descend */
   function doorWorld(out) {
     toWorld(-1.16, (DOOR_Z0 + DOOR_Z1) / 2, out);
@@ -654,7 +753,7 @@ export function buildVanInterior(scene, shadows, vanBody, vanState) {
       d > 1e-6 ? (hi - p) / d : (d < -1e-6 ? (lo - p) / d : 9);
     let t = slab(lx, ldx, -HW + CAM_M, HW - CAM_M);
     t = Math.min(t, slab(ly, ldy, FLOOR_Y + 0.28, CEIL_Y - CAM_M));
-    t = Math.min(t, slab(lz, ldz, Z_BACK + CAM_M, 2.42 - CAM_M));
+    t = Math.min(t, slab(lz, ldz, Z_BACK + CAM_M, Z_FRONT - CAM_M));
     // Aucun plancher de recul ici : un `Math.max(0.35, t)` écrasait justement
     // la contrainte qu'on vient de calculer. En visant vers le haut, la caméra
     // repartait sous le plancher et on se retrouvait à regarder la SOUS-FACE du
@@ -718,7 +817,7 @@ export function buildVanInterior(scene, shadows, vanBody, vanState) {
   update(0);                                          // pose fermée et éteinte
 
   return {
-    toLocal, toWorld, resolve, floorY: FLOOR_Y, doorWorld, insideLocal, boarded, atDoorway, stepHeight, camLimit,
+    toLocal, toWorld, resolve, floorY: FLOOR_Y, doorWorld, insideLocal, boarded, atDoorway, stepHeight, atSeat, camLimit,
     seatLocal: SEAT, update, lampSet, lampOn: () => lampLit,
     openDoor, closeDoor, toggleDoor, doorOpen, doorPassable, doorFrac: () => doorE,
     colliders, root, node: doorNode,
