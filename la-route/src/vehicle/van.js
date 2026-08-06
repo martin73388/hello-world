@@ -200,11 +200,27 @@ export function buildVan(scene, shadows, ground) {
   box('vBaieMr', 0.05, BTOP - 0.53, 0.05, -1.01, (0.53 + BTOP) / 2, BZ0 + 0.025, chrome);
   box('vBaieMf', 0.05, BTOP - 0.53, 0.05, -1.01, (0.53 + BTOP) / 2, BZ1 - 0.025, chrome);
   box('vBaieSeuil', 0.06, 0.05, BZ1 - BZ0, -1.01, 0.555, (BZ0 + BZ1) / 2, chrome);
-  // Jonc chromé à la jonction des deux teintes. Il n'est pas décoratif : les
-  // deux caissons ont la MÊME profondeur et le même centre en z, donc leurs
-  // faces avant et arrière sont rigoureusement coplanaires et se disputaient le
-  // pixel. Le jonc déborde de deux centimètres tout autour et couvre la couture.
-  box('vTrim', 2.04, 0.07, 5.24, 0, 1.55, 0, chrome);
+  /* ---- jonc chromé à la jonction des deux teintes ----
+   * Il n'est pas décoratif : les deux caissons ont la même profondeur et le
+   * même centre en z, donc leurs faces avant et arrière sont rigoureusement
+   * coplanaires et se disputent le pixel. Le jonc couvre la couture.
+   *
+   * Mais un jonc est une BAGUETTE POSÉE SUR LA PEAU, pas une dalle. En le
+   * faisant d'une seule boîte de 2,04 × 5,24, je l'avais fait traverser tout
+   * l'habitacle à hauteur de poitrine : de l'intérieur, et à travers la baie
+   * ouverte, une barre chromée barrait la pièce. On le pose donc en quatre
+   * segments, un par face, chacun juste en saillie de SON plan — et celui du
+   * flanc gauche s'interrompt à la baie, sinon il traverserait l'ouverture.
+   */
+  const TY = 1.55, TH2 = 0.07;
+  // flanc gauche, de part et d'autre de la baie
+  box('vTrimLR', 0.04, TH2, BZ0 + 2.6, -1.01, TY, (-2.6 + BZ0) / 2, chrome);
+  box('vTrimLF', 0.04, TH2, 2.6 - BZ1, -1.01, TY, (BZ1 + 2.6) / 2, chrome);
+  // flanc droit, d'un seul tenant
+  box('vTrimR', 0.04, TH2, 5.2, 1.01, TY, 0, chrome);
+  // faces avant et arrière : c'est là que la couture des deux caissons est nue
+  box('vTrimF', 2.02, TH2, 0.04, 0, TY, 2.615, chrome);
+  box('vTrimB', 2.02, TH2, 0.04, 0, TY, -2.615, chrome);
   box('vBumpF', 2.06, 0.17, 0.14, 0, 0.62, 2.66, chrome);
   box('vBumpR', 2.06, 0.17, 0.14, 0, 0.62, -2.66, chrome);
   // vitres : pare-brise, portes cabine, flanc arrière, portes arrière
