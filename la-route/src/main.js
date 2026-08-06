@@ -397,7 +397,10 @@ async function start() {
       if (cabin.atSeat(lp.x, lp.z)) {
         aboard = false; state.drive = true;
         driver.setSeated(true, van.body);
-        state.distTarget = 8.4;
+        // 8,4 m datait de l'époque où la cabine était vide : à cette distance le
+        // combiné fait quatre pixels et le volant qui tourne ne se voit pas. On
+        // reprend le volant à 3,2 m, et la molette descend jusqu'au poste.
+        state.distTarget = Math.min(state.distTarget, 3.2);
         return;
       }
       // On ne « descend » plus : on ouvre la porte et on SORT EN MARCHANT.
@@ -441,7 +444,10 @@ async function start() {
     if (Math.abs(e.movementX) > 0) state.lookHold = 1.4;
   });
   addEventListener('wheel', (e) => {
-    state.distTarget = Math.min(9, Math.max(1.6, state.distTarget + Math.sign(e.deltaY) * 0.5));
+    // au volant on peut aller chercher le poste de pilotage ; à pied la borne
+    // reste à 1,6 m, sous quoi la caméra entrerait dans le mécano
+    const lo = state.drive ? 0.7 : 1.6;
+    state.distTarget = Math.min(9, Math.max(lo, state.distTarget + Math.sign(e.deltaY) * 0.5));
   }, { passive: true });
 
   // 6 lumières simultanées par matériau (défaut 4) : soleil + hémisphérique
@@ -590,7 +596,16 @@ async function start() {
       const dy = ((wantYaw - state.camYaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
       state.camYaw += dy * Math.min(1, Math.min(0.85, 0.28 + speed * 0.05) * ease * dt);
       state.camPitch = Math.max(0.1, state.camPitch);
-      focX = van.st.x; focZ = van.st.z; focY = van.st.bodyY + 1.1;
+      // Sous 2,2 m on ne regarde plus le VÉHICULE mais son CONDUCTEUR : la
+      // cible glisse sur la tête du mécano assis, et le cadrage devient celui
+      // d'un poste de pilotage. Au-delà, on reprend le centre de caisse — une
+      // caméra de poursuite doit viser la masse qu'elle suit, pas un occupant.
+      if (state.dist < 2.2) {
+        cabin.toWorld(cabin.seatLocal.x, cabin.seatLocal.z + 0.02, sc1);
+        focX = sc1.x; focZ = sc1.z; focY = van.st.bodyY + 2.12;
+      } else {
+        focX = van.st.x; focZ = van.st.z; focY = van.st.bodyY + 1.1;
+      }
       fvx = van.st.vx; fvz = van.st.vz;              // le regard suit la glisse
       setHint(speed <= 1.6 ? 'E — descendre' : '');
       if (speed > 7) wild.scatter(van.st.x, van.st.z);   // un van lancé fait fuir
@@ -811,7 +826,12 @@ async function start() {
     // repère van (les parois du van ne sont pas des camRects — l'ancien
     // plafond fixe à 1,9 m laissait la caméra traverser la tôle et cadrer
     // le van de DEHORS, mécano invisible)
-    if (aboard) {
+    // Vaut aussi EN CONDUITE dès qu'on s'est rapproché : la cible est alors
+    // dans la cabine, et sans borne la caméra ressortirait par la tôle pour
+    // cadrer le van de dehors — le poste qu'on vient de construire ne serait
+    // jamais vu. Même lancer de rayon, mêmes bornes : rien à modifier, il
+    // suffisait de l'appeler.
+    if (aboard || (state.drive && state.dist < 2.2)) {
       allowed = Math.min(allowed,
         cabin.camLimit(state.tx, state.ty, state.tz, odx, ody, odz));
     }
