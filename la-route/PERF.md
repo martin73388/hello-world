@@ -52,7 +52,45 @@ elle ment). Toute mesure passant par la boucle de rendu doit vérifier
 `document.visibilityState === 'visible'`, ou chronométrer `scene.render()`
 directement comme ci-dessus.
 
-## CONTRE-MESURE : `scene.render()` ne mesure pas ce qu'on croit
+## LA MESURE QUI FAIT FOI (méthode validée par un témoin)
+
+Les deux sections qui suivent racontent deux mesures successives, toutes deux
+fausses, et pour la même raison. Elles sont conservées parce que l'erreur est
+instructive — mais **ce sont les chiffres ci-dessous qui font foi**.
+
+**La méthode.** `scene.render()` seul ne referme pas le cycle : `beginFrame` et
+`endFrame` encadrent l'acquisition et la présentation du swap chain, et c'est là
+que se posent les jalons GPU. Pire, sous WebGPU la soumission rend la main
+avant que le GPU ait travaillé — chronométrer la soumission ne mesure donc
+presque rien. On force la synchronisation en relisant UN pixel après
+`endFrame` : le temps mural devient alors le temps GPU.
+
+**Le témoin qui valide la méthode** : la relecture seule, sans rien rendre,
+coûte **0,3 ms**. Elle ne pollue donc pas la mesure — c'était la première chose
+à vérifier, et c'est ce qui manquait aux deux tentatives précédentes.
+
+Au cadrage plein-jour, en 1087 × 780, médiane sur 14 frames :
+
+| Configuration | Coût | Écart |
+| --- | --- | --- |
+| Scène complète | **25,3 ms** | — |
+| Sans les aiguilles de pin dans les casters | 19,0 ms | **−6,3 ms** |
+| Sans aucun caster d'ombre | 18,7 ms | −6,6 ms |
+| MSAA 4× → 1× | 21,5 ms | **−3,8 ms** |
+| Frame vide (tous maillages cachés), chaîne de post comprise | 7,6 ms | — |
+
+**Ce que ça dit.** La passe d'ombres coûte 6,6 ms, et `pineFoliage` en porte 6,3
+à lui seul — 95 %. Le premier chiffre de ce document (« ~11 ms ») était donc
+dans le bon ordre de grandeur ; ma rétractation l'était moins. La chaîne de post
+et le coût fixe de frame pèsent 7,6 ms, dont 3,8 pour le seul MSAA 4×.
+
+**Les deux leviers, mesurés :** sortir le feuillage de pin des casters rend
+6,3 ms sur 25,3 — un quart de la frame. Passer MSAA à 1× en rend 3,8. Mais
+sortir le feuillage des ombres SANS rien mettre à la place éclaire le sol
+uniformément : c'est exactement le « c'est plat » qu'on cherche à guérir. Ce
+gain-là finance le dapple analytique du PORTAGE 2.4, il ne s'encaisse pas seul.
+
+## CONTRE-MESURE (fausse, conservée pour la leçon) : `scene.render()` ne mesure pas ce qu'on croit
 
 Reprise le lendemain, au cadrage plein-jour, boucle arrêtée, médiane sur 30
 frames — les chiffres ne ressemblent pas aux précédents :
@@ -66,12 +104,13 @@ frames — les chiffres ne ressemblent pas aux précédents :
 
 Deux enseignements, et une leçon de méthode.
 
-**Le premier est solide et contre-intuitif** : `pineFoliage` pèse 3 146 000
-triangles sur les 3 616 000 de la liste de casters — 87 % — et le retirer ne
-change RIEN (2,8 → 2,9 ms, soit du bruit). La passe d'ombres n'est donc pas
-limitée par la géométrie, mais par son coût fixe : deux cascades, leurs
-effacements, leurs changements de cible. « Réduire les triangles d'ombre » est
-le mauvais levier, et l'aurait été quel que soit le budget.
+**Le premier est ~~solide~~ FAUX, et c'est la leçon** : on lisait ici que
+retirer `pineFoliage` des casters ne changeait rien (2,8 → 2,9 ms). Mesuré
+correctement, ça rend **6,3 ms sur 25,3**. L'erreur venait de la méthode, pas
+du raisonnement : sans `beginFrame`/`endFrame` et sans synchronisation GPU, on
+chronométrait une soumission qui rend la main avant que le GPU travaille. Une
+comparaison relative faite dans la même session ne vaut rien si les deux termes
+mesurent la mauvaise chose.
 
 **Le second est que je ne sais pas mesurer cette scène.** `scene.render()`
 chronomètre la SOUMISSION côté CPU ; sous WebGPU le GPU travaille après, et la

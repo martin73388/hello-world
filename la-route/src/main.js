@@ -110,7 +110,17 @@ async function start() {
   if (DEV_GL) {
     engine = new Engine(canvas, true);
   } else {
-    engine = new WebGPUEngine(canvas, { antialias: true });
+    // `timestamp-query` est la SEULE façon de savoir ce que fait le GPU ici.
+    // On a mesuré 2,8 ms de soumission CPU pour une frame observée autour de
+    // 30 fps : la soumission ne dit donc RIEN du coût réel, et tant qu'on n'a
+    // pas d'horloge GPU, tout arbitrage de perf est une croyance — on en a
+    // déjà écrit une dans PERF.md avant de devoir la rétracter. Si
+    // l'adaptateur ne porte pas l'extension, Babylon la filtre en silence :
+    // la demander ne peut pas casser le démarrage.
+    engine = new WebGPUEngine(canvas, {
+      antialias: true,
+      deviceDescriptor: { requiredFeatures: ['timestamp-query'] },
+    });
     // initAsync télécharge glslang et twgsl depuis le CDN Babylon : ils
     // transpilent en WGSL le GLSL de nos plugins matériau (herbe, brume,
     // déformation). Sans eux, WebGPU démarre mais AUCUN shader ne compile —
@@ -122,6 +132,11 @@ async function start() {
       console.error('[LA ROUTE] transpilation WebGPU indisponible :', e);
       return showNoGpu('shaders');
     }
+    // La greffe getGPUFrameTimeCounter était déjà là — l'index des extensions
+    // WebGPU importé plus haut contient engine.query.js. Ce qui manquait était
+    // l'interrupteur. Le setter se remet à false tout seul si le device n'a
+    // pas l'extension : aucune garde à écrire.
+    engine.enableGPUTimingMeasurements = true;
   }
 
   const scene = new Scene(engine);
@@ -869,5 +884,10 @@ async function start() {
   // poignées de développement (cadrage des captures d'itération)
   window.__laroute = { state, scene, engine, deform, van, driver, weather, fire, horn,
     garage, post, retro, grass, clouds, shafts, water, flora, cabin, ridges, wild,
-    capture, isAboard: () => aboard, localPos: lp };
+    capture, isAboard: () => aboard, localPos: lp,
+    // `shadows` et `sun` manquaient : toute sonde d'ombre — taille de carte,
+    // liste de casters, nombre de cascades — était inexécutable depuis la
+    // console. C'est ce qui a permis d'attribuer onze millisecondes aux ombres
+    // sans jamais pouvoir les isoler.
+    shadows, sun, pines, under, litter };
 }

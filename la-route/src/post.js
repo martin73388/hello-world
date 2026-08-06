@@ -55,6 +55,9 @@ export function createPost(scene, camera) {
 
   /* ---- passes toggleables (A/B) ---- */
   const set = (name, on) => {
+    // 'msaa' porte un ENTIER (1, 2 ou 4), pas un booléen : on le traite avant
+    // la coercition, sinon 4 devient true et l'appel ne veut plus rien dire.
+    if (name === 'msaa') { pipe.samples = (on | 0) || 1; return; }
     on = !!on;
     switch (name) {
       case 'fxaa': pipe.fxaaEnabled = on; break;
@@ -74,6 +77,11 @@ export function createPost(scene, camera) {
       case 'sharpen': return pipe.sharpenEnabled;
       case 'vignette': return ip.vignetteEnabled;
       case 'tonemapping': return ip.toneMappingEnabled;
+      // MSAA 4x sur une cible HDR demi-flottante est le seul poste de la chaîne
+      // dont le coût croît avec la résolution ET avec le nombre d'échantillons.
+      // C'est donc le premier suspect si on est limité par le remplissage — et
+      // il n'avait aucune poignée, donc personne ne pouvait le mesurer.
+      case 'msaa': return pipe.samples;
       default: return false;
     }
   };
@@ -81,5 +89,7 @@ export function createPost(scene, camera) {
   /** force du bloom, réglable à chaud depuis l'overlay */
   const setBloom = (w) => { pipe.bloomWeight = w; };
 
-  return { setExposure, getExposure, update, set, has, setBloom };
+  // `pipe` sort aussi : les sondes de perf ont besoin de le manipuler passe
+  // par passe, et `samples` ne se lit pas autrement.
+  return { setExposure, getExposure, update, set, has, setBloom, pipe };
 }
