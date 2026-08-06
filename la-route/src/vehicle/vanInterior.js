@@ -31,6 +31,18 @@ const HW = 0.95;                         // demi-largeur habitable → 1,90 m
 const Z_BACK = -2.45;                    // paroi arrière
 const Z_BULK = 1.00;                     // cloison de séparation cabine/cellule
 const TH = 0.05;                         // épaisseur du doublage
+/**
+ * Épaisseur du doublage DE FLANC — plus mince que le reste, et ce n'est pas
+ * une coquetterie. La caisse de van.js a ses flancs au plan |x| = 1,000 exact.
+ * À TH = 0,05, le doublage posé contre la paroi habitable (|x| = 0,95) ressort
+ * pile à 1,000 : sa face extérieure et la tôle peinte occupaient le MÊME plan,
+ * et se disputaient le pixel. De dehors, on voyait de grands rectangles de
+ * contreplaqué clignoter par-dessus le flanc rouge — le « problème de textures
+ * qui se superposent ». À 0,035, la face extérieure tombe à 0,985 : quinze
+ * millimètres à l'intérieur de la tôle, invisible de dehors, et le volume
+ * habitable ne bouge pas d'un millimètre (la face INTÉRIEURE reste à 0,95).
+ */
+const TH_F = 0.035;
 // Le passage fait 0,80 m : un marcheur de 0,32 m de rayon en réclame 0,64, et
 // il doit rester du jeu pour ne pas râper la cloison à chaque franchissement.
 const PASS_X0 = -0.10, PASS_X1 = 0.70;   // passage vers la cabine
@@ -237,18 +249,18 @@ export function buildVanInterior(scene, shadows, vanBody, vanState) {
   box('viSol', HW * 2, 0.04, CD, 0, FLOOR_Y - 0.02, CZ, wood);
   box('viPlafond', HW * 2, 0.04, CD, 0, CEIL_Y + 0.02, CZ, formica);
   // flanc gauche : coupé par la baie coulissante, pleine hauteur
-  box('viFlancGar', TH, CEIL_Y - FLOOR_Y, DOOR_Z0 - Z_BACK,
-    -HW - TH / 2, (FLOOR_Y + CEIL_Y) / 2, (Z_BACK + DOOR_Z0) / 2, wood);
-  box('viFlancGav', TH, CEIL_Y - FLOOR_Y, Z_BULK - DOOR_Z1,
-    -HW - TH / 2, (FLOOR_Y + CEIL_Y) / 2, (DOOR_Z1 + Z_BULK) / 2, wood);
+  box('viFlancGar', TH_F, CEIL_Y - FLOOR_Y, DOOR_Z0 - Z_BACK,
+    -HW - TH_F / 2, (FLOOR_Y + CEIL_Y) / 2, (Z_BACK + DOOR_Z0) / 2, wood);
+  box('viFlancGav', TH_F, CEIL_Y - FLOOR_Y, Z_BULK - DOOR_Z1,
+    -HW - TH_F / 2, (FLOOR_Y + CEIL_Y) / 2, (DOOR_Z1 + Z_BULK) / 2, wood);
   // flanc droit : évidé autour de la vitre de custode (vWinR2 de van.js)
   const WY0 = 1.86, WY1 = 2.30, WZ0 = -0.90, WZ1 = 0.10;
-  box('viFlancDb', TH, WY0 - FLOOR_Y, CD, HW + TH / 2, (FLOOR_Y + WY0) / 2, CZ, wood);
-  box('viFlancDh', TH, CEIL_Y - WY1, CD, HW + TH / 2, (WY1 + CEIL_Y) / 2, CZ, wood);
-  box('viFlancDar', TH, WY1 - WY0, WZ0 - Z_BACK,
-    HW + TH / 2, (WY0 + WY1) / 2, (Z_BACK + WZ0) / 2, wood);
-  box('viFlancDav', TH, WY1 - WY0, Z_BULK - WZ1,
-    HW + TH / 2, (WY0 + WY1) / 2, (WZ1 + Z_BULK) / 2, wood);
+  box('viFlancDb', TH_F, WY0 - FLOOR_Y, CD, HW + TH_F / 2, (FLOOR_Y + WY0) / 2, CZ, wood);
+  box('viFlancDh', TH_F, CEIL_Y - WY1, CD, HW + TH_F / 2, (WY1 + CEIL_Y) / 2, CZ, wood);
+  box('viFlancDar', TH_F, WY1 - WY0, WZ0 - Z_BACK,
+    HW + TH_F / 2, (WY0 + WY1) / 2, (Z_BACK + WZ0) / 2, wood);
+  box('viFlancDav', TH_F, WY1 - WY0, Z_BULK - WZ1,
+    HW + TH_F / 2, (WY0 + WY1) / 2, (WZ1 + Z_BULK) / 2, wood);
   // paroi arrière : évidée autour de la lunette (vWinB), on la voit du lit
   const BY0 = 1.92, BY1 = 2.32, BX = 0.65;
   box('viFondb', HW * 2, BY0 - FLOOR_Y, TH, 0, (FLOOR_Y + BY0) / 2, Z_BACK - TH / 2, wood);
@@ -373,13 +385,13 @@ export function buildVanInterior(scene, shadows, vanBody, vanState) {
   doorNode.parent = root;
   const DZC = (DOOR_Z0 + DOOR_Z1) / 2, DZD = DOOR_Z1 - DOOR_Z0;
   const DGY0 = 1.86, DGY1 = 2.30;                     // la vitre de la portière
-  box('viPortePan', 0.05, DGY0 - 0.55, DZD, -HW - 0.075, (0.55 + DGY0) / 2, DZC, skin, doorNode);
+  box('viPortePan', 0.05, DGY0 - 0.55, DZD, -HW - 0.080, (0.55 + DGY0) / 2, DZC, skin, doorNode);
   box('viPorteHt', 0.05, CEIL_Y - DGY1, DZD, -HW - 0.075, (DGY1 + CEIL_Y) / 2, DZC, skin, doorNode);
   box('viPorteMg', 0.05, DGY1 - DGY0, 0.14, -HW - 0.075, (DGY0 + DGY1) / 2, DOOR_Z0 + 0.07, skin, doorNode);
   box('viPorteMd', 0.05, DGY1 - DGY0, 0.14, -HW - 0.075, (DGY0 + DGY1) / 2, DOOR_Z1 - 0.07, skin, doorNode);
   box('viPorteVitre', 0.02, DGY1 - DGY0 - 0.02, DZD - 0.3,
     -HW - 0.075, (DGY0 + DGY1) / 2, DZC, glass, doorNode);
-  box('viPorteDoubl', 0.03, DGY0 - 0.55, DZD - 0.04, -HW - 0.035, (0.55 + DGY0) / 2, DZC, wood, doorNode);
+  box('viPorteDoubl', 0.03, DGY0 - 0.55, DZD - 0.04, -HW - 0.015, (0.55 + DGY0) / 2, DZC, wood, doorNode);
   box('viPortePoignee', 0.06, 0.05, 0.18, -HW - 0.13, 1.34, DOOR_Z1 - 0.2, metal, doorNode);
   box('viPorteRail', 0.05, 0.05, DZD + DOOR_TRAVEL + 0.1,
     -HW - 0.09, CEIL_Y + 0.06, DZC - DOOR_TRAVEL / 2, dark);
@@ -546,10 +558,14 @@ export function buildVanInterior(scene, shadows, vanBody, vanState) {
     const slab = (p, d, lo, hi) =>
       d > 1e-6 ? (hi - p) / d : (d < -1e-6 ? (lo - p) / d : 9);
     let t = slab(lx, ldx, -HW + CAM_M, HW - CAM_M);
-    t = Math.min(t, slab(ly, ldy, FLOOR_Y + 0.15, CEIL_Y - CAM_M));
+    t = Math.min(t, slab(ly, ldy, FLOOR_Y + 0.28, CEIL_Y - CAM_M));
     t = Math.min(t, slab(lz, ldz, Z_BACK + CAM_M, 2.42 - CAM_M));
-    // plancher à 0,35 : sous ça l'épaule entre dans la tête du mécano
-    return Math.max(0.35, t);
+    // Aucun plancher de recul ici : un `Math.max(0.35, t)` écrasait justement
+    // la contrainte qu'on vient de calculer. En visant vers le haut, la caméra
+    // repartait sous le plancher et on se retrouvait à regarder la SOUS-FACE du
+    // sol, qui barrait l'écran en deux. La borne basse est 0 : si la paroi est
+    // à dix centimètres, la caméra reste à dix centimètres.
+    return Math.max(0, t);
   }
 
   /* ---- plafonnier ---- */

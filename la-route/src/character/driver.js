@@ -129,5 +129,22 @@ export function buildDriver(scene, shadows) {
     }
   }
 
-  return { root, update, setSeated };
+  /**
+   * Escamote le mécano quand la caméra est trop près pour qu'il laisse voir
+   * quoi que ce soit — typiquement dans la cellule du van, où la caméra est
+   * bornée aux parois et se retrouve à moins d'un mètre de son dos.
+   *
+   * `isVisible` sur la racine ne suffirait pas : root est un TransformNode, il
+   * ne porte aucune géométrie, et la propriété ne descend pas aux enfants. On
+   * parcourt donc les maillages. La liste est figée à la construction, le
+   * parcours ne coûte rien, et on ne touche au tableau que si l'état CHANGE.
+   */
+  let shown = true;
+  function setShown(on) {
+    if (on === shown) return;
+    shown = on;
+    for (const m of meshes) m.isVisible = on;
+  }
+
+  return { root, update, setSeated, setShown };
 }

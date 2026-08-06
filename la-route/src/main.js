@@ -793,6 +793,11 @@ async function start() {
     // rapproche vite quand un obstacle surgit, réélargit en douceur
     state.distOcc += (allowed - state.distOcc) * Math.min(1, (allowed < state.distOcc ? 22 : 4.5) * dt);
     const dEff = Math.min(state.dist, state.distOcc);
+    // Dans la cellule, la caméra est bornée aux parois : elle se retrouve à
+    // moins d'un mètre du dos du mécano, qui remplit alors tout l'écran et
+    // masque l'aménagement. Sous ce seuil on l'escamote — c'est l'intérieur
+    // qu'on est venu voir, pas la nuque du personnage.
+    driver.setShown(dEff > 1.15);
     camera.position.x = state.tx + odx * dEff;
     camera.position.y = Math.max(
       height(camera.position.x, camera.position.z) + 0.4,

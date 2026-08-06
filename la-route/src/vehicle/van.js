@@ -126,9 +126,42 @@ export function buildVan(scene, shadows, ground) {
   // le véhicule. La livrée fait alors le tour de la caisse d'un seul tenant,
   // et le jonc chromé est une ligne continue à la bonne hauteur. U n'est pas
   // touché : le grain et les joints de panneaux restent à leur échelle.
-  box('vLower', 2.0, 1.02, 5.2, 0, 1.04, 0, paintLo);
-  box('vUpper', 1.96, 0.95, 5.2, 0, 2.02, 0, paintHi);
+  const vLower = box('vLower', 2.0, 1.02, 5.2, 0, 1.04, 0, paintLo);
+  const vUpper = box('vUpper', 1.96, 0.95, 5.2, 0, 2.02, 0, paintHi);
   box('vRoof', 1.84, 0.1, 5.02, 0, 2.54, 0, paintHi);
+
+  /**
+   * Les caissons de caisse sont des boîtes PLEINES, et la cellule habitable les
+   * traverse : elle va de 0,52 à 2,37, quand vLower occupe 0,53→1,55 et vUpper
+   * 1,545→2,495. Vues de l'intérieur, la plupart de leurs faces sont éliminées
+   * au dos — mais pas toutes. Debout dans le van, l'œil est à 2,1 m, donc
+   * AU-DESSUS du dessus de vLower : cette face-là est vue de face et barre le
+   * salon d'un plancher fantôme à hauteur de hanche. Symétriquement, le dessous
+   * de vUpper pose un faux plafond au même endroit. Le joueur les a vus tout de
+   * suite : « il y a un sol en trop dans le van, il coupe la zone en 2 ».
+   *
+   * On retire donc ces deux faces. Elles ne manquent nulle part ailleurs : le
+   * dessus de vLower est couvert par vUpper, le dessous de vUpper par vLower, et
+   * le jonc chromé habille la jonction vue du dehors.
+   *
+   * On sélectionne par la NORMALE plutôt que par un indice de face : l'ordre des
+   * faces d'un CreateBox est une convention interne, et parier sur une
+   * convention a déjà coûté cher sur ce véhicule.
+   */
+  const dropFace = (m, nx, ny, nz) => {
+    const nrm = m.getVerticesData('normal');
+    const idx = m.getIndices();
+    const keep = [];
+    for (let i = 0; i < idx.length; i += 3) {
+      const a = idx[i] * 3;
+      if (nrm[a] * nx + nrm[a + 1] * ny + nrm[a + 2] * nz < 0.9) {
+        keep.push(idx[i], idx[i + 1], idx[i + 2]);
+      }
+    }
+    m.setIndices(keep);
+  };
+  dropFace(vLower, 0, 1, 0);            // le plancher fantôme à 1,55
+  dropFace(vUpper, 0, -1, 0);           // le plafond fantôme au même plan
   // Jonc chromé à la jonction des deux teintes. Il n'est pas décoratif : les
   // deux caissons ont la MÊME profondeur et le même centre en z, donc leurs
   // faces avant et arrière sont rigoureusement coplanaires et se disputaient le
