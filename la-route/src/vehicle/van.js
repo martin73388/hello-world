@@ -122,10 +122,10 @@ export function buildVan(scene, shadows, ground) {
   // autrement que les flancs. Le van avait l'air d'être deux véhicules
   // superposés.
   //
-  // On recale donc la coordonnée V de chaque sommet sur sa HAUTEUR RÉELLE dans
-  // le véhicule. La livrée fait alors le tour de la caisse d'un seul tenant,
-  // et le jonc chromé est une ligne continue à la bonne hauteur. U n'est pas
-  // touché : le grain et les joints de panneaux restent à leur échelle.
+  // La livrée vient donc de la TEINTE des matériaux (paintLo / paintHi), pas de
+  // la texture, qui ne porte plus que la tôle. Le grain et les joints de
+  // panneaux restent continus d'un caisson à l'autre puisqu'elle est partagée,
+  // et le jonc chromé matérialise la ligne de séparation à la bonne hauteur.
   const vLower = box('vLower', 2.0, 1.02, 5.2, 0, 1.04, 0, paintLo);
   const vUpper = box('vUpper', 1.96, 0.95, 5.2, 0, 2.02, 0, paintHi);
   box('vRoof', 1.84, 0.1, 5.02, 0, 2.54, 0, paintHi);
@@ -174,7 +174,13 @@ export function buildVan(scene, shadows, ground) {
   ws.rotation.x = -0.1;
   box('vWinL', 0.02, 0.5, 0.78, -0.992, 2.1, 1.62, glass);
   box('vWinR', 0.02, 0.5, 0.78, 0.992, 2.1, 1.62, glass);
-  box('vWinL2', 0.02, 0.44, 1.0, -0.992, 2.08, -0.4, glass);
+  // Pas de custode à gauche : l'emplacement est occupé par la BAIE
+  // COULISSANTE. La vitre qui s'y trouvait appartenait à la caisse et non à la
+  // portière — donc elle ne coulissait pas avec elle : portière fermée elle
+  // doublait la vitre de portière (deux plans alpha à 13 mm, le flanc gauche
+  // sortait plus sombre que le droit), et portière ouverte elle restait
+  // suspendue en travers de l'ouverture, un mètre de verre en plein passage.
+  // La portière a sa propre vitre, viPorteVitre.
   box('vWinR2', 0.02, 0.44, 1.0, 0.992, 2.08, -0.4, glass);
   box('vWinB', 1.3, 0.4, 0.02, 0, 2.12, -2.615, glass);
   // lettrage arrière
@@ -217,8 +223,15 @@ export function buildVan(scene, shadows, ground) {
   box('vSeatLb', 0.55, 0.6, 0.13, -0.52, 1.66, 1.44, inn);
   box('vSeatR', 0.55, 0.14, 0.55, 0.52, 1.32, 1.7, inn);
   box('vSeatRb', 0.55, 0.6, 0.13, 0.52, 1.66, 1.44, inn);
-  box('vBed', 1.7, 0.34, 1.5, 0, 1.2, -1.6, inn);              // silhouette cellule
-  box('vKitch', 0.5, 0.8, 1.2, 0.68, 1.44, -0.3, inn);
+  // vBed et vKitch ont été RETIRÉS : c'étaient les silhouettes que van.js
+  // posait à l'époque où la cellule n'était qu'un décor vu par les vitres.
+  // Depuis que vanInterior.js meuble pour de vrai, elles traversaient le
+  // mobilier — le témoin de couchette dépassait de 23 cm au-dessus du matelas,
+  // celui de kitchenette de 42 cm au-dessus du plan de travail, à travers
+  // l'évier, l'étagère et les tranches des livres. Tout ça dans l'axe de la
+  // baie coulissante, donc vu en permanence. La cabine, elle, garde ses
+  // sièges et son tablier : vanInterior ne modélise rien en avant de la
+  // cloison.
   const wheelT = MeshBuilder.CreateTorus('vWheelT', { diameter: 0.4, thickness: 0.045, tessellation: 18 }, scene);
   wheelT.position.set(-0.52, 1.78, 2.12); wheelT.rotation.x = Math.PI / 2 - 0.5;
   wheelT.material = dark; wheelT.parent = body; meshes.push(wheelT);

@@ -32,17 +32,22 @@ const Z_BACK = -2.45;                    // paroi arrière
 const Z_BULK = 1.00;                     // cloison de séparation cabine/cellule
 const TH = 0.05;                         // épaisseur du doublage
 /**
- * Épaisseur du doublage DE FLANC — plus mince que le reste, et ce n'est pas
- * une coquetterie. La caisse de van.js a ses flancs au plan |x| = 1,000 exact.
- * À TH = 0,05, le doublage posé contre la paroi habitable (|x| = 0,95) ressort
- * pile à 1,000 : sa face extérieure et la tôle peinte occupaient le MÊME plan,
- * et se disputaient le pixel. De dehors, on voyait de grands rectangles de
- * contreplaqué clignoter par-dessus le flanc rouge — le « problème de textures
- * qui se superposent ». À 0,035, la face extérieure tombe à 0,985 : quinze
- * millimètres à l'intérieur de la tôle, invisible de dehors, et le volume
- * habitable ne bouge pas d'un millimètre (la face INTÉRIEURE reste à 0,95).
+ * Épaisseur du doublage DE FLANC. La caisse de van.js a DEUX largeurs, pas
+ * une — vLower est à |x| = 1,000, mais vUpper, qui couvre tout ce qui est
+ * au-dessus de y = 1,545, n'est qu'à 0,980. Le doublage se pose contre la
+ * paroi habitable (|x| = 0,95) et ressort donc de TH_F :
+ *   à 0,050 il tombait pile sur vLower — lutte de profondeur, les rectangles
+ *     de contreplaqué clignotaient sur le flanc ;
+ *   à 0,035 il tombait à 0,985, soit 5 mm DEVANT vUpper — il ne clignotait
+ *     plus, il gagnait tout le temps, et on voyait de dehors de grands
+ *     panneaux de bois à la place de la tôle crème.
+ * La contrainte serrante est donc vUpper à 0,980, pas vLower à 1,000. À 0,020
+ * la face extérieure tombe à 0,970 : dix millimètres derrière vUpper, trente
+ * derrière vLower. La face INTÉRIEURE ne bouge pas (0,950) — volume habitable,
+ * colliders et camLimit sont écrits contre HW, ils ne voient pas la
+ * différence.
  */
-const TH_F = 0.035;
+const TH_F = 0.02;
 // Le passage fait 0,80 m : un marcheur de 0,32 m de rayon en réclame 0,64, et
 // il doit rester du jeu pour ne pas râper la cloison à chaque franchissement.
 const PASS_X0 = -0.10, PASS_X1 = 0.70;   // passage vers la cabine
@@ -247,6 +252,13 @@ export function buildVanInterior(scene, shadows, vanBody, vanState) {
    * parois — et les trous qui font les vraies fenêtres. ---- */
   const CZ = (Z_BACK + Z_BULK) / 2, CD = Z_BULK - Z_BACK;
   box('viSol', HW * 2, 0.04, CD, 0, FLOOR_Y - 0.02, CZ, wood);
+  // La cabine n'a JAMAIS eu de plancher à elle : le seul plan qu'on y voyait
+  // était le DESSUS de vLower, à 1,55 — le « sol en trop » à hauteur de hanche
+  // que van.js vient de retirer. Depuis, le regard traverse le van et sort sur
+  // le terrain, de l'intérieur comme du dehors par le pare-brise. On aboute
+  // franchement à viSol en z = 1,00 : normales opposées, aucun plan partagé.
+  box('viSolCabine', HW * 2, 0.04, 2.42 - Z_BULK,
+    0, FLOOR_Y - 0.02, (Z_BULK + 2.42) / 2, dark);
   box('viPlafond', HW * 2, 0.04, CD, 0, CEIL_Y + 0.02, CZ, formica);
   // flanc gauche : coupé par la baie coulissante, pleine hauteur
   box('viFlancGar', TH_F, CEIL_Y - FLOOR_Y, DOOR_Z0 - Z_BACK,
@@ -491,14 +503,41 @@ export function buildVanInterior(scene, shadows, vanBody, vanState) {
   let doorT = 0, doorP = 0, doorE = 0;
   function openDoor() { doorT = 1; }
   function closeDoor() { doorT = 0; }
+  /** E actionne la portière : c'est le SEUL rôle de la touche sur le van. */
+  function toggleDoor() { doorT = doorT > 0.5 ? 0 : 1; }
   const doorOpen = () => doorE > 0.85;
+  /** la baie est-elle assez ouverte pour qu'on s'y engage à pied ? Plus
+   * permissif que doorOpen : on doit pouvoir entrer pendant qu'elle coulisse
+   * encore, sinon le franchissement se sent « attendu ».
+   * Le seuil est le MÊME que celui d'`insideLocal` : à 0,45 ici et 0,5 là-bas,
+   * porte entrouverte à 0,47, on embarquait puis débarquait une frame sur deux. */
+  const DOOR_PASS = 0.5;
+  const doorPassable = () => doorE > DOOR_PASS;
+
+  /**
+   * A-t-on FRANCHI la baie ? Volontairement plus strict qu'`insideLocal` : le
+   * marcheur doit avoir passé la tôle (lx > -HW - 0,06), pas seulement s'être
+   * approché du seuil.
+   *
+   * L'écart entre les deux seuils est délibéré et c'est lui qui rend le
+   * franchissement propre. On devient passager à -1,01, on ne redevient piéton
+   * qu'à -1,32 : trente centimètres d'hystérésis. Sans cet écart, un joueur
+   * arrêté pile sur le seuil basculerait d'un repère à l'autre à chaque frame,
+   * et la caméra battrait entre son cadrage extérieur et intérieur.
+   */
+  function boarded(lx, lz) {
+    // -0,99 et pas -1,01 : STRICTEMENT dans le domaine d'insideLocal, dont le
+    // test principal exige lx > -1,00. Deux centimètres de trop et on embarquait
+    // sur une position qu'insideLocal jugeait dehors, donc on ressortait aussitôt.
+    return lz > Z_BACK + 0.05 && lz < 2.40 && lx > -0.99 && lx < HW;
+  }
 
   /** le volume habitable, cellule + cabine ; porte ouverte, le seuil compte
    * pour « dedans » : on ne rebascule pas dehors en plein franchissement */
   function insideLocal(lx, lz) {
     if (lz < Z_BACK - 0.05 || lz > 2.5) return false;
     if (lx > -1.0 && lx < 1.0) return true;
-    return doorE > 0.5 && lx > -1.32 && lx <= -1.0 && lz > DOOR_Z0 && lz < DOOR_Z1;
+    return doorE > DOOR_PASS && lx > -1.32 && lx <= -1.0 && lz > DOOR_Z0 && lz < DOOR_Z1;
   }
 
   /** cercle-AABB en local : c'est ce qui rend l'intérieur praticable en roulant */
@@ -623,9 +662,9 @@ export function buildVanInterior(scene, shadows, vanBody, vanState) {
   update(0);                                          // pose fermée et éteinte
 
   return {
-    toLocal, toWorld, resolve, floorY: FLOOR_Y, doorWorld, insideLocal, camLimit,
+    toLocal, toWorld, resolve, floorY: FLOOR_Y, doorWorld, insideLocal, boarded, camLimit,
     seatLocal: SEAT, update, lampSet, lampOn: () => lampLit,
-    openDoor, closeDoor, doorOpen, doorFrac: () => doorE,
+    openDoor, closeDoor, toggleDoor, doorOpen, doorPassable, doorFrac: () => doorE,
     colliders, root, node: doorNode,
   };
 }

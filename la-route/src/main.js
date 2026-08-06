@@ -324,7 +324,10 @@ async function start() {
     locked: false, drive: false, distOcc: 4.2,
     lookHold: 0,          // délai de grâce du recentrage caméra au volant
   };
-  let walkDist = 4.2, wheelAcc = 0, lightsManual = false;
+  // (plus de walkDist : la caméra ne change plus de distance à l'embarquement,
+  // c'est camLimit qui la resserre dans la cellule et la relâche dehors — le
+  // joueur garde le zoom qu'il a choisi)
+  let wheelAcc = 0, lightsManual = false;
   // « à bord » : le mécano marche DANS le van pendant qu'il roule. Sa
   // position est alors tenue en coordonnées LOCALES du véhicule.
   let aboard = false;
@@ -387,7 +390,7 @@ async function start() {
       state.distTarget = 2.4;                          // caméra resserrée dedans
       return;
     }
-    // --- à bord, à pied : s'asseoir au volant, ou descendre ---
+    // --- à bord, à pied : s'asseoir au volant, sinon manœuvrer la portière ---
     if (aboard) {
       if (Math.hypot(lp.x - cabin.seatLocal.x, lp.z - cabin.seatLocal.z) < 1.0) {
         aboard = false; state.drive = true;
@@ -395,13 +398,9 @@ async function start() {
         state.distTarget = 8.4;
         return;
       }
-      if (Math.abs(van.st.speed) > 0.6) return;        // on ne saute pas en marche
-      cabin.openDoor();
-      const d = cabin.doorWorld(sc1);
-      aboard = false;
-      state.px = d.x; state.pz = d.z; state.vx = 0; state.vz = 0;
-      state.py = groundAll(d.x, d.z);
-      state.distTarget = walkDist;
+      // On ne « descend » plus : on ouvre la porte et on SORT EN MARCHANT.
+      if (Math.abs(van.st.speed) > 0.6) return;        // pas de portière en marche
+      cabin.toggleDoor();
       return;
     }
     {
@@ -415,21 +414,11 @@ async function start() {
         if (!(garage.doorFrac() > 0.5 && vanInDoorway)) garage.toggleDoor();
         return;
       }
+      // Le van est un OBJET du monde, pas un lieu où l'on se téléporte : E ne
+      // fait qu'actionner la portière. On entre ensuite en marchant par la
+      // baie, comme on franchirait n'importe quelle porte.
       const d = cabin.doorWorld(sc1);
-      if (Math.hypot(state.px - d.x, state.pz - d.z) < 2.3) {
-        // on ENTRE dans la cellule à pied : la position bascule en local
-        cabin.openDoor();
-        cabin.toLocal(state.px, state.pz, lp);
-        lp.x = Math.max(-0.7, Math.min(0.7, lp.x));
-        lp.z = Math.max(-1.4, Math.min(1.2, lp.z));
-        aboard = true;
-        state.vx = 0; state.vz = 0;
-        walkDist = state.distTarget;
-        state.distTarget = 2.4;
-        // pof d'échappement au démarrage
-        const c = Math.cos(van.st.yaw), s = Math.sin(van.st.yaw);
-        dust.puff(van.st.x - 0.6 * c - 2.5 * s, van.st.bodyY - 0.3, van.st.z + 0.6 * s - 2.5 * c);
-      }
+      if (Math.hypot(state.px - d.x, state.pz - d.z) < 2.3) cabin.toggleDoor();
     }
   });
   const keys = Object.create(null);
@@ -626,7 +615,18 @@ async function start() {
       lp.x = sc2.x; lp.z = sc2.z;
       cabin.toWorld(lp.x, lp.z, sc1);
       state.px = sc1.x; state.pz = sc1.z;
-      state.py = van.st.bodyY + cabin.floorY;
+      // Sortie en marchant, symétrique de l'entrée : on repasse piéton quand on
+      // a quitté le volume habitable, seuil compris. Le seuil de sortie (-1,32)
+      // est plus large que celui d'entrée (-1,01) : c'est cette hystérésis qui
+      // évite de battre entre les deux repères quand on s'arrête sur le pas.
+      if (!cabin.insideLocal(lp.x, lp.z)) {
+        aboard = false;
+        state.vx = 0; state.vz = 0;
+      }
+      // le plancher est 50 cm au-dessus du sol : on y monte en glissant, pas
+      // d'un cran — la même relaxation que la marche en terrain accidenté
+      const fy = van.st.bodyY + cabin.floorY;
+      state.py += (fy - state.py) * Math.min(1, 14 * dt);
       driver.root.position.set(state.px, state.py, state.pz);
       driver.root.rotation.y = state.yaw;
       driver.update(dt, il > 0 ? WALK * 0.55 : 0);
@@ -666,6 +666,18 @@ async function start() {
       if (po) { state.px = po.x; state.pz = po.z; }
       const pr = resolveRects(state.px, state.pz, 0.32);
       state.px = pr.x; state.pz = pr.z;
+      // Franchissement de la baie. On n'« active » pas le van : dès que le
+      // marcheur a passé la tôle, sa position bascule en repère de caisse —
+      // même point, même cap, aucun saut, aucune touche à presser. La porte
+      // doit être suffisamment ouverte, et le van à l'arrêt (on n'attrape pas
+      // un véhicule en mouvement au passage).
+      if (!aboard && cabin.doorPassable() && Math.abs(van.st.speed) < 1.2) {
+        cabin.toLocal(state.px, state.pz, lp);
+        if (cabin.boarded(lp.x, lp.z)) {
+          aboard = true;
+          state.vx = 0; state.vz = 0;
+        }
+      }
       // empreintes de pas : un splat par foulée, alterné gauche/droite
       const spd = Math.hypot(state.vx, state.vz);
       if (spd > 0.4) {
@@ -697,16 +709,18 @@ async function start() {
       fvx = state.vx; fvz = state.vz;
       if (aboard) {
         const nearSeat = Math.hypot(lp.x - cabin.seatLocal.x, lp.z - cabin.seatLocal.z) < 1.0;
-        setHint(nearSeat ? 'E — prendre le volant' : 'E — descendre');
+        setHint(nearSeat ? 'E — prendre le volant'
+          : (cabin.doorFrac() > 0.5 ? 'E — fermer la portière' : 'E — ouvrir la portière'));
       } else {
         const d = cabin.doorWorld(sc1);
         const b = garage.buttonWorld;
         const dBtn = Math.hypot(state.px - b.x, state.pz - b.z);
         if (dBtn < 2.0) {
           setHint(garage.doorFrac() > 0.5 ? 'E — fermer la porte' : 'E — ouvrir la porte');
-        } else {
-          setHint(Math.hypot(state.px - d.x, state.pz - d.z) < 2.3 ? 'E — entrer dans le van' : '');
-        }
+        } else if (Math.hypot(state.px - d.x, state.pz - d.z) < 2.3) {
+          // plus de « entrer dans le van » : la porte s'ouvre, on entre à pied
+          setHint(cabin.doorFrac() > 0.5 ? 'E — fermer la portière' : 'E — ouvrir la portière');
+        } else setHint('');
       }
     }
 
@@ -775,7 +789,12 @@ async function start() {
       // le van bloque la marche… SAUF au droit de sa portière ouverte :
       // sinon le mécano est expulsé du seuil avant d'avoir pu entrer
       const dw = cabin.doorWorld(sc2);
-      const nearDoor = Math.hypot(state.px - dw.x, state.pz - dw.z) < 2.6;
+      // La caisse cesse de barrer le passage UNIQUEMENT au droit d'une portière
+      // ouverte : portière close, le van est un obstacle plein, comme il doit
+      // l'être. C'est ce qui fait qu'on entre par la porte et pas à travers
+      // la tôle.
+      const nearDoor = Math.hypot(state.px - dw.x, state.pz - dw.z) < 2.6
+        && cabin.doorPassable();
       vanRect.active = !state.drive && !aboard && !nearDoor;
     }
     const odx = (Math.sin(state.camYaw) * cp * state.dist + Math.cos(state.camYaw) * shoulder) / state.dist;
