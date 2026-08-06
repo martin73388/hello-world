@@ -17,6 +17,14 @@ import { SpotLight } from '@babylonjs/core/Lights/spotLight.js';
 
 const WHEEL_R = 0.37, TRACK = 0.85, WHEELBASE = 3.2, CLEAR = 0.42;
 
+/**
+ * Les cotes de la BAIE latérale, exportées : la carrosserie perce le trou,
+ * l'aménagement y fait coulisser la portière. Deux jeux de constantes auraient
+ * fini par diverger d'un centimètre, et un centimètre ici c'est soit un jour
+ * dans la tôle, soit une porte qui ne ferme plus.
+ */
+export const BAY_Z0 = -0.95, BAY_Z1 = 0.35;
+
 function paintTexture(scene) {
   const tex = new DynamicTexture('vanPaint', 512, scene, true);
   const g = tex.getContext();
@@ -162,6 +170,36 @@ export function buildVan(scene, shadows, ground) {
   };
   dropFace(vLower, 0, 1, 0);            // le plancher fantôme à 1,55
   dropFace(vUpper, 0, -1, 0);           // le plafond fantôme au même plan
+
+  /* ---- LA BAIE : une vraie ouverture dans le flanc gauche ----
+   * La portière coulissait déjà, mais derrière elle il n'y avait RIEN à
+   * traverser : la caisse est une boîte pleine, et on ouvrait la porte sur de
+   * la tôle. Il faut donc percer le flanc.
+   *
+   * On retire la face -x des deux caissons, puis on remonte le flanc autour du
+   * trou. Les deux caissons n'ayant pas la même largeur (1,00 en bas, 0,98 en
+   * haut), chaque panneau est posé au plan de SON caisson : le décrochement
+   * reste celui de la carrosserie d'origine.
+   *
+   * La baie va du plancher (0,53) au linteau (2,30), soit 1,77 m de haut sur
+   * 1,30 m de large — les cotes de la portière, qui la couvre exactement quand
+   * elle est fermée. */
+  const BZ0 = BAY_Z0, BZ1 = BAY_Z1, BTOP = 2.30, LT = 0.02;
+  dropFace(vLower, -1, 0, 0);
+  dropFace(vUpper, -1, 0, 0);
+  // bas de caisse, de part et d'autre de la baie
+  box('vFlkLoR', LT, 1.02, BZ0 + 2.6, -1.0 + LT / 2, 1.04, (-2.6 + BZ0) / 2, paintLo);
+  box('vFlkLoF', LT, 1.02, 2.6 - BZ1, -1.0 + LT / 2, 1.04, (BZ1 + 2.6) / 2, paintLo);
+  // haut de caisse, idem, plus le linteau au-dessus de l'ouverture
+  box('vFlkHiR', LT, 0.95, BZ0 + 2.6, -0.98 + LT / 2, 2.02, (-2.6 + BZ0) / 2, paintHi);
+  box('vFlkHiF', LT, 0.95, 2.6 - BZ1, -0.98 + LT / 2, 2.02, (BZ1 + 2.6) / 2, paintHi);
+  box('vFlkHiT', LT, 2.495 - BTOP, BZ1 - BZ0, -0.98 + LT / 2,
+    (BTOP + 2.495) / 2, (BZ0 + BZ1) / 2, paintHi);
+  // montants et seuil : la baie a un encadrement, sinon la tranche de la tôle
+  // se lit comme une découpe au cutter
+  box('vBaieMr', 0.05, BTOP - 0.53, 0.05, -1.01, (0.53 + BTOP) / 2, BZ0 + 0.025, chrome);
+  box('vBaieMf', 0.05, BTOP - 0.53, 0.05, -1.01, (0.53 + BTOP) / 2, BZ1 - 0.025, chrome);
+  box('vBaieSeuil', 0.06, 0.05, BZ1 - BZ0, -1.01, 0.555, (BZ0 + BZ1) / 2, chrome);
   // Jonc chromé à la jonction des deux teintes. Il n'est pas décoratif : les
   // deux caissons ont la MÊME profondeur et le même centre en z, donc leurs
   // faces avant et arrière sont rigoureusement coplanaires et se disputaient le

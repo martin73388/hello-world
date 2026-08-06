@@ -21,6 +21,7 @@ import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { PointLight } from '@babylonjs/core/Lights/pointLight.js';
 import { windClock } from '../vegetation/wind.js';
+import { BAY_Z0, BAY_Z1 } from './van.js';
 
 /* ---- géométrie de la cellule (tout en local, y = 0 au niveau de bodyY) ----
  * La caisse de van.js : vLower 0,53→1,55 et vUpper 1,545→2,495. Le plancher se
@@ -51,7 +52,9 @@ const TH_F = 0.02;
 // Le passage fait 0,80 m : un marcheur de 0,32 m de rayon en réclame 0,64, et
 // il doit rester du jeu pour ne pas râper la cloison à chaque franchissement.
 const PASS_X0 = -0.10, PASS_X1 = 0.70;   // passage vers la cabine
-const DOOR_Z0 = -0.95, DOOR_Z1 = 0.35;   // baie coulissante (1,30 m)
+// Les cotes de la baie viennent de van.js, qui perce le trou dans la tôle :
+// une seule source, sinon la portière et l'ouverture divergent.
+const DOOR_Z0 = BAY_Z0, DOOR_Z1 = BAY_Z1;   // baie coulissante (1,30 m)
 const DOOR_TRAVEL = 1.4;                 // course vers l'arrière
 const DOOR_DUR = 0.9;                    // ouverture/fermeture (s)
 const SEAT = { x: -0.52, z: 1.70 };      // siège conducteur (cf. vSeatL de van.js)
@@ -409,11 +412,18 @@ export function buildVanInterior(scene, shadows, vanBody, vanState) {
     -HW - 0.09, CEIL_Y + 0.06, DZC - DOOR_TRAVEL / 2, dark);
   box('viPorteSeuil', 0.16, 0.05, DZD, -HW - 0.03, FLOOR_Y - 0.015, DZC, metal);
 
-  /* ---- marchepied sous la portière ---- */
-  box('viMarche', 0.34, 0.05, 1.06, -1.16, 0.3, DZC, dark);
-  box('viMarcheTapis', 0.3, 0.02, 1.0, -1.16, 0.335, DZC, wood);
-  box('viMarcheEq1', 0.2, 0.16, 0.05, -1.08, 0.38, DZC - 0.42, dark);
-  box('viMarcheEq2', 0.2, 0.16, 0.05, -1.08, 0.38, DZC + 0.42, dark);
+  /* ---- marchepied sous la portière ----
+   * Le plancher est à 0,52 et le sol à 0 : sans relais, on « montait » d'un
+   * demi-mètre d'un coup. La marche se pose à 0,27, presque à mi-hauteur, et
+   * elle est assez large (0,42 m) et assez épaisse (0,09) pour se lire comme
+   * un marchepied et non comme une planche oubliée sous la caisse. Deux
+   * équerres la rattachent visiblement au bas de caisse, et un nez chromé
+   * accroche la lumière — c'est ce qui la signale au joueur qui approche. */
+  box('viMarche', 0.42, 0.09, 1.12, -1.19, 0.27, DZC, dark);
+  box('viMarcheTapis', 0.38, 0.02, 1.06, -1.19, 0.325, DZC, wood);
+  box('viMarcheNez', 0.05, 0.05, 1.12, -1.385, 0.30, DZC, metal);
+  box('viMarcheEq1', 0.22, 0.22, 0.06, -1.10, 0.40, DZC - 0.45, dark);
+  box('viMarcheEq2', 0.22, 0.22, 0.06, -1.10, 0.40, DZC + 0.45, dark);
 
   /* ---- rideaux : tringle + panneau pendu, ils balancent au roulis.
    * Celui de la portière est parenté à doorNode : il coulisse avec elle. ---- */
