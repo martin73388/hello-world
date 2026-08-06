@@ -260,6 +260,13 @@ async function start() {
     let x = px, z = pz;
     for (const c of walkRects) {
       if (c.door && !garage.doorBlocked()) continue;
+      // Le drapeau `active` était consulté par la caméra SEULEMENT : la marche
+      // l'ignorait, si bien que le rectangle du van barrait le passage même au
+      // droit d'une portière grande ouverte. On butait à 1,37 du centre de
+      // caisse — 1,05 de demi-rectangle plus 0,32 de rayon — sans jamais
+      // pouvoir atteindre le seuil. Invisible tant qu'on entrait par
+      // téléportation ; bloquant dès qu'il a fallu entrer en marchant.
+      if (c.active === false) continue;
       const nx = Math.max(c.x0, Math.min(c.x1, x));
       const nz = Math.max(c.z0, Math.min(c.z1, z));
       const dx = x - nx, dz = z - nz;
@@ -796,13 +803,12 @@ async function start() {
       vanRect.y1 = van.st.bodyY + 1.7;
       // le van bloque la marche… SAUF au droit de sa portière ouverte :
       // sinon le mécano est expulsé du seuil avant d'avoir pu entrer
-      const dw = cabin.doorWorld(sc2);
-      // La caisse cesse de barrer le passage UNIQUEMENT au droit d'une portière
-      // ouverte : portière close, le van est un obstacle plein, comme il doit
-      // l'être. C'est ce qui fait qu'on entre par la porte et pas à travers
-      // la tôle.
-      const nearDoor = Math.hypot(state.px - dw.x, state.pz - dw.z) < 2.6
-        && cabin.doorPassable();
+      // La caisse cesse de barrer le passage UNIQUEMENT dans le couloir de la
+      // baie, et seulement portière ouverte : partout ailleurs le van est un
+      // obstacle plein, comme il doit l'être. C'est ce qui fait qu'on entre
+      // PAR LA PORTE et pas à travers la tôle.
+      cabin.toLocal(state.px, state.pz, sc2);
+      const nearDoor = cabin.doorPassable() && cabin.atDoorway(sc2.x, sc2.z);
       vanRect.active = !state.drive && !aboard && !nearDoor;
     }
     const odx = (Math.sin(state.camYaw) * cp * state.dist + Math.cos(state.camYaw) * shoulder) / state.dist;

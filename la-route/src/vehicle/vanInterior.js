@@ -598,6 +598,16 @@ export function buildVanInterior(scene, shadows, vanBody, vanState) {
   }
 
   /**
+   * Le marcheur est-il dans le COULOIR D'ENTRÉE, face à la baie ? C'est la
+   * seule zone où la caisse cesse de barrer le passage. Un simple rayon autour
+   * du seuil ne suffisait pas : à 2,60 m il couvrait une bonne part du flanc,
+   * et on pouvait traverser la tôle à côté de la porte.
+   */
+  function atDoorway(lx, lz) {
+    return lz > DOOR_Z0 - 0.15 && lz < DOOR_Z1 + 0.15 && lx > -2.0 && lx < 0.2;
+  }
+
+  /**
    * Hauteur de marche au droit de l'escalier, en repère van — ou null hors de
    * son emprise, auquel cas l'appelant garde le sol du terrain.
    *
@@ -708,7 +718,7 @@ export function buildVanInterior(scene, shadows, vanBody, vanState) {
   update(0);                                          // pose fermée et éteinte
 
   return {
-    toLocal, toWorld, resolve, floorY: FLOOR_Y, doorWorld, insideLocal, boarded, stepHeight, camLimit,
+    toLocal, toWorld, resolve, floorY: FLOOR_Y, doorWorld, insideLocal, boarded, atDoorway, stepHeight, camLimit,
     seatLocal: SEAT, update, lampSet, lampOn: () => lampLit,
     openDoor, closeDoor, toggleDoor, doorOpen, doorPassable, doorFrac: () => doorE,
     colliders, root, node: doorNode,
