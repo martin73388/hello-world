@@ -113,6 +113,15 @@ d'ombres est le premier poste à attaquer, et de loin.
 
 - Serveur : `cd la-route && npm run dev`. Note le port annoncé : 5173 peut
   déjà être pris par une instance laissée ouverte.
+- **Chrome finit par confisquer le GPU d'un onglet resté masqué.** Après une
+  longue session en arrière-plan, les avertissements « Destroyed texture
+  IOSurface used in a submit » s'accumulent, puis la compilation ASYNCHRONE des
+  pipelines cesse de progresser : tout `isReadyForSubMesh` reste faux pour
+  toujours, sur les deux moteurs, même après redémarrage de vite, même sur un
+  commit vérifié bon une heure avant. Ça ressemble à s'y méprendre à un shader
+  cassé — la bissection par `git stash` de TOUT le travail non commité est le
+  seul test qui coupe court. Remède : remettre la fenêtre au premier plan et
+  recharger. Diagnostiquer du code là-dessus est une perte de temps pure.
 - **La fenêtre doit être VISIBLE pour capturer.** Onglet masqué : rAF est
   suspendu (zéro frame) et le canvas se lit noir — une capture de 76 ko,
   moyenne (0,0,0). Si la boucle est arrêtée, on peut la piloter à la main

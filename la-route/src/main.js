@@ -53,6 +53,7 @@ import { createCampfire } from './world/campfire.js';
 import { createWeather } from './world/weather.js';
 import { createHorn } from './world/horn.js';
 import { createWildlife } from './world/wildlife.js';
+import { createDapple } from './world/dapple.js';
 
 const canvas = document.getElementById('rc');
 const boot = document.getElementById('boot');
@@ -183,6 +184,10 @@ async function start() {
   const under = plantUnderstory(scene, shadows);
   // le tapis : herbe, fougères, buissons — se couchent dans les ornières
   const grass = plantGrass(scene, deform.state);
+  // les taches de soleil : la carte de canopée se peint d'après les couronnes
+  // réelles des pins, et le plugin se greffe sur le sol et le tapis — après
+  // plantGrass, donc, puisque c'est lui qui crée les six matériaux du tapis
+  const dapple = createDapple(scene, pines.crowns);
   console.log('pins :', pines.count, '| flore :', flora.count, '| litière :', litter.count, '| étage moyen :', under.count);
 
   // M4 : le mécano articulé remplace la capsule, le van attend sur la route
@@ -889,5 +894,5 @@ async function start() {
     // liste de casters, nombre de cascades — était inexécutable depuis la
     // console. C'est ce qui a permis d'attribuer onze millisecondes aux ombres
     // sans jamais pouvoir les isoler.
-    shadows, sun, pines, under, litter };
+    shadows, sun, pines, under, litter, dapple };
 }

@@ -178,6 +178,7 @@ export function plantPines(scene, shadows) {
   let seed = 17;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const mats = [];
+  const crowns = [];
   const trunks = [];                                 // {x, z, r} pour les collisions
   const q = new Quaternion(), sc = new Vector3(), tr = new Vector3();
   for (let i = 0; i < 9000 && mats.length < 1900; i++) {
@@ -213,6 +214,9 @@ export function plantPines(scene, shadows) {
     const m = Matrix.Compose(sc, q, tr);
     mats.push(m);
     trunks.push({ x, z, r: 0.26 * s + 0.1 });
+    // la couronne, pour la carte de canopée du dapple : sommet réel de l'arbre
+    // (l'échelle Y porte le bulk) et rayon de houppier ~2,3 m à l'échelle
+    crowns.push({ x, z, top: y + 12.2 * sc.y, r: 2.3 * sc.x });
   }
   const buf = new Float32Array(mats.length * 16);
   for (let i = 0; i < mats.length; i++) mats[i].copyToArray(buf, i * 16);
@@ -245,7 +249,14 @@ export function plantPines(scene, shadows) {
   }
   trunk.thinInstanceSetBuffer('color', bufT, 4, true);
   foliage.receiveShadows = true;
-  shadows.addShadowCaster(foliage);
+  /* Le feuillage NE PROJETTE PLUS dans la shadow map — mesuré à 6,3 ms sur
+   * 25,3, soit un quart de la frame, pour un semis de points que le PCF
+   * lissait en gris. Son ombre est reprise par la transmittance analytique du
+   * dapple (world/dapple.js), qui fait le même travail pour trois lectures de
+   * texture — c'est le couple que PORTAGE 2.4 prescrit, précisément pour ne
+   * pas compter l'ombre de canopée deux fois. Les TRONCS restent : la
+   * colonnade est ouverte et leurs ombres dures sont l'information que l'œil
+   * attend (réserve du PORTAGE honorée). */
   shadows.addShadowCaster(trunk);
-  return { count: mats.length, trunks };
+  return { count: mats.length, trunks, crowns };
 }
