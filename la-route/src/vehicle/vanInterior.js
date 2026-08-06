@@ -419,11 +419,31 @@ export function buildVanInterior(scene, shadows, vanBody, vanState) {
    * un marchepied et non comme une planche oubliée sous la caisse. Deux
    * équerres la rattachent visiblement au bas de caisse, et un nez chromé
    * accroche la lumière — c'est ce qui la signale au joueur qui approche. */
-  box('viMarche', 0.42, 0.09, 1.12, -1.19, 0.27, DZC, dark);
-  box('viMarcheTapis', 0.38, 0.02, 1.06, -1.19, 0.325, DZC, wood);
-  box('viMarcheNez', 0.05, 0.05, 1.12, -1.385, 0.30, DZC, metal);
-  box('viMarcheEq1', 0.22, 0.22, 0.06, -1.10, 0.40, DZC - 0.45, dark);
-  box('viMarcheEq2', 0.22, 0.22, 0.06, -1.10, 0.40, DZC + 0.45, dark);
+  /* Le compte, d'abord, parce que c'est lui qui décide de tout : la caisse est
+   * portée à CLEAR = 0,42 m au-dessus du sol, et le plancher est 0,52 plus
+   * haut — soit 0,94 m à gravir. L'unique marche qui existait était posée à
+   * y local 0,315, c'est-à-dire à SOIXANTE-SEIZE centimètres du sol : ce
+   * n'était pas une marche, c'était un rebord qu'on ne pouvait pas escalader.
+   *
+   * On divise donc la montée en trois pas égaux de 31 cm : sol → 0,31 → 0,63
+   * → plancher. En repère van (y = 0 à hauteur de caisse), les dessus tombent
+   * à -0,11 et +0,21. La marche basse pend sous le bas de caisse, comme un
+   * marchepied rapporté ; la haute est en retrait, dans l'axe du seuil. */
+  const M1_TOP = 0.31 - 0.42, M2_TOP = 0.63 - 0.42;   // -0,11 et +0,21
+  const MT = 0.06;                                    // épaisseur des tôles
+  // marche basse, la plus en saillie — c'est celle qu'on voit en approchant
+  box('viMarcheBas', 0.36, MT, 1.12, -1.24, M1_TOP - MT / 2, DZC, dark);
+  box('viMarcheBasTapis', 0.32, 0.015, 1.06, -1.24, M1_TOP + 0.008, DZC, metal);
+  // marche haute, en retrait, au droit du seuil de la baie
+  box('viMarcheHt', 0.30, MT, 1.12, -1.15, M2_TOP - MT / 2, DZC, dark);
+  box('viMarcheHtTapis', 0.26, 0.015, 1.06, -1.15, M2_TOP + 0.008, DZC, metal);
+  // jambages : deux montants qui rattachent visiblement l'escalier au bas de
+  // caisse, sinon les deux tôles flottent dans le vide
+  for (const mz of [DZC - 0.46, DZC + 0.46]) {
+    box('viMarcheJb' + mz, 0.05, M2_TOP - M1_TOP + MT, 0.07,
+      -1.32, (M1_TOP + M2_TOP) / 2, mz, dark);
+    box('viMarcheEq' + mz, 0.30, 0.05, 0.06, -1.15, M2_TOP + 0.10, mz, dark);
+  }
 
   /* ---- rideaux : tringle + panneau pendu, ils balancent au roulis.
    * Celui de la portière est parenté à doorNode : il coulisse avec elle. ---- */
@@ -577,6 +597,22 @@ export function buildVanInterior(scene, shadows, vanBody, vanState) {
     return out;
   }
 
+  /**
+   * Hauteur de marche au droit de l'escalier, en repère van — ou null hors de
+   * son emprise, auquel cas l'appelant garde le sol du terrain.
+   *
+   * Sans ça les marches ne seraient que du décor : le marcheur les traverserait
+   * au ras du sol puis se téléporterait au plancher en franchissant la baie.
+   * C'est cette fonction qui fait qu'on MONTE.
+   */
+  function stepHeight(lx, lz) {
+    if (lz < DOOR_Z0 - 0.06 || lz > DOOR_Z1 + 0.06) return null;
+    if (lx > -1.02) return FLOOR_Y;                   // déjà sur le plancher
+    if (lx > -1.31) return M2_TOP + 0.02;             // marche haute
+    if (lx > -1.45) return M1_TOP + 0.02;             // marche basse
+    return null;                                      // au sol, devant le van
+  }
+
   /** le seuil de la portière, en monde — le point où l'on monte et descend */
   function doorWorld(out) {
     toWorld(-1.16, (DOOR_Z0 + DOOR_Z1) / 2, out);
@@ -672,7 +708,7 @@ export function buildVanInterior(scene, shadows, vanBody, vanState) {
   update(0);                                          // pose fermée et éteinte
 
   return {
-    toLocal, toWorld, resolve, floorY: FLOOR_Y, doorWorld, insideLocal, boarded, camLimit,
+    toLocal, toWorld, resolve, floorY: FLOOR_Y, doorWorld, insideLocal, boarded, stepHeight, camLimit,
     seatLocal: SEAT, update, lampSet, lampOn: () => lampLit,
     openDoor, closeDoor, toggleDoor, doorOpen, doorPassable, doorFrac: () => doorE,
     colliders, root, node: doorNode,

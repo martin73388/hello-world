@@ -324,6 +324,9 @@ async function start() {
     locked: false, drive: false, distOcc: 4.2,
     lookHold: 0,          // délai de grâce du recentrage caméra au volant
   };
+  // scratch dédié : la hauteur de marche se calcule en repère van à chaque
+  // frame, et `lp` porte déjà la position à bord — pas question de l'écraser
+  const stepL = { x: 0, z: 0 };
   // (plus de walkDist : la caméra ne change plus de distance à l'embarquement,
   // c'est camLimit qui la resserre dans la cellule et la relâche dehors — le
   // joueur garde le zoom qu'il a choisi)
@@ -699,7 +702,12 @@ async function start() {
       terrain.patchTick(state.px, state.pz);
       van.update(dt, { throttle: 0, steer: 0, offroad: false, mist: weather.rainEase() }, vanBlocked);
       dust.plumes[0].emitRate = 0; dust.plumes[1].emitRate = 0;
-      const gy = groundAll(state.px, state.pz);
+      // L'escalier du van porte le marcheur : sans ça les deux marches ne
+      // seraient que du décor, on les traverserait au ras du sol avant de se
+      // téléporter au plancher en franchissant la baie.
+      cabin.toLocal(state.px, state.pz, stepL);
+      const sh = cabin.stepHeight(stepL.x, stepL.z);
+      const gy = sh !== null ? van.st.bodyY + sh : groundAll(state.px, state.pz);
       state.py += (gy - state.py) * Math.min(1, 14 * dt);
       driver.root.position.set(state.px, state.py, state.pz);
       driver.root.rotation.y = state.yaw;
