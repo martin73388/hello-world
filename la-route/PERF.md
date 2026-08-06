@@ -29,10 +29,9 @@ rafale et chronométré, médiane sur 24 frames.
 
 Deux choses à en tirer, et une seule est solide.
 
-**Solide** : la passe d'ombres pèse ~11 ms, soit près de la moitié de la
-frame, pour un budget écrit à 1,8 ms. Deux cascades qui re-soumettent 209
-casters de feuillage alpha-testé, c'est le poste numéro un — très loin devant
-tout le reste. C'est reproductible et le signal est énorme.
+**~~Solide~~ — RETIRÉ, voir la contre-mesure ci-dessous.** On lisait ici que la
+passe d'ombres pesait ~11 ms sur 23. Ce chiffre n'a pas été reproduit et ne
+doit pas servir de base de travail.
 
 **Pas solide** : l'attribution poste par poste. Masquer le tapis, les pins ou
 la litière sort des mesures non monotones (le retour au cas de base dérive de
@@ -52,6 +51,41 @@ Frame` (zéro frame, et `getFps()` continue de renvoyer la dernière valeur —
 elle ment). Toute mesure passant par la boucle de rendu doit vérifier
 `document.visibilityState === 'visible'`, ou chronométrer `scene.render()`
 directement comme ci-dessus.
+
+## CONTRE-MESURE : `scene.render()` ne mesure pas ce qu'on croit
+
+Reprise le lendemain, au cadrage plein-jour, boucle arrêtée, médiane sur 30
+frames — les chiffres ne ressemblent pas aux précédents :
+
+| Configuration | Coût |
+| --- | --- |
+| Tout | **2,8 ms** |
+| Sans les aiguilles de pin dans les casters | 2,9 ms |
+| Sans aucun feuillage d'arbre dans les casters | 2,6 ms |
+| Sans aucune ombre du tout | 0,9 ms |
+
+Deux enseignements, et une leçon de méthode.
+
+**Le premier est solide et contre-intuitif** : `pineFoliage` pèse 3 146 000
+triangles sur les 3 616 000 de la liste de casters — 87 % — et le retirer ne
+change RIEN (2,8 → 2,9 ms, soit du bruit). La passe d'ombres n'est donc pas
+limitée par la géométrie, mais par son coût fixe : deux cascades, leurs
+effacements, leurs changements de cible. « Réduire les triangles d'ombre » est
+le mauvais levier, et l'aurait été quel que soit le budget.
+
+**Le second est que je ne sais pas mesurer cette scène.** `scene.render()`
+chronomètre la SOUMISSION côté CPU ; sous WebGPU le GPU travaille après, et la
+file d'attente rend la mesure élastique. 2,3 ms de CPU par frame pour un rendu
+observé aux alentours de 30 fps signifie que le goulot est le GPU — et le
+compteur `getGPUFrameTimeCounter()` reste vide, Babylon n'ayant pas ouvert la
+fonctionnalité timestamp-query à la création du device.
+
+Tant qu'on n'a pas d'instrument GPU, **aucun chiffre absolu de ce document ne
+doit servir à arbitrer**. Les comparaisons RELATIVES prises dans la même
+session gardent leur valeur — c'est ce qui rend la mesure sur les aiguilles
+utilisable. Prochaine étape pour sortir de l'aveugle : demander
+`timestamp-query` au device, ou faire varier la résolution de rendu et observer
+si le temps suit (s'il suit, on est bien limité par le remplissage).
 
 Coûts M6/M7 à surveiller :
 - particules : pluie 1400 + flammes/braises/fumée ~370 + lucioles 70 +
